@@ -1,0 +1,131 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=Inter:wght@400;500;600&display=swap');
+
+#lovable-badge {
+  display: none !important;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 220 40% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 40% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 40% 15%;
+
+    /* Primary: Deep Blue — fé e estabilidade */
+    --primary: 226 62% 33%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Orange — energia e juventude */
+    --secondary: 29 100% 50%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Accent: Golden — espiritualidade */
+    --accent: 43 95% 49%;
+    --accent-foreground: 220 40% 15%;
+
+    /* Muted */
+    --muted: 220 20% 93%;
+    --muted-foreground: 220 15% 50%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 88%;
+    --input: 220 20% 88%;
+    --ring: 29 100% 50%;
+
+    --radius: 1rem;
+
+    /* Brand specific */
+    --brand-orange: 29 100% 50%;
+    --brand-blue: 226 62% 33%;
+    --brand-gold: 43 95% 49%;
+    --brand-green: 145 63% 49%;
+    --brand-gray: 0 0% 27%;
+    --brand-white: 0 0% 97%;
+
+    /* Gradients */
+    --gradient-hero: linear-gradient(160deg, hsl(226, 62%, 22%) 0%, hsl(250, 55%, 35%) 100%);
+    --gradient-orange: linear-gradient(135deg, hsl(29, 100%, 50%) 0%, hsl(20, 100%, 55%) 100%);
+    --gradient-gold: linear-gradient(135deg, hsl(43, 95%, 49%) 0%, hsl(35, 100%, 55%) 100%);
+    --gradient-green: linear-gradient(135deg, hsl(145, 63%, 45%) 0%, hsl(160, 63%, 40%) 100%);
+
+    /* Sidebar */
+    --sidebar-background: 226 62% 22%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 29 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 226 50% 30%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 226 50% 28%;
+    --sidebar-ring: 29 100% 50%;
+  }
+
+  .dark {
+    --background: 226 62% 10%;
+    --foreground: 0 0% 95%;
+
+    --card: 226 55% 14%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 226 55% 14%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 29 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 226 62% 33%;
+    --secondary-foreground: 0 0% 100%;
+
+    --accent: 43 95% 49%;
+    --accent-foreground: 220 40% 15%;
+
+    --muted: 226 40% 20%;
+    --muted-foreground: 220 15% 60%;
+
+    --destructive: 0 62% 40%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 226 40% 22%;
+    --input: 226 40% 22%;
+    --ring: 29 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Montserrat', sans-serif;
+  }
+}
+
+@keyframes tab-slide-in {
+  0% {
+    opacity: 0;
+    transform: translateX(12px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}

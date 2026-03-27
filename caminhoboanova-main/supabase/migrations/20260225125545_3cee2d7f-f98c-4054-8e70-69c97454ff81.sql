@@ -1,0 +1,1 @@
+ALTER TABLE public.events ADD COLUMN linked_lesson_id uuid REFERENCES public.lessons(id) ON DELETE SET NULL DEFAULT NULL;
