@@ -7,6 +7,10 @@ export interface AutomatedSystemUpdate {
   updateType: "nova_funcionalidade" | "melhoria" | "correcao" | "comunicado";
   createdAt: string;
   authorName: string | null;
+  codeChanges: Array<{
+    area: string;
+    description: string;
+  }>;
 }
 
 const BUILD_VERSION = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "0.0.0";
@@ -23,6 +27,20 @@ export const AUTOMATED_SYSTEM_UPDATES: AutomatedSystemUpdate[] = [
     updateType: "comunicado",
     createdAt: BUILD_DATE,
     authorName: "Sistema",
+    codeChanges: [
+      {
+        area: "vite.config.ts",
+        description: "Injeta automaticamente a versao do package.json e a data do build no frontend.",
+      },
+      {
+        area: "src/data/systemUpdates.ts",
+        description: "Mantem o historico exibido no admin do sistema como fonte versionada dentro do projeto.",
+      },
+      {
+        area: "src/pages/AdminSistema.tsx",
+        description: "Exibe a versao atual e o historico automatico sem depender de formulario manual.",
+      },
+    ],
   },
   {
     id: "2026-03-30-admin-password",
@@ -34,6 +52,16 @@ export const AUTOMATED_SYSTEM_UPDATES: AutomatedSystemUpdate[] = [
     updateType: "correcao",
     createdAt: "2026-03-30T11:30:00.000Z",
     authorName: "Equipe Caminho",
+    codeChanges: [
+      {
+        area: "src/components/auth/AdminSistemaPasswordGate.tsx",
+        description: "Removeu a validacao por e-mail autorizado e manteve somente a senha da area admin do sistema.",
+      },
+      {
+        area: "src/pages/AdminSistema.tsx",
+        description: "Eliminou o bloqueio interno dependente do banco para permitir acesso apenas com login + senha da rota.",
+      },
+    ],
   },
   {
     id: "2026-03-30-admin-updates",
@@ -45,5 +73,19 @@ export const AUTOMATED_SYSTEM_UPDATES: AutomatedSystemUpdate[] = [
     updateType: "melhoria",
     createdAt: "2026-03-30T11:20:00.000Z",
     authorName: "Equipe Caminho",
+    codeChanges: [
+      {
+        area: "src/pages/AdminSistema.tsx",
+        description: "Criou a aba de atualizacoes dentro do admin do sistema com cards e visao geral.",
+      },
+      {
+        area: "supabase/migrations/20260330114330_create_system_update_log.sql",
+        description: "Preparou a estrutura de log de atualizacoes no Supabase para o modelo inicial da area.",
+      },
+      {
+        area: "supabase/migrations/20260330114609_create_authorized_system_admins.sql",
+        description: "Preparou a tabela de administradores autorizados do sistema para a primeira versao da seguranca.",
+      },
+    ],
   },
 ].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());

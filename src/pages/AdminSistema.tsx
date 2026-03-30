@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 
@@ -66,6 +67,7 @@ export default function AdminSistema() {
   const [churchesLoading, setChurchesLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedUpdateId, setSelectedUpdateId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -128,6 +130,7 @@ export default function AdminSistema() {
   };
 
   const latestAutomatedUpdate = AUTOMATED_SYSTEM_UPDATES[0] ?? null;
+  const selectedUpdate = AUTOMATED_SYSTEM_UPDATES.find((item) => item.id === selectedUpdateId) ?? null;
 
   if (authLoading) return null;
 
@@ -394,7 +397,11 @@ export default function AdminSistema() {
                   const typeConfig = UPDATE_TYPE_OPTIONS.find((option) => option.value === item.updateType) ?? UPDATE_TYPE_OPTIONS[1];
 
                   return (
-                    <Card key={item.id} className="border-border">
+                    <Card
+                      key={item.id}
+                      className="cursor-pointer border-border transition-all hover:-translate-y-0.5 hover:shadow-md"
+                      onClick={() => setSelectedUpdateId(item.id)}
+                    >
                       <CardContent className="p-5">
                         <div className="space-y-3">
                           <div className="flex flex-wrap items-center gap-2">
@@ -421,6 +428,10 @@ export default function AdminSistema() {
                             <span>Registrado em {new Date(item.createdAt).toLocaleString("pt-BR")}</span>
                             <span>Por {item.authorName || "Sistema"}</span>
                           </div>
+
+                          <p className="text-xs font-medium text-primary">
+                            Clique para ver o que foi modificado no codigo
+                          </p>
                         </div>
                       </CardContent>
                     </Card>
@@ -431,6 +442,65 @@ export default function AdminSistema() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog open={!!selectedUpdate} onOpenChange={(open) => setSelectedUpdateId(open ? selectedUpdateId : null)}>
+        <DialogContent className="max-w-2xl rounded-2xl">
+          {selectedUpdate && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="font-montserrat text-2xl font-black text-foreground">
+                  {selectedUpdate.title}
+                </DialogTitle>
+                <DialogDescription>
+                  Detalhamento tecnico do que foi alterado no codigo nesta atualizacao.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className={`border ${UPDATE_TYPE_OPTIONS.find((option) => option.value === selectedUpdate.updateType)?.color ?? ""}`}>
+                    {UPDATE_TYPE_OPTIONS.find((option) => option.value === selectedUpdate.updateType)?.label ?? selectedUpdate.updateType}
+                  </Badge>
+                  {selectedUpdate.version && (
+                    <Badge variant="secondary" className="rounded-full">
+                      {selectedUpdate.version}
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                  <p className="text-sm font-semibold text-foreground">Resumo</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">{selectedUpdate.summary}</p>
+                </div>
+
+                {selectedUpdate.details && (
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-sm font-semibold text-foreground">Contexto</p>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">{selectedUpdate.details}</p>
+                  </div>
+                )}
+
+                <div className="rounded-2xl border border-border bg-background p-4">
+                  <p className="text-sm font-semibold text-foreground">O que foi modificado no codigo</p>
+                  <div className="mt-3 space-y-3">
+                    {selectedUpdate.codeChanges.map((change) => (
+                      <div key={`${selectedUpdate.id}-${change.area}`} className="rounded-xl border border-border bg-muted/30 p-3">
+                        <p className="font-mono text-xs font-semibold text-foreground">{change.area}</p>
+                        <p className="mt-1 text-sm leading-6 text-muted-foreground">{change.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <span>Registrado em {new Date(selectedUpdate.createdAt).toLocaleString("pt-BR")}</span>
+                  <span>Por {selectedUpdate.authorName || "Sistema"}</span>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
