@@ -20,6 +20,7 @@ import MinhaIgreja from "./pages/MinhaIgreja";
 import Onboarding from "./pages/Onboarding";
 import AdminSistema from "./pages/AdminSistema";
 import NotFound from "./pages/NotFound";
+import AdminSistemaPasswordGate from "./components/auth/AdminSistemaPasswordGate";
 
 const queryClient = new QueryClient();
 
@@ -75,7 +76,14 @@ const AppRoutes = () => (
     <Route path="/exportar-dados" element={<ProtectedRoute><ExportData /></ProtectedRoute>} />
     <Route path="/minha-igreja" element={<ProtectedRoute><MinhaIgreja /></ProtectedRoute>} />
     <Route path="/onboarding" element={<Onboarding />} />
-    <Route path="/admin-sistema" element={<ProtectedRoute><AdminSistema /></ProtectedRoute>} />
+    <Route
+      path="/admin-sistema"
+      element={
+        <AdminSistemaPasswordGate>
+          <AdminSistema />
+        </AdminSistemaPasswordGate>
+      }
+    />
 
     {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
     <Route path="*" element={<NotFound />} />
