@@ -323,9 +323,6 @@ export default function Apresentacao() {
                 <a href="/onboarding" className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl text-primary-foreground font-montserrat font-bold text-lg hover:shadow-xl hover:-translate-y-0.5 transition-all" style={{ background: "var(--gradient-hero)" }}>
                   Teste grátis por 30 dias <ArrowRight className="w-5 h-5" />
                 </a>
-                <a href="/area-membros" className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl border-2 border-primary text-primary font-semibold text-lg hover:bg-primary/10 transition-all">
-                  Área de membros
-                </a>
                 <a href="#funcionalidades" className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl border-2 border-border text-foreground font-semibold text-lg hover:border-primary/40 hover:text-primary transition-all">
                   Ver funcionalidades
                 </a>
