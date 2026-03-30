@@ -19,6 +19,7 @@ import Apresentacao from "./pages/Apresentacao";
 import MinhaIgreja from "./pages/MinhaIgreja";
 import Onboarding from "./pages/Onboarding";
 import AdminSistema from "./pages/AdminSistema";
+import AreaMembros from "./pages/AreaMembros";
 import NotFound from "./pages/NotFound";
 import AdminSistemaPasswordGate from "./components/auth/AdminSistemaPasswordGate";
 
@@ -73,6 +74,7 @@ const AppRoutes = () => (
     <Route path="/redefinir-senha" element={<ResetPassword />} />
     <Route path="/instalar" element={<Install />} />
     <Route path="/apresentacao" element={<Apresentacao />} />
+    <Route path="/area-membros" element={<PublicRoute><AreaMembros /></PublicRoute>} />
     <Route path="/exportar-dados" element={<ProtectedRoute><ExportData /></ProtectedRoute>} />
     <Route path="/minha-igreja" element={<ProtectedRoute><MinhaIgreja /></ProtectedRoute>} />
     <Route path="/onboarding" element={<Onboarding />} />

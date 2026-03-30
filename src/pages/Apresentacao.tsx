@@ -225,10 +225,11 @@ export default function Apresentacao() {
             </div>
             <span className="font-montserrat font-bold text-lg tracking-tight text-foreground">Caminho</span>
           </div>
-          <div className="hidden md:flex items-center gap-8 text-sm font-inter font-medium text-muted-foreground">
+          <div className="flex items-center gap-8 text-sm font-inter font-medium text-muted-foreground">
             <a href="#funcionalidades" className="hover:text-primary transition-colors">Funcionalidades</a>
             <a href="#beneficios" className="hover:text-primary transition-colors">Benefícios</a>
             <a href="#planos" className="hover:text-primary transition-colors">Planos</a>
+            <a href="/area-membros" className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-primary hover:bg-primary/90 transition-all">Área de membros</a>
           </div>
           <div className="flex items-center gap-3">
             <a href="#planos" className="hidden sm:inline-flex px-5 py-2.5 rounded-full text-primary-foreground text-sm font-semibold hover:shadow-lg transition-all" style={{ background: "var(--gradient-hero)" }}>
@@ -265,6 +266,7 @@ export default function Apresentacao() {
                   { href: "#como-funciona", icon: Calendar, label: "Como funciona" },
                   { href: "#planos", icon: Star, label: "Planos" },
                   { href: "#faq", icon: MessageCircle, label: "Perguntas frequentes" },
+                  { href: "/area-membros", icon: Shield, label: "Área de membros" },
                   { href: WHATSAPP_LINK, icon: Smartphone, label: "Contato", external: true },
                 ].map((item) => (
                   <a
@@ -320,6 +322,9 @@ export default function Apresentacao() {
               <motion.div variants={fadeUp} custom={3} className="flex flex-col sm:flex-row gap-4">
                 <a href="/onboarding" className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl text-primary-foreground font-montserrat font-bold text-lg hover:shadow-xl hover:-translate-y-0.5 transition-all" style={{ background: "var(--gradient-hero)" }}>
                   Teste grátis por 30 dias <ArrowRight className="w-5 h-5" />
+                </a>
+                <a href="/area-membros" className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl border-2 border-primary text-primary font-semibold text-lg hover:bg-primary/10 transition-all">
+                  Área de membros
                 </a>
                 <a href="#funcionalidades" className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl border-2 border-border text-foreground font-semibold text-lg hover:border-primary/40 hover:text-primary transition-all">
                   Ver funcionalidades
