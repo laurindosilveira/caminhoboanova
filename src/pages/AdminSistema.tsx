@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { AUTOMATED_SYSTEM_UPDATES } from "@/data/systemUpdates";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -12,7 +13,6 @@ import {
   Search,
   ShieldAlert,
   Sparkles,
-  Trash2,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
 
 interface ChurchSubscription {
@@ -36,18 +35,6 @@ interface ChurchSubscription {
   created_at: string;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
-}
-
-interface SystemUpdateItem {
-  id: string;
-  title: string;
-  summary: string;
-  details: string | null;
-  version: string | null;
-  update_type: string;
-  created_at: string;
-  created_by: string | null;
-  author_name: string | null;
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; icon: typeof CheckCircle2 }> = {
@@ -71,27 +58,14 @@ const UPDATE_TYPE_OPTIONS = [
   { value: "comunicado", label: "Comunicado", color: "bg-muted text-muted-foreground border-border" },
 ];
 
-const EMPTY_UPDATE_FORM = {
-  title: "",
-  version: "",
-  update_type: "melhoria",
-  summary: "",
-  details: "",
-};
-
 export default function AdminSistema() {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   const [churches, setChurches] = useState<ChurchSubscription[]>([]);
   const [churchesLoading, setChurchesLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-
-  const [updates, setUpdates] = useState<SystemUpdateItem[]>([]);
-  const [updatesLoading, setUpdatesLoading] = useState(true);
-  const [savingUpdate, setSavingUpdate] = useState(false);
-  const [updateForm, setUpdateForm] = useState(EMPTY_UPDATE_FORM);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -102,7 +76,6 @@ export default function AdminSistema() {
   useEffect(() => {
     if (user) {
       fetchChurches();
-      fetchUpdates();
     }
   }, [user]);
 
@@ -123,50 +96,6 @@ export default function AdminSistema() {
     setChurchesLoading(false);
   }
 
-  async function fetchUpdates() {
-    setUpdatesLoading(true);
-    const { data, error } = await supabase
-      .from("system_update_log" as any)
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error(error);
-      toast({ title: "Erro ao carregar atualizacoes", variant: "destructive" });
-      setUpdatesLoading(false);
-      return;
-    }
-
-    const rawItems = ((data as any[]) ?? []) as Array<SystemUpdateItem & { created_by?: string | null }>;
-    const authorIds = Array.from(new Set(rawItems.map((item) => item.created_by).filter(Boolean)));
-
-    let profileMap = new Map<string, string>();
-
-    if (authorIds.length > 0) {
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("user_id, full_name")
-        .in("user_id", authorIds);
-
-      profileMap = new Map((profileData ?? []).map((entry) => [entry.user_id, entry.full_name]));
-    }
-
-    setUpdates(
-      rawItems.map((item) => ({
-        id: item.id,
-        title: item.title,
-        summary: item.summary,
-        details: item.details,
-        version: item.version,
-        update_type: item.update_type,
-        created_at: item.created_at,
-        created_by: item.created_by ?? null,
-        author_name: item.created_by ? profileMap.get(item.created_by) ?? null : null,
-      })),
-    );
-    setUpdatesLoading(false);
-  }
-
   async function updateStatus(id: string, newStatus: string) {
     const { error } = await supabase
       .from("church_subscriptions" as any)
@@ -180,55 +109,6 @@ export default function AdminSistema() {
 
     toast({ title: `Status atualizado para "${STATUS_MAP[newStatus]?.label ?? newStatus}"` });
     fetchChurches();
-  }
-
-  async function createUpdate() {
-    if (!updateForm.title.trim() || !updateForm.summary.trim()) {
-      toast({
-        title: "Preencha os campos obrigatorios",
-        description: "Informe pelo menos o titulo e o resumo da atualizacao.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setSavingUpdate(true);
-
-    const payload = {
-      title: updateForm.title.trim(),
-      version: updateForm.version.trim() || null,
-      update_type: updateForm.update_type,
-      summary: updateForm.summary.trim(),
-      details: updateForm.details.trim() || null,
-      created_by: user?.id ?? null,
-    };
-
-    const { error } = await supabase.from("system_update_log" as any).insert(payload as any);
-
-    if (error) {
-      console.error(error);
-      toast({ title: "Erro ao salvar atualizacao", variant: "destructive" });
-      setSavingUpdate(false);
-      return;
-    }
-
-    toast({ title: "Atualizacao registrada", description: "O historico do app foi atualizado com sucesso." });
-    setUpdateForm(EMPTY_UPDATE_FORM);
-    setSavingUpdate(false);
-    fetchUpdates();
-  }
-
-  async function deleteUpdate(updateId: string) {
-    const { error } = await supabase.from("system_update_log" as any).delete().eq("id", updateId);
-
-    if (error) {
-      console.error(error);
-      toast({ title: "Erro ao remover atualizacao", variant: "destructive" });
-      return;
-    }
-
-    toast({ title: "Atualizacao removida" });
-    fetchUpdates();
   }
 
   const filteredChurches = churches.filter((church) => {
@@ -247,6 +127,8 @@ export default function AdminSistema() {
     canceled: churches.filter((church) => church.subscription_status === "canceled" || church.subscription_status === "blocked").length,
   };
 
+  const latestAutomatedUpdate = AUTOMATED_SYSTEM_UPDATES[0] ?? null;
+
   if (authLoading) return null;
 
   return (
@@ -261,7 +143,7 @@ export default function AdminSistema() {
           </div>
           <div>
             <h1 className="font-montserrat text-lg font-black text-foreground">Administracao do Sistema</h1>
-            <p className="text-xs text-muted-foreground">Gestao de igrejas, assinaturas e atualizacoes do app</p>
+            <p className="text-xs text-muted-foreground">Gestao de igrejas, assinaturas e atualizacoes automaticas do app</p>
           </div>
         </div>
       </div>
@@ -415,83 +297,40 @@ export default function AdminSistema() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 font-montserrat text-xl font-black">
                     <Sparkles className="h-5 w-5 text-primary" />
-                    Registrar nova atualizacao
+                    Preenchimento automatico
                   </CardTitle>
                   <CardDescription>
-                    Cadastre aqui as melhorias, correcoes e comunicados importantes do app.
+                    Esta area agora recebe as informacoes das atualizacoes automaticamente a partir do proprio projeto.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <label htmlFor="update-title" className="text-sm font-medium text-foreground">Titulo</label>
-                      <Input
-                        id="update-title"
-                        value={updateForm.title}
-                        onChange={(event) => setUpdateForm((current) => ({ ...current, title: event.target.value }))}
-                        placeholder="Ex: Nova area de acompanhamento"
-                        className="rounded-xl"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label htmlFor="update-version" className="text-sm font-medium text-foreground">Versao</label>
-                      <Input
-                        id="update-version"
-                        value={updateForm.version}
-                        onChange={(event) => setUpdateForm((current) => ({ ...current, version: event.target.value }))}
-                        placeholder="Ex: v2.3.0"
-                        className="rounded-xl"
-                      />
-                    </div>
+                  <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                    <p className="text-sm font-semibold text-foreground">Como funciona agora</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      O painel mostra a versao atual publicada no build e o historico versionado das entregas sem depender de formulario manual no app.
+                    </p>
                   </div>
 
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium text-foreground">Tipo da atualizacao</p>
-                    <div className="flex flex-wrap gap-2">
-                      {UPDATE_TYPE_OPTIONS.map((option) => (
-                        <Button
-                          key={option.value}
-                          type="button"
-                          variant={updateForm.update_type === option.value ? "default" : "outline"}
-                          className="rounded-xl"
-                          onClick={() => setUpdateForm((current) => ({ ...current, update_type: option.value }))}
-                        >
-                          {option.label}
-                        </Button>
-                      ))}
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Versao atual</p>
+                      <p className="mt-1 font-montserrat text-2xl font-black text-foreground">
+                        {latestAutomatedUpdate?.version ?? "Sem versao"}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Build atual</p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">
+                        {latestAutomatedUpdate ? new Date(latestAutomatedUpdate.createdAt).toLocaleString("pt-BR") : "Nao disponivel"}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label htmlFor="update-summary" className="text-sm font-medium text-foreground">Resumo</label>
-                    <Textarea
-                      id="update-summary"
-                      value={updateForm.summary}
-                      onChange={(event) => setUpdateForm((current) => ({ ...current, summary: event.target.value }))}
-                      placeholder="Descreva em poucas linhas o que mudou."
-                      className="min-h-[110px] rounded-2xl"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label htmlFor="update-details" className="text-sm font-medium text-foreground">Detalhes adicionais</label>
-                    <Textarea
-                      id="update-details"
-                      value={updateForm.details}
-                      onChange={(event) => setUpdateForm((current) => ({ ...current, details: event.target.value }))}
-                      placeholder="Opcional: explique impacto, uso ou observacoes internas."
-                      className="min-h-[150px] rounded-2xl"
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">Responsavel pelo registro</p>
-                      <p className="text-xs text-muted-foreground">{profile?.full_name || user?.email || "Administrador do sistema"}</p>
-                    </div>
-                    <Button onClick={createUpdate} disabled={savingUpdate} className="rounded-xl">
-                      {savingUpdate ? "Salvando..." : "Publicar atualizacao"}
-                    </Button>
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4">
+                    <p className="text-sm font-semibold text-foreground">Origem das informacoes</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      O historico desta aba e lido diretamente do projeto e exibido automaticamente no admin do sistema sempre que houver novo deploy.
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -502,26 +341,26 @@ export default function AdminSistema() {
                     <Megaphone className="h-5 w-5 text-primary" />
                     Visao geral
                   </CardTitle>
-                  <CardDescription>Resumo rapido do historico cadastrado nesta area.</CardDescription>
+                  <CardDescription>Resumo rapido do historico automatico desta versao do app.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-2xl border border-border bg-muted/30 p-4">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Total</p>
-                      <p className="mt-1 font-montserrat text-3xl font-black text-foreground">{updates.length}</p>
+                      <p className="mt-1 font-montserrat text-3xl font-black text-foreground">{AUTOMATED_SYSTEM_UPDATES.length}</p>
                     </div>
                     <div className="rounded-2xl border border-border bg-muted/30 p-4">
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">Ultima publicacao</p>
                       <p className="mt-1 text-sm font-semibold text-foreground">
-                        {updates[0] ? new Date(updates[0].created_at).toLocaleDateString("pt-BR") : "Nenhuma ainda"}
+                        {latestAutomatedUpdate ? new Date(latestAutomatedUpdate.createdAt).toLocaleDateString("pt-BR") : "Nenhuma ainda"}
                       </p>
                     </div>
                   </div>
 
                   <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
-                    <p className="text-sm font-semibold text-foreground">Como usar esta area</p>
+                    <p className="text-sm font-semibold text-foreground">Beneficio principal</p>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Use esta aba para manter um registro oficial das alteracoes do app, facilitando comunicados internos e controle de versao.
+                      Voce nao precisa mais abrir o app para cadastrar a atualizacao manualmente. O painel recebe esse conteudo sozinho a partir do codigo publicado.
                     </p>
                   </div>
                 </CardContent>
@@ -531,75 +370,57 @@ export default function AdminSistema() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="font-montserrat text-xl font-black text-foreground">Historico de atualizacoes</h2>
-                <p className="text-sm text-muted-foreground">Entradas registradas no sistema administrativo.</p>
+                <p className="text-sm text-muted-foreground">Entradas automaticas exibidas pelo admin do sistema.</p>
               </div>
-              <Button variant="outline" onClick={fetchUpdates} className="rounded-xl">
-                <RefreshCw className={`mr-2 h-4 w-4 ${updatesLoading ? "animate-spin" : ""}`} />
-                Atualizar lista
+              <Button variant="outline" onClick={() => window.location.reload()} className="rounded-xl">
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Recarregar painel
               </Button>
             </div>
 
-            {updatesLoading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((item) => (
-                  <div key={item} className="h-36 animate-pulse rounded-2xl bg-muted" />
-                ))}
-              </div>
-            ) : updates.length === 0 ? (
+            {AUTOMATED_SYSTEM_UPDATES.length === 0 ? (
               <Card className="border-border">
                 <CardContent className="p-8 text-center">
                   <Megaphone className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-                  <p className="font-montserrat font-bold text-foreground">Nenhuma atualizacao cadastrada</p>
+                  <p className="font-montserrat font-bold text-foreground">Nenhuma atualizacao automatica encontrada</p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Publique a primeira entrada acima para iniciar o historico do app.
+                    Assim que houver uma nova versao publicada, ela aparecera automaticamente aqui.
                   </p>
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-3">
-                {updates.map((item) => {
-                  const typeConfig = UPDATE_TYPE_OPTIONS.find((option) => option.value === item.update_type) ?? UPDATE_TYPE_OPTIONS[1];
+                {AUTOMATED_SYSTEM_UPDATES.map((item) => {
+                  const typeConfig = UPDATE_TYPE_OPTIONS.find((option) => option.value === item.updateType) ?? UPDATE_TYPE_OPTIONS[1];
 
                   return (
                     <Card key={item.id} className="border-border">
                       <CardContent className="p-5">
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                          <div className="space-y-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="font-montserrat text-lg font-black text-foreground">{item.title}</h3>
-                              <Badge variant="outline" className={`border ${typeConfig.color}`}>
-                                {typeConfig.label}
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-montserrat text-lg font-black text-foreground">{item.title}</h3>
+                            <Badge variant="outline" className={`border ${typeConfig.color}`}>
+                              {typeConfig.label}
+                            </Badge>
+                            {item.version && (
+                              <Badge variant="secondary" className="rounded-full">
+                                {item.version}
                               </Badge>
-                              {item.version && (
-                                <Badge variant="secondary" className="rounded-full">
-                                  {item.version}
-                                </Badge>
-                              )}
-                            </div>
-
-                            <p className="text-sm leading-6 text-muted-foreground">{item.summary}</p>
-
-                            {item.details && (
-                              <div className="rounded-2xl border border-border bg-muted/30 p-4 text-sm leading-6 text-foreground">
-                                {item.details}
-                              </div>
                             )}
-
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                              <span>Registrado em {new Date(item.created_at).toLocaleString("pt-BR")}</span>
-                              <span>Por {item.author_name || "Administrador do sistema"}</span>
-                            </div>
                           </div>
 
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10"
-                            onClick={() => deleteUpdate(item.id)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Excluir
-                          </Button>
+                          <p className="text-sm leading-6 text-muted-foreground">{item.summary}</p>
+
+                          {item.details && (
+                            <div className="rounded-2xl border border-border bg-muted/30 p-4 text-sm leading-6 text-foreground">
+                              {item.details}
+                            </div>
+                          )}
+
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            <span>Registrado em {new Date(item.createdAt).toLocaleString("pt-BR")}</span>
+                            <span>Por {item.authorName || "Sistema"}</span>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
