@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { isAuthorizedSystemAdmin } from "@/lib/systemAdminAccess";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -81,11 +80,8 @@ const EMPTY_UPDATE_FORM = {
 };
 
 export default function AdminSistema() {
-  const { user, profile, isSuper, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-
-  const [hasSystemAccess, setHasSystemAccess] = useState(false);
-  const [checkingAccess, setCheckingAccess] = useState(true);
 
   const [churches, setChurches] = useState<ChurchSubscription[]>([]);
   const [churchesLoading, setChurchesLoading] = useState(true);
@@ -98,47 +94,17 @@ export default function AdminSistema() {
   const [updateForm, setUpdateForm] = useState(EMPTY_UPDATE_FORM);
 
   useEffect(() => {
-    let active = true;
-
-    async function checkAccess() {
-      if (!user?.email || !isSuper) {
-        if (active) {
-          setHasSystemAccess(false);
-          setCheckingAccess(false);
-        }
-        return;
-      }
-
-      setCheckingAccess(true);
-      const allowed = await isAuthorizedSystemAdmin(user.email);
-
-      if (active) {
-        setHasSystemAccess(allowed);
-        setCheckingAccess(false);
-      }
+    if (!authLoading && !user) {
+      navigate("/login", { replace: true });
     }
-
-    if (!authLoading) {
-      checkAccess();
-    }
-
-    return () => {
-      active = false;
-    };
-  }, [authLoading, isSuper, user?.email]);
+  }, [authLoading, navigate, user]);
 
   useEffect(() => {
-    if (!authLoading && !checkingAccess && (!user || !hasSystemAccess)) {
-      navigate("/", { replace: true });
-    }
-  }, [authLoading, checkingAccess, hasSystemAccess, navigate, user]);
-
-  useEffect(() => {
-    if (user && hasSystemAccess) {
+    if (user) {
       fetchChurches();
       fetchUpdates();
     }
-  }, [user, hasSystemAccess]);
+  }, [user]);
 
   async function fetchChurches() {
     setChurchesLoading(true);
@@ -281,7 +247,7 @@ export default function AdminSistema() {
     canceled: churches.filter((church) => church.subscription_status === "canceled" || church.subscription_status === "blocked").length,
   };
 
-  if (authLoading || checkingAccess) return null;
+  if (authLoading) return null;
 
   return (
     <div className="min-h-screen bg-background">
