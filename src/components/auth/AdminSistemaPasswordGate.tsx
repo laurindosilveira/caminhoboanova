@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
+import { isAuthorizedSystemAdmin } from "@/lib/systemAdminAccess";
 
 const ADMIN_SISTEMA_PASSWORD = "CaminhoBoaNova2026";
-const ADMIN_SISTEMA_ALLOWED_EMAILS = ["laurindosilveira@gmail.com"];
 
 function getSessionKey(userEmail?: string | null) {
   return `admin-sistema-access:${userEmail ?? "guest"}`;
@@ -18,8 +18,8 @@ export default function AdminSistemaPasswordGate({ children }: { children: React
   const { user, isSuper, loading } = useAuth();
   const [password, setPassword] = useState("");
   const [isUnlocked, setIsUnlocked] = useState(false);
-
-  const isAllowed = !!(isSuper && user?.email && ADMIN_SISTEMA_ALLOWED_EMAILS.includes(user.email));
+  const [hasSystemAccess, setHasSystemAccess] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
 
   useEffect(() => {
     if (!user?.email) {
@@ -29,6 +29,34 @@ export default function AdminSistemaPasswordGate({ children }: { children: React
 
     setIsUnlocked(sessionStorage.getItem(getSessionKey(user.email)) === "granted");
   }, [user?.email]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function checkAccess() {
+      if (!user?.email || !isSuper) {
+        if (active) {
+          setHasSystemAccess(false);
+          setCheckingAccess(false);
+        }
+        return;
+      }
+
+      setCheckingAccess(true);
+      const allowed = await isAuthorizedSystemAdmin(user.email);
+
+      if (active) {
+        setHasSystemAccess(allowed);
+        setCheckingAccess(false);
+      }
+    }
+
+    checkAccess();
+
+    return () => {
+      active = false;
+    };
+  }, [user?.email, isSuper]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -51,9 +79,9 @@ export default function AdminSistemaPasswordGate({ children }: { children: React
     toast({ title: "Acesso liberado", description: "Proteção da área do sistema validada nesta sessão." });
   }
 
-  if (loading) return null;
+  if (loading || checkingAccess) return null;
   if (!user) return <Navigate to="/login" replace />;
-  if (!isAllowed) return <Navigate to="/" replace />;
+  if (!hasSystemAccess) return <Navigate to="/" replace />;
   if (isUnlocked) return <>{children}</>;
 
   return (
