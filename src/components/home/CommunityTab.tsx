@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
 import { MessageCircle, GraduationCap, Cake, Sparkles, Send, Trash2, Target, Check, Users, ClipboardList, Upload, Image, Camera } from "lucide-react";
 import ClassroomTab from "./ClassroomTab";
 import AnnouncementsSection from "./AnnouncementsSection";
@@ -61,6 +62,8 @@ type SubTab = "comunidade" | "sala" | "discipulador" | "galeria";
 
 export default function CommunityTab() {
   const { profile, role } = useAuth();
+  const { effectiveArea, isOverriding } = useAreaSwitch();
+  const currentArea = effectiveArea || profile?.area || "";
   const [subTab, setSubTab] = useState<SubTab>("comunidade");
   const [messages, setMessages] = useState<Message[]>([]);
   const [reactions, setReactions] = useState<ReactionMap>({});
@@ -76,7 +79,7 @@ export default function CommunityTab() {
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   useEffect(() => {
-    if (!profile) return;
+    if (!profile || !currentArea) return;
 
     async function fetchMessages() {
       setLoadingMessages(true);
@@ -107,8 +110,8 @@ export default function CommunityTab() {
       const currentMonth = new Date().getMonth() + 1;
       const { data } = await supabase
         .from("profiles")
-        .select("full_name, birth_date")
-        .eq("community", profile.community as any);
+        .select("full_name, birth_date, area")
+        .eq("area", currentArea as any);
       const bdays: BirthdayPerson[] = (data ?? [])
         .filter(p => {
           const month = new Date(p.birth_date + "T00:00:00").getMonth() + 1;
@@ -140,13 +143,22 @@ export default function CommunityTab() {
         .select("*")
         .lte("start_date", today)
         .gte("end_date", today);
-      const cIds = (challengesData ?? []).map((c: any) => c.id);
+      const area1Communities = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
+      const visibleChallenges = (challengesData ?? []).filter((challenge: any) => {
+        if (challenge.area) return challenge.area === currentArea;
+        if (challenge.community) {
+          const challengeArea = area1Communities.includes(challenge.community) ? "Área 1" : "Área 2";
+          return challengeArea === currentArea;
+        }
+        return true;
+      });
+      const cIds = visibleChallenges.map((c: any) => c.id);
       let participantsData: any[] = [];
       if (cIds.length > 0) {
         const { data } = await supabase.from("challenge_participants").select("challenge_id, user_id, completed, response_text, file_url").in("challenge_id", cIds);
         participantsData = data ?? [];
       }
-      const mapped: Challenge[] = (challengesData ?? []).map((c: any) => {
+      const mapped: Challenge[] = visibleChallenges.map((c: any) => {
         const parts = participantsData.filter((p: any) => p.challenge_id === c.id);
         const myPart = user ? parts.find((p: any) => p.user_id === user.id) : null;
         return {
@@ -172,7 +184,7 @@ export default function CommunityTab() {
     fetchBirthdays();
     fetchTestimonies();
     fetchChallenges();
-  }, [profile]);
+  }, [profile, currentArea]);
 
   async function toggleReaction(messageId: string, emoji: string) {
     const { data: { user } } = await supabase.auth.getUser();
@@ -281,9 +293,9 @@ export default function CommunityTab() {
       {/* Header */}
       <div className="flex items-center justify-between px-5">
         <h2 className="font-montserrat font-black text-foreground text-xl">👥 Comunidade</h2>
-        {profile?.community && (
+        {currentArea && (
           <span className="text-xs font-inter text-muted-foreground bg-muted rounded-full px-3 py-1">
-            {profile.community}
+            {isOverriding ? currentArea : profile?.community}
           </span>
         )}
       </div>
@@ -363,6 +375,15 @@ export default function CommunityTab() {
 
           {/* 🏆 Conquistas da Comunidade */}
           <CommunityAchievements />
+
+          {isOverriding && (
+            <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+              <p className="font-montserrat font-bold text-foreground text-sm">Visualização por área ativa</p>
+              <p className="mt-1 text-xs font-inter text-muted-foreground">
+                Itens baseados em comunidade individual, como testemunhos e sala da turma, continuam limitados pela comunidade original do seu perfil.
+              </p>
+            </div>
+          )}
 
 
           {challenges.length > 0 && (

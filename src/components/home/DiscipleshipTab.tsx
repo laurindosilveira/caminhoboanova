@@ -392,7 +392,7 @@ export default function DiscipleshipTab({ targetLessonId, onTargetLessonConsumed
       {/* Hero — always visible */}
       <DiscipleshipHero
         fullName={profile?.full_name}
-        community={profile?.community}
+        community={currentArea}
         healthStatus={healthStatus}
       />
 

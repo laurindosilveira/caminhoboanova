@@ -35,6 +35,7 @@ export default function Index() {
   const [profileSubTab, setProfileSubTab] = useState<ProfileSubTab>("meu-perfil");
   const { profile, role } = useAuth();
   const { effectiveArea } = useAreaSwitch();
+  const currentArea = effectiveArea || profile?.area || "";
   const navigate = useNavigate();
   const stats = useUserStats();
   useAppNotifications();
@@ -148,7 +149,7 @@ export default function Index() {
 
         {/* ===== CONQUISTAS ===== */}
         {activeTab === "conquistas" && (
-          <div className="pt-4">
+          <div key={`conquistas-${currentArea}`} className="pt-4">
             <AchievementsGrid
               faithPoints={stats.faithPoints}
               streakDays={stats.streakDays}
@@ -159,14 +160,15 @@ export default function Index() {
         )}
 
         {/* ===== AGENDA ===== */}
-        {activeTab === "agenda" && <UserAgendaTab />}
+        {activeTab === "agenda" && <UserAgendaTab key={`agenda-${currentArea}`} />}
 
         {/* ===== COMUNIDADE ===== */}
-        {activeTab === "comunidade" && <CommunityTab />}
+        {activeTab === "comunidade" && <CommunityTab key={`comunidade-${currentArea}`} />}
 
         {/* ===== DISCIPULADO ===== */}
         {activeTab === "discipulado" && (
           <DiscipleshipTab
+            key={`discipulado-${currentArea}`}
             targetLessonId={targetLessonId}
             onTargetLessonConsumed={() => setTargetLessonId(null)}
           />
@@ -174,7 +176,7 @@ export default function Index() {
 
         {/* ===== PERFIL ===== */}
         {activeTab === "perfil" && (
-          <div className="pt-5 pb-4 space-y-4">
+          <div key={`perfil-${currentArea}`} className="pt-5 pb-4 space-y-4">
             <div className="px-5">
               <h2 className="font-montserrat font-black text-foreground text-xl">👤 Perfil</h2>
             </div>
