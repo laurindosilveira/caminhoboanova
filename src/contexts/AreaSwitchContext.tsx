@@ -6,17 +6,20 @@ interface AreaSwitchContextType {
   effectiveArea: string;
   setEffectiveArea: (area: string) => Promise<void>;
   isOverriding: boolean;
+  switchNonce: number;
 }
 
 const AreaSwitchContext = createContext<AreaSwitchContextType>({
   effectiveArea: "",
-  setEffectiveArea: () => {},
+  setEffectiveArea: async () => {},
   isOverriding: false,
+  switchNonce: 0,
 });
 
 export function AreaSwitchProvider({ children }: { children: ReactNode }) {
   const { user, profile, role, adminArea } = useAuth();
   const [overrideArea, setOverrideArea] = useState<string | null>(null);
+  const [switchNonce, setSwitchNonce] = useState(0);
 
   const canSwitch = role === "admin";
   const profileArea = profile?.area ?? "";
@@ -43,8 +46,11 @@ export function AreaSwitchProvider({ children }: { children: ReactNode }) {
           setOverrideArea(adminArea || profileArea);
           throw error;
         }
+
+        setSwitchNonce((value) => value + 1);
       },
       isOverriding,
+      switchNonce,
     }}>
       {children}
     </AreaSwitchContext.Provider>

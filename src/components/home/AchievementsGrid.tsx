@@ -67,7 +67,7 @@ function getAreaNumber(area: string) {
 
 export default function AchievementsGrid({ faithPoints, streakDays, completedCount }: AchievementsGridProps) {
   const { profile, role } = useAuth();
-  const { effectiveArea, isOverriding } = useAreaSwitch();
+  const { effectiveArea, isOverriding, switchNonce } = useAreaSwitch();
   const canManage = role === "admin" || role === "lider";
   const myUserId = profile?.user_id;
   const currentArea = effectiveArea || profile?.area || "";
@@ -345,7 +345,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
       });
     }
     fetchQualitative();
-  }, [profile, fetchAreaRanking, activeCommunities, currentArea]);
+  }, [profile, fetchAreaRanking, activeCommunities, currentArea, switchNonce]);
 
   const achievements: Achievement[] = [
     { id: 1, key: "streak_7", icon: "🔥", title: "7 dias seguidos", desc: "Sequência de fé incrível!", unlocked: streakDays >= 7, current: streakDays, target: 7, bonusPoints: 10 },
