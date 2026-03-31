@@ -206,6 +206,22 @@ CREATE TABLE public.devotional_progress (
   UNIQUE(user_id, devotional_id)
 );
 
+-- devotional_responses
+CREATE TABLE public.devotional_responses (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL,
+  devotional_id UUID NOT NULL,
+  question_index INTEGER NOT NULL,
+  response TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+  UNIQUE (user_id, devotional_id, question_index),
+  CONSTRAINT devotional_responses_progress_fkey
+    FOREIGN KEY (user_id, devotional_id)
+    REFERENCES public.devotional_progress(user_id, devotional_id)
+    ON DELETE CASCADE
+);
+
 -- spiritual_assessments
 CREATE TABLE public.spiritual_assessments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -462,6 +478,7 @@ ALTER TABLE public.lesson_responses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.lesson_content ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.devotional_content ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.devotional_progress ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.devotional_responses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.spiritual_assessments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.discipleship_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pastoral_notes ENABLE ROW LEVEL SECURITY;
@@ -611,6 +628,9 @@ CREATE TRIGGER update_lesson_content_timestamp BEFORE UPDATE ON public.lesson_co
 CREATE TRIGGER update_devotional_content_updated_at BEFORE UPDATE ON public.devotional_content
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
+CREATE TRIGGER update_devotional_responses_updated_at BEFORE UPDATE ON public.devotional_responses
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
 CREATE TRIGGER update_meeting_evaluations_updated_at BEFORE UPDATE ON public.meeting_evaluations
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
@@ -721,6 +741,10 @@ CREATE POLICY "Users can view their own devotional progress" ON public.devotiona
 CREATE POLICY "Users can insert their own devotional progress" ON public.devotional_progress FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can delete their own devotional progress" ON public.devotional_progress FOR DELETE USING (auth.uid() = user_id);
 CREATE POLICY "Admins can view all devotional progress" ON public.devotional_progress FOR SELECT USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = devotional_progress.user_id AND p.area = get_my_area())));
+
+-- devotional_responses
+CREATE POLICY "Users can manage their own devotional responses" ON public.devotional_responses FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Admins can view devotional responses in their area" ON public.devotional_responses FOR SELECT USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = devotional_responses.user_id AND p.area = get_my_area())));
 
 -- spiritual_assessments
 CREATE POLICY "Users can manage their own assessments" ON public.spiritual_assessments FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);

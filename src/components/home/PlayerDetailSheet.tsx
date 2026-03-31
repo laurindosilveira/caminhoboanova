@@ -21,9 +21,16 @@ interface ActivityItem {
   points: number;
   date: string;
   deletable: boolean;
-  // For deletion
   tableId?: string;
 }
+
+type DevotionalExpandedContent = {
+  bible_reference?: string;
+  reflection?: string;
+  practice?: string;
+  questions?: string[];
+  answers?: Array<{ question_index: number; response: string }>;
+};
 
 export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsChanged }: Props) {
   const { role } = useAuth();
@@ -66,18 +73,17 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       supabase.from("activities").select("id, title, points, type"),
     ]);
 
-    const lessonMap = new Map((lessons ?? []).map(l => [l.id, l]));
-    const devMap = new Map((devContent ?? []).map(d => [d.id, d]));
-    const eventMap = new Map((events ?? []).map(e => [e.id, e]));
-    const actMap = new Map((activities ?? []).map(a => [a.id, a]));
+    const lessonMap = new Map((lessons ?? []).map((l) => [l.id, l]));
+    const devMap = new Map((devContent ?? []).map((d) => [d.id, d]));
+    const eventMap = new Map((events ?? []).map((e) => [e.id, e]));
+    const actMap = new Map((activities ?? []).map((a) => [a.id, a]));
 
     const allItems: ActivityItem[] = [];
 
-    // Lessons (group by lesson_id, show once per lesson)
-    const lessonIds = new Set((lessonResps ?? []).map(r => r.lesson_id));
-    lessonIds.forEach(lessonId => {
+    const lessonIds = new Set((lessonResps ?? []).map((r) => r.lesson_id));
+    lessonIds.forEach((lessonId) => {
       const lesson = lessonMap.get(lessonId);
-      const firstResp = (lessonResps ?? []).find(r => r.lesson_id === lessonId);
+      const firstResp = (lessonResps ?? []).find((r) => r.lesson_id === lessonId);
       allItems.push({
         id: `lesson-${lessonId}`,
         type: "lesson",
@@ -90,8 +96,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       });
     });
 
-    // Devotionals
-    (devProgress ?? []).forEach(dp => {
+    (devProgress ?? []).forEach((dp) => {
       const dev = devMap.get(dp.devotional_id);
       const dow = new Date(dp.completed_at).getDay();
       const pts = dow === 0 || dow === 6 ? 2 : 5;
@@ -107,8 +112,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       });
     });
 
-    // Attendance
-    (attendance ?? []).forEach(a => {
+    (attendance ?? []).forEach((a) => {
       const event = eventMap.get(a.event_id);
       allItems.push({
         id: `att-${a.id}`,
@@ -122,12 +126,11 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       });
     });
 
-    // Worship
-    (worship ?? []).forEach(w => {
+    (worship ?? []).forEach((w) => {
       allItems.push({
         id: `wor-${w.id}`,
         type: "worship",
-        title: `Culto — ${w.preacher_name}`,
+        title: `Culto - ${w.preacher_name}`,
         subtitle: `${format(new Date(w.worship_date), "d/MM/yyyy")} às ${w.worship_time}`,
         points: 5,
         date: w.created_at,
@@ -136,8 +139,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       });
     });
 
-    // Achievements
-    (achievements ?? []).forEach(a => {
+    (achievements ?? []).forEach((a) => {
       allItems.push({
         id: `ach-${a.id}`,
         type: "achievement",
@@ -150,8 +152,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       });
     });
 
-    // User progress (other activities)
-    (userProgress ?? []).forEach(up => {
+    (userProgress ?? []).forEach((up) => {
       const act = actMap.get(up.activity_id);
       if (act && act.type !== "devocional" && act.type !== "formacao" && act.type !== "encontro") {
         allItems.push({
@@ -167,7 +168,6 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       }
     });
 
-    // Sort by date descending
     allItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setItems(allItems);
     setTotalPoints(allItems.reduce((s, i) => s + i.points, 0));
@@ -191,12 +191,34 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         .eq("lesson_id", item.tableId);
       setExpandedContent(data ?? []);
     } else if (item.type === "devotional" && item.tableId) {
-      const { data } = await supabase
-        .from("devotional_content")
-        .select("bible_reference, reflection, practice")
-        .eq("id", (await supabase.from("devotional_progress").select("devotional_id").eq("id", item.tableId).single()).data?.devotional_id ?? "")
+      const { data: progress } = await supabase
+        .from("devotional_progress")
+        .select("devotional_id")
+        .eq("id", item.tableId)
         .single();
-      setExpandedContent(data);
+
+      if (!progress?.devotional_id) {
+        setExpandedContent(null);
+      } else {
+        const [{ data: devotional }, { data: responses }] = await Promise.all([
+          supabase
+            .from("devotional_content")
+            .select("bible_reference, reflection, practice, questions")
+            .eq("id", progress.devotional_id)
+            .single(),
+          supabase
+            .from("devotional_responses")
+            .select("question_index, response")
+            .eq("user_id", userId)
+            .eq("devotional_id", progress.devotional_id)
+            .order("question_index"),
+        ]);
+
+        setExpandedContent({
+          ...(devotional as DevotionalExpandedContent),
+          answers: responses ?? [],
+        });
+      }
     } else {
       setExpandedContent(null);
     }
@@ -208,9 +230,8 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     setDeleting(item.id);
 
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     try {
-      // Delete from source table
       if (item.type === "lesson" && item.tableId) {
         await supabase.from("lesson_responses").delete().eq("user_id", userId).eq("lesson_id", item.tableId);
       } else if (item.type === "devotional" && item.tableId) {
@@ -225,7 +246,6 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         await supabase.from("user_progress").delete().eq("id", item.tableId);
       }
 
-      // Log removal
       await supabase.from("activity_removal_log").insert({
         removed_by: user?.id ?? "",
         target_user_id: userId,
@@ -233,11 +253,11 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         activity_id: item.tableId ?? item.id,
         activity_title: item.title,
         points_removed: item.points,
-        notes: `Removido via relatório de pontuação`,
+        notes: "Removido via relatório de pontuação",
       });
 
-      setItems(prev => prev.filter(i => i.id !== item.id));
-      setTotalPoints(prev => prev - item.points);
+      setItems((prev) => prev.filter((i) => i.id !== item.id));
+      setTotalPoints((prev) => prev - item.points);
       toast.success(`Removido: ${item.title} (-${item.points} pts)`);
       onPointsChanged?.();
     } catch (err: any) {
@@ -268,7 +288,6 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     }
   };
 
-  // Group by type for summary
   const grouped = items.reduce((acc, item) => {
     if (!acc[item.type]) acc[item.type] = { count: 0, points: 0 };
     acc[item.type].count++;
@@ -280,9 +299,8 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={onClose}>
       <div
         className="bg-card rounded-t-2xl w-full max-w-md max-h-[85vh] flex flex-col shadow-xl animate-in slide-in-from-bottom"
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <div>
             <p className="font-montserrat font-bold text-foreground text-base">{fullName}</p>
@@ -293,7 +311,6 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
           </button>
         </div>
 
-        {/* Summary */}
         <div className="p-4 border-b border-border flex-shrink-0">
           <p className="font-montserrat font-bold text-foreground text-xs mb-2">Resumo</p>
           <div className="grid grid-cols-3 gap-2">
@@ -308,16 +325,15 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
           </div>
         </div>
 
-        {/* Activity list */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {loading ? (
             <div className="space-y-2">
-              {[1, 2, 3, 4].map(i => <div key={i} className="h-14 bg-muted rounded-xl animate-pulse" />)}
+              {[1, 2, 3, 4].map((i) => <div key={i} className="h-14 bg-muted rounded-xl animate-pulse" />)}
             </div>
           ) : items.length === 0 ? (
             <p className="text-center text-muted-foreground font-inter text-sm py-8">Nenhuma atividade pontuada.</p>
           ) : (
-            items.map(item => (
+            items.map((item) => (
               <div key={item.id}>
                 <div
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors cursor-pointer ${
@@ -349,7 +365,6 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
                   <ChevronRight className={`w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform ${expandedItem === item.id ? "rotate-90" : ""}`} />
                 </div>
 
-                {/* Expanded content */}
                 {expandedItem === item.id && (
                   <div className="ml-10 mt-1 p-3 bg-muted/20 rounded-xl border border-border text-xs font-inter space-y-1">
                     {loadingContent ? (
@@ -367,8 +382,35 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
                       )
                     ) : item.type === "devotional" && expandedContent ? (
                       <div>
-                        <p className="text-muted-foreground font-bold">📖 {expandedContent.bible_reference}</p>
-                        {expandedContent.reflection && <p className="text-foreground mt-1">{expandedContent.reflection.slice(0, 200)}...</p>}
+                        {expandedContent.bible_reference && (
+                          <p className="text-muted-foreground font-bold">📖 {expandedContent.bible_reference}</p>
+                        )}
+                        {expandedContent.reflection && (
+                          <p className="text-foreground mt-1 whitespace-pre-wrap">{expandedContent.reflection}</p>
+                        )}
+                        {Array.isArray(expandedContent.questions) && expandedContent.questions.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            {expandedContent.questions
+                              .filter((q: string) => q.trim())
+                              .map((question: string, index: number) => {
+                                const answer = expandedContent.answers?.find((row: any) => row.question_index === index)?.response;
+                                return (
+                                  <div key={index}>
+                                    <p className="text-muted-foreground font-bold">{index + 1}. {question}</p>
+                                    <p className="text-foreground whitespace-pre-wrap">
+                                      {answer || <span className="italic text-muted-foreground">Sem resposta registrada.</span>}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        )}
+                        {expandedContent.practice && (
+                          <div className="mt-3">
+                            <p className="text-muted-foreground font-bold">Prática</p>
+                            <p className="text-foreground whitespace-pre-wrap">{expandedContent.practice}</p>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <p className="text-muted-foreground italic">Detalhes da atividade: {typeLabel(item.type)}</p>

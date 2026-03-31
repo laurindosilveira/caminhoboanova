@@ -55,6 +55,30 @@ export default function DevotionalView({ activity, onBack, onComplete, isComplet
     load();
   }, [activity.id, devotionalData]);
 
+  useEffect(() => {
+    async function loadAnswers() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("devotional_responses")
+        .select("question_index, response")
+        .eq("user_id", user.id)
+        .eq("devotional_id", activity.id)
+        .order("question_index");
+
+      if (!data) return;
+
+      const nextAnswers: Record<number, string> = {};
+      data.forEach((row) => {
+        nextAnswers[row.question_index] = row.response ?? "";
+      });
+      setAnswers(nextAnswers);
+    }
+
+    loadAnswers();
+  }, [activity.id]);
+
   // Validation: all non-empty questions must be answered
   const activeQuestions = (content?.questions ?? []).filter(q => q.trim());
   const allQuestionsAnswered = activeQuestions.length === 0 || activeQuestions.every((_, i) => (answers[i] ?? "").trim().length > 0);
@@ -70,7 +94,28 @@ export default function DevotionalView({ activity, onBack, onComplete, isComplet
       return;
     }
     setCompleting(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setCompleting(false);
+      return;
+    }
+
+    const answerRows = activeQuestions.map((_, i) => ({
+      user_id: user.id,
+      devotional_id: activity.id,
+      question_index: i,
+      response: answers[i] ?? "",
+    }));
+
     await onComplete(activity.id);
+    if (answerRows.length > 0) {
+      const { error } = await supabase
+        .from("devotional_responses")
+        .upsert(answerRows, { onConflict: "user_id,devotional_id,question_index" });
+      if (error) {
+        toast.error("Devocional concluído, mas houve erro ao salvar as respostas.");
+      }
+    }
     setCompleting(false);
   }
 
@@ -182,7 +227,11 @@ export default function DevotionalView({ activity, onBack, onComplete, isComplet
                     }`}>{i + 1}</span>
                     <p className="text-foreground font-inter text-sm">{q}</p>
                   </div>
-                  {!isCompleted && (
+                  {isCompleted ? (
+                    <div className="w-full px-3 py-2.5 rounded-xl border border-border bg-muted/30 text-foreground font-inter text-sm whitespace-pre-wrap min-h-16">
+                      {(answers[i] ?? "").trim() || "Sem resposta registrada."}
+                    </div>
+                  ) : (
                     <textarea
                       value={answers[i] ?? ""}
                       onChange={e => setAnswers(prev => ({ ...prev, [i]: e.target.value }))}

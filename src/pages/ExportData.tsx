@@ -71,6 +71,7 @@ export default function ExportData() {
         supabase.from("user_progress").select("*"),
         supabase.from("lesson_responses").select("*"),
         supabase.from("devotional_progress").select("*"),
+        supabase.from("devotional_responses").select("*"),
         supabase.from("attendance").select("*"),
         supabase.from("worship_attendance").select("*"),
         supabase.from("achievement_unlocks").select("*"),
@@ -94,7 +95,7 @@ export default function ExportData() {
     ]);
 
     const [courses, lessons, lessonContent, devotionalContent, activities, turmas, events, communitySettings, communityChallenges, courseUnlocks] = b1.map(r => r.data ?? []);
-    const [profiles, userRoles, userProgress, lessonResponses, devotionalProgress, attendance, worshipAttendance, achievementUnlocks] = b2.map(r => r.data ?? []);
+    const [profiles, userRoles, userProgress, lessonResponses, devotionalProgress, devotionalResponses, attendance, worshipAttendance, achievementUnlocks] = b2.map(r => r.data ?? []);
     const [discipleshipPlans, pastoralNotes, spiritualAssessments, meetingEvaluations, leaderMeetingNotes, messages, messageReactions, areaPastors, rankingSeasons, challengeParticipants, notificationPreferences, communityChat, prayerRequests, testimonies] = b3.map(r => r.data ?? []);
 
     let sql = "";
@@ -118,6 +119,7 @@ export default function ExportData() {
     sql += buildInserts("user_progress", userProgress);
     sql += buildInserts("lesson_responses", lessonResponses);
     sql += buildInserts("devotional_progress", devotionalProgress);
+    sql += buildInserts("devotional_responses", devotionalResponses);
     sql += buildInserts("attendance", attendance);
     sql += buildInserts("worship_attendance", worshipAttendance);
     sql += buildInserts("achievement_unlocks", achievementUnlocks);

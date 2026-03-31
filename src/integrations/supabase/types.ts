@@ -548,6 +548,44 @@ export type Database = {
           },
         ]
       }
+      devotional_responses: {
+        Row: {
+          created_at: string
+          devotional_id: string
+          id: string
+          question_index: number
+          response: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          devotional_id: string
+          id?: string
+          question_index: number
+          response?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          devotional_id?: string
+          id?: string
+          question_index?: number
+          response?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "devotional_responses_progress_fkey"
+            columns: ["user_id", "devotional_id"]
+            isOneToOne: false
+            referencedRelation: "devotional_progress"
+            referencedColumns: ["user_id", "devotional_id"]
+          },
+        ]
+      }
       discipleship_plans: {
         Row: {
           aptidao: string | null
