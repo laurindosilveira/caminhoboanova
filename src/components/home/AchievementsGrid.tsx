@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import confetti from "canvas-confetti";
 import {
   AlertDialog,
@@ -65,13 +65,15 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
   const myUserId = profile?.user_id;
   const currentArea = effectiveArea || profile?.area || "";
   const areaNumber = getAreaNumber(currentArea);
-  const activeCommunities = areaNumber === 1
-    ? AREA_1_COMMUNITIES
-    : areaNumber === 2
-    ? AREA_2_COMMUNITIES
-    : profile?.community
-      ? [profile.community]
-      : [];
+  const activeCommunities = useMemo(() =>
+    areaNumber === 1
+      ? AREA_1_COMMUNITIES
+      : areaNumber === 2
+      ? AREA_2_COMMUNITIES
+      : profile?.community
+        ? [profile.community]
+        : [],
+  [areaNumber, profile?.community]);
   const [seasons, setSeasons] = useState<RankingSeason[]>([]);
   const [members, setMembers] = useState<RankingMember[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
