@@ -102,6 +102,8 @@ function calcAge(birthDate: string) {
 
 type Lesson = { id: string; title: string; order_num: number; objective: string | null; topics: string[] | null; course_id: string };
 type Course = { id: string; title: string; order_num: number };
+type LessonCompletion = { lesson_id: string; completed_at: string | null };
+type DevotionalCompletion = { devotional_id: string; lesson_id: string | null; completed_at: string };
 
 const COMMUNITIES_LIST = ["Martim Lutero","Bom Pastor","Rincão Fundo","Rincão Frente","Linha Brasil","Iriá Pira 1","Iriá Pira 2"] as const;
 function getArea(community: string) {
@@ -143,6 +145,8 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
+  const [lessonCompletions, setLessonCompletions] = useState<LessonCompletion[]>([]);
+  const [devotionalCompletions, setDevotionalCompletions] = useState<DevotionalCompletion[]>([]);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [timelineItems, setTimelineItems] = useState<TimelineItem[]>([]);
   const [meetingEvals, setMeetingEvals] = useState<MeetingEval[]>([]);
@@ -162,6 +166,9 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
         { data: planData },
         { data: notesData },
         { data: lessonsData },
+        { data: lessonResponsesData },
+        { data: devotionalProgressData },
+        { data: devotionalContentData },
         { data: attendanceData },
         { data: progressData },
         { data: allAssessments },
@@ -175,6 +182,9 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
         supabase.from("discipleship_plans").select("*").eq("user_id", p.user_id).maybeSingle(),
         supabase.from("pastoral_notes").select("*").eq("user_id", p.user_id).order("created_at", { ascending: false }),
         supabase.from("lessons").select("id, title, order_num, objective, topics, course_id").order("order_num"),
+        supabase.from("lesson_responses").select("lesson_id, created_at").eq("user_id", p.user_id).order("created_at"),
+        supabase.from("devotional_progress").select("devotional_id, completed_at").eq("user_id", p.user_id).order("completed_at"),
+        supabase.from("devotional_content").select("id, lesson_id"),
         supabase.from("attendance").select("id, event_id, status, created_at").eq("user_id", p.user_id),
         supabase.from("user_progress").select("activity_id, completed_at").eq("user_id", p.user_id),
         supabase.from("spiritual_assessments").select("month, year, prayer_score, presence_score, created_at").eq("user_id", p.user_id),
@@ -197,6 +207,33 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
         ? (lessonsData ?? []).filter((lesson) => unlockedCourseIds.has(lesson.course_id))
         : (lessonsData ?? []);
       setLessons(visibleLessons);
+      const visibleLessonIds = new Set(visibleLessons.map((lesson) => lesson.id));
+
+      const lessonCompletionMap = new Map<string, string | null>();
+      (lessonResponsesData ?? []).forEach((response) => {
+        if (!visibleLessonIds.has(response.lesson_id)) return;
+        const existing = lessonCompletionMap.get(response.lesson_id);
+        if (!existing || new Date(response.created_at).getTime() < new Date(existing).getTime()) {
+          lessonCompletionMap.set(response.lesson_id, response.created_at);
+        }
+      });
+      setLessonCompletions(
+        Array.from(lessonCompletionMap.entries()).map(([lesson_id, completed_at]) => ({
+          lesson_id,
+          completed_at,
+        }))
+      );
+
+      const devotionalLessonMap = new Map((devotionalContentData ?? []).map((devotional: any) => [devotional.id, devotional.lesson_id]));
+      setDevotionalCompletions(
+        (devotionalProgressData ?? [])
+          .map((progress: any) => ({
+            devotional_id: progress.devotional_id,
+            lesson_id: devotionalLessonMap.get(progress.devotional_id) ?? null,
+            completed_at: progress.completed_at,
+          }))
+          .filter((completion) => !completion.lesson_id || visibleLessonIds.has(completion.lesson_id))
+      );
 
       // Fetch turmas
       const { data: turmasData } = await supabase.from("turmas").select("id, name, area").eq("is_active", true).order("area").order("name");

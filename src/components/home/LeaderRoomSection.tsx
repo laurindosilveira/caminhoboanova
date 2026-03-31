@@ -28,6 +28,10 @@ type Participant = {
   user_id: string; full_name: string; community: string; area: string;
   birth_date: string; phone: string; completed_count: number; completed_activity_ids: string[];
   confirmation_year?: number | null;
+  completed_lesson_count?: number;
+  completed_devotional_count?: number;
+  completed_event_count?: number;
+  faith_points?: number;
 };
 type PlanInfo = { health_status: string; is_priority: boolean; needs_pastor?: boolean };
 type Turma = { id: string; name: string; area: string | null };
@@ -214,23 +218,54 @@ export default function LeaderRoomSection({ asTab = false }: { asTab?: boolean }
       profilesQuery = profilesQuery.eq("turma_id", profile!.turma_id!);
     }
 
-    const [{ data: activitiesData }, { data: profilesData }, userResult, { data: turmasData }] = await Promise.all([
+    const [
+      { data: activitiesData },
+      { data: profilesData },
+      userResult,
+      { data: turmasData },
+      { data: progressData },
+      { data: lessonResponsesData },
+      { data: devotionalProgressData },
+    ] = await Promise.all([
       supabase.from("activities").select("*").order("order_num"),
       profilesQuery,
       supabase.auth.getUser(),
       supabase.from("turmas").select("id, name, area").eq("is_active", true),
+      supabase.from("user_progress").select("user_id, activity_id"),
+      supabase.from("lesson_responses").select("user_id, lesson_id"),
+      supabase.from("devotional_progress").select("user_id, devotional_id, completed_at"),
     ]);
 
     const myId = userResult.data.user?.id ?? "";
     const profilesList = (profilesData ?? []).filter(p => p.user_id !== myId);
-    const { data: progressData } = await supabase.from("user_progress").select("user_id, activity_id");
+    const activityMap = new Map((activitiesData ?? []).map((activity) => [activity.id, activity]));
 
     const participantList: Participant[] = profilesList.map((p) => {
       const userProgress = (progressData ?? []).filter((pr) => pr.user_id === p.user_id);
+      const lessonCount = new Set(
+        (lessonResponsesData ?? [])
+          .filter((response) => response.user_id === p.user_id)
+          .map((response) => response.lesson_id)
+      ).size;
+      const devotionals = (devotionalProgressData ?? []).filter((progress) => progress.user_id === p.user_id);
+      const devotionalCount = devotionals.length;
+      const completedActivityIds = userProgress.map((pr) => pr.activity_id);
+      const completedEventCount = completedActivityIds.filter((activityId) => activityMap.get(activityId)?.type === "encontro").length;
+      const activityPoints = completedActivityIds.reduce((sum, activityId) => sum + (activityMap.get(activityId)?.points ?? 0), 0);
+      const devotionalPoints = devotionals.reduce((sum, progress) => {
+        const completedAt = new Date(progress.completed_at);
+        const day = completedAt.getDay();
+        return sum + (day === 0 || day === 6 ? 2 : 5);
+      }, 0);
+
       return {
         ...p,
-        completed_count: userProgress.length,
-        completed_activity_ids: userProgress.map((pr) => pr.activity_id),
+        completed_count: userProgress.length + lessonCount + devotionalCount,
+        completed_activity_ids: completedActivityIds,
+        completed_lesson_count: lessonCount,
+        completed_devotional_count: devotionalCount,
+        completed_event_count: completedEventCount,
+        faith_points: activityPoints + (lessonCount * 20) + devotionalPoints,
         turma_id: p.turma_id,
       } as any;
     });

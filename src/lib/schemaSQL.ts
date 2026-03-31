@@ -702,6 +702,7 @@ CREATE POLICY "Activities viewable by authenticated users" ON public.activities 
 CREATE POLICY "Users can view own progress" ON public.user_progress FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own progress" ON public.user_progress FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Admins can view area participants progress" ON public.user_progress FOR SELECT USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = user_progress.user_id AND p.area = get_my_area())));
+CREATE POLICY "Liders can view area participants progress" ON public.user_progress FOR SELECT USING (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = user_progress.user_id AND p.area = get_my_area())));
 
 -- courses
 CREATE POLICY "Courses viewable by authenticated users" ON public.courses FOR SELECT TO authenticated USING (true);
@@ -727,6 +728,7 @@ CREATE POLICY "Users can remove their own reactions" ON public.message_reactions
 -- lesson_responses
 CREATE POLICY "Users can manage their own lesson responses" ON public.lesson_responses FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Admins can view lesson responses in their area" ON public.lesson_responses FOR SELECT USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = lesson_responses.user_id AND p.area = get_my_area())));
+CREATE POLICY "Liders can view lesson responses in their area" ON public.lesson_responses FOR SELECT USING (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = lesson_responses.user_id AND p.area = get_my_area())));
 
 -- lesson_content
 CREATE POLICY "Admins can manage lesson content" ON public.lesson_content FOR ALL USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));
@@ -741,30 +743,37 @@ CREATE POLICY "Users can view their own devotional progress" ON public.devotiona
 CREATE POLICY "Users can insert their own devotional progress" ON public.devotional_progress FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can delete their own devotional progress" ON public.devotional_progress FOR DELETE USING (auth.uid() = user_id);
 CREATE POLICY "Admins can view all devotional progress" ON public.devotional_progress FOR SELECT USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = devotional_progress.user_id AND p.area = get_my_area())));
+CREATE POLICY "Liders can view all devotional progress" ON public.devotional_progress FOR SELECT USING (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = devotional_progress.user_id AND p.area = get_my_area())));
 
 -- devotional_responses
 CREATE POLICY "Users can manage their own devotional responses" ON public.devotional_responses FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Admins can view devotional responses in their area" ON public.devotional_responses FOR SELECT USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = devotional_responses.user_id AND p.area = get_my_area())));
+CREATE POLICY "Liders can view devotional responses in their area" ON public.devotional_responses FOR SELECT USING (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = devotional_responses.user_id AND p.area = get_my_area())));
 
 -- spiritual_assessments
 CREATE POLICY "Users can manage their own assessments" ON public.spiritual_assessments FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Admins can view assessments in their area" ON public.spiritual_assessments FOR SELECT USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = spiritual_assessments.user_id AND p.area = get_my_area())));
+CREATE POLICY "Liders can view assessments in their area" ON public.spiritual_assessments FOR SELECT USING (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = spiritual_assessments.user_id AND p.area = get_my_area())));
 
 -- discipleship_plans
 CREATE POLICY "Users can view their own plan" ON public.discipleship_plans FOR SELECT TO authenticated USING (auth.uid() = user_id);
 CREATE POLICY "Admins can manage plans in their area" ON public.discipleship_plans FOR ALL USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = discipleship_plans.user_id AND p.area = get_my_area()))) WITH CHECK (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = discipleship_plans.user_id AND p.area = get_my_area())));
+CREATE POLICY "Liders can manage plans in their area" ON public.discipleship_plans FOR ALL USING (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = discipleship_plans.user_id AND p.area = get_my_area()))) WITH CHECK (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = discipleship_plans.user_id AND p.area = get_my_area())));
 
 -- pastoral_notes
 CREATE POLICY "Admins can manage pastoral notes in their area" ON public.pastoral_notes FOR ALL USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = pastoral_notes.user_id AND p.area = get_my_area()))) WITH CHECK (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = pastoral_notes.user_id AND p.area = get_my_area())));
+CREATE POLICY "Liders can manage pastoral notes in their area" ON public.pastoral_notes FOR ALL USING (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = pastoral_notes.user_id AND p.area = get_my_area()))) WITH CHECK (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = pastoral_notes.user_id AND p.area = get_my_area())));
 
 -- attendance
 CREATE POLICY "Users can view their own attendance" ON public.attendance FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert their own attendance" ON public.attendance FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can update their own attendance" ON public.attendance FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Admins can manage attendance in their area" ON public.attendance FOR ALL USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = attendance.user_id AND p.area = get_my_area()))) WITH CHECK (has_role(auth.uid(), 'admin'));
+CREATE POLICY "Liders can manage attendance in their area" ON public.attendance FOR ALL USING (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = attendance.user_id AND p.area = get_my_area()))) WITH CHECK (has_role(auth.uid(), 'lider'));
 
 -- meeting_evaluations
 CREATE POLICY "Admins can manage evaluations in their area" ON public.meeting_evaluations FOR ALL USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = meeting_evaluations.user_id AND p.area = get_my_area()))) WITH CHECK (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = meeting_evaluations.user_id AND p.area = get_my_area())));
+CREATE POLICY "Liders can manage evaluations in their area" ON public.meeting_evaluations FOR ALL USING (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = meeting_evaluations.user_id AND p.area = get_my_area()))) WITH CHECK (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = meeting_evaluations.user_id AND p.area = get_my_area())));
 
 -- community_chat
 CREATE POLICY "Users can view chat from their community" ON public.community_chat FOR SELECT USING (community = (get_my_community())::text);
@@ -791,6 +800,9 @@ CREATE POLICY "Users can view own worship attendance" ON public.worship_attendan
 CREATE POLICY "Admins can view worship attendance in area" ON public.worship_attendance FOR SELECT USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = worship_attendance.user_id AND p.area = get_my_area())));
 CREATE POLICY "Admins can update worship attendance in area" ON public.worship_attendance FOR UPDATE USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = worship_attendance.user_id AND p.area = get_my_area())));
 CREATE POLICY "Admins can delete worship attendance in area" ON public.worship_attendance FOR DELETE USING (has_role(auth.uid(), 'admin') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = worship_attendance.user_id AND p.area = get_my_area())));
+CREATE POLICY "Liders can view worship attendance in area" ON public.worship_attendance FOR SELECT USING (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = worship_attendance.user_id AND p.area = get_my_area())));
+CREATE POLICY "Liders can update worship attendance in area" ON public.worship_attendance FOR UPDATE USING (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = worship_attendance.user_id AND p.area = get_my_area())));
+CREATE POLICY "Liders can delete worship attendance in area" ON public.worship_attendance FOR DELETE USING (has_role(auth.uid(), 'lider') AND (is_super_admin(auth.uid()) OR EXISTS (SELECT 1 FROM profiles p WHERE p.user_id = worship_attendance.user_id AND p.area = get_my_area())));
 
 -- ranking_seasons
 CREATE POLICY "Admins can manage ranking seasons" ON public.ranking_seasons FOR ALL USING (has_role(auth.uid(), 'admin')) WITH CHECK (has_role(auth.uid(), 'admin'));

@@ -13,6 +13,10 @@ type RankingSeason = { id: string; course_id: string; community: string; closed_
 type Participant = {
   user_id: string; full_name: string; community: string; area: string;
   birth_date: string; phone: string; completed_count: number; completed_activity_ids: string[];
+  completed_lesson_count?: number;
+  completed_devotional_count?: number;
+  completed_event_count?: number;
+  faith_points?: number;
 };
 type PlanInfo = { health_status: string; is_priority: boolean; needs_pastor?: boolean };
 
@@ -340,6 +344,16 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
   // Type breakdown
   const byType = (type: string) => activities.filter(a => a.type === type).length;
   const completedByType = (type: string) => {
+    if (type === "devocional") {
+      return participants.reduce((sum, participant) => sum + (participant.completed_devotional_count ?? 0), 0);
+    }
+    if (type === "formacao") {
+      return participants.reduce((sum, participant) => sum + (participant.completed_lesson_count ?? 0), 0);
+    }
+    if (type === "encontro") {
+      return participants.reduce((sum, participant) => sum + (participant.completed_event_count ?? 0), 0);
+    }
+
     const ids = new Set(activities.filter(a => a.type === type).map(a => a.id));
     return participants.reduce((sum, p) => sum + p.completed_activity_ids.filter(id => ids.has(id)).length, 0);
   };
@@ -548,13 +562,11 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
           {byComm.map(c => {
             const group = participants.filter(p => p.community === c.name);
             // Detailed stats
-            const devIds = new Set(activities.filter(a => a.type === "devocional").map(a => a.id));
-            const formIds = new Set(activities.filter(a => a.type === "formacao").map(a => a.id));
-            const devDone = group.reduce((s, p) => s + p.completed_activity_ids.filter(id => devIds.has(id)).length, 0);
-            const devTotal = devIds.size * group.length;
+            const devTotal = byType("devocional") * group.length;
+            const devDone = group.reduce((sum, participant) => sum + (participant.completed_devotional_count ?? 0), 0);
             const devPct = devTotal > 0 ? Math.round((devDone / devTotal) * 100) : 0;
-            const formDone = group.reduce((s, p) => s + p.completed_activity_ids.filter(id => formIds.has(id)).length, 0);
-            const formTotal = formIds.size * group.length;
+            const formTotal = byType("formacao") * group.length;
+            const formDone = group.reduce((sum, participant) => sum + (participant.completed_lesson_count ?? 0), 0);
             const formPct = formTotal > 0 ? Math.round((formDone / formTotal) * 100) : 0;
             const ativos = group.filter(p => p.completed_count > 0).length;
             const inativos = group.length - ativos;

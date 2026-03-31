@@ -16,6 +16,10 @@ type Participant = {
   user_id: string; full_name: string; community: string; area: string;
   birth_date: string; phone: string; completed_count: number; completed_activity_ids: string[];
   confirmation_year?: number | null;
+  completed_lesson_count?: number;
+  completed_devotional_count?: number;
+  completed_event_count?: number;
+  faith_points?: number;
   avatar_url?: string | null;
   father_name?: string | null;
   mother_name?: string | null;
@@ -1282,7 +1286,7 @@ export default function ParticipantsTab({ participants, activities, communities 
           {filtered.map((p) => {
             const pct = activities.length > 0 ? Math.round((p.completed_count / activities.length) * 100) : 0;
             const status = getStatusInfo(p.completed_count, activities.length);
-            const totalPts = activities.filter(a => p.completed_activity_ids.includes(a.id)).reduce((s, a) => s + a.points, 0);
+            const totalPts = p.faith_points ?? activities.filter(a => p.completed_activity_ids.includes(a.id)).reduce((s, a) => s + a.points, 0);
             const age = calcAge(p.birth_date);
             return (
               <button
