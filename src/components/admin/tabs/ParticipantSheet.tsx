@@ -58,6 +58,10 @@ export type Participant = {
   birth_date: string; phone: string; completed_count: number; completed_activity_ids: string[];
   turma_id?: string | null;
   confirmation_year?: number | null;
+  completed_lesson_count?: number;
+  completed_devotional_count?: number;
+  completed_event_count?: number;
+  faith_points?: number;
   avatar_url?: string | null;
   father_name?: string | null;
   mother_name?: string | null;
@@ -97,6 +101,7 @@ function calcAge(birthDate: string) {
 }
 
 type Lesson = { id: string; title: string; order_num: number; objective: string | null; topics: string[] | null; course_id: string };
+type Course = { id: string; title: string; order_num: number };
 
 const COMMUNITIES_LIST = ["Martim Lutero","Bom Pastor","Rincão Fundo","Rincão Frente","Linha Brasil","Iriá Pira 1","Iriá Pira 2"] as const;
 function getArea(community: string) {
@@ -136,6 +141,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   const [newConfYear, setNewConfYear] = useState<number | null>(p.confirmation_year ?? null);
   const [savingConfYear, setSavingConfYear] = useState(false);
   const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [timelineItems, setTimelineItems] = useState<TimelineItem[]>([]);
@@ -151,7 +157,20 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
     async function load() {
-      const [{ data: ass }, { data: planData }, { data: notesData }, { data: lessonsData }, { data: attendanceData }, { data: progressData }, { data: allAssessments }, { data: evalData }, { data: worshipData }, { data: challengeParticipations }] = await Promise.all([
+      const [
+        { data: ass },
+        { data: planData },
+        { data: notesData },
+        { data: lessonsData },
+        { data: attendanceData },
+        { data: progressData },
+        { data: allAssessments },
+        { data: evalData },
+        { data: worshipData },
+        { data: challengeParticipations },
+        { data: coursesData },
+        { data: unlocksData },
+      ] = await Promise.all([
         supabase.from("spiritual_assessments").select("*").eq("user_id", p.user_id).eq("month", month).eq("year", year).maybeSingle(),
         supabase.from("discipleship_plans").select("*").eq("user_id", p.user_id).maybeSingle(),
         supabase.from("pastoral_notes").select("*").eq("user_id", p.user_id).order("created_at", { ascending: false }),
@@ -162,12 +181,22 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
         supabase.from("meeting_evaluations").select("event_id, participation_score, understanding_score, engagement_score, notes, created_at").eq("user_id", p.user_id),
         supabase.from("worship_attendance").select("id, worship_date, worship_time, preacher_name, status, event_type, created_at").eq("user_id", p.user_id).order("worship_date", { ascending: false }),
         supabase.from("challenge_participants").select("challenge_id, completed, completed_at, joined_at, response_text, file_url").eq("user_id", p.user_id),
+        supabase.from("courses").select("id, title, order_num").order("order_num"),
+        supabase.from("course_unlocks").select("course_id").eq("area", p.area),
       ]);
 
       setAssessment(ass ?? null);
       if (planData) setPlan(prev => ({ ...prev, ...planData }));
       setNotes(notesData ?? []);
-      setLessons(lessonsData ?? []);
+      const unlockedCourseIds = new Set((unlocksData ?? []).map((unlock: any) => unlock.course_id));
+      const visibleCourses = unlockedCourseIds.size > 0
+        ? (coursesData ?? []).filter((course) => unlockedCourseIds.has(course.id))
+        : (coursesData ?? []);
+      setCourses(visibleCourses as Course[]);
+      const visibleLessons = unlockedCourseIds.size > 0
+        ? (lessonsData ?? []).filter((lesson) => unlockedCourseIds.has(lesson.course_id))
+        : (lessonsData ?? []);
+      setLessons(visibleLessons);
 
       // Fetch turmas
       const { data: turmasData } = await supabase.from("turmas").select("id, name, area").eq("is_active", true).order("area").order("name");
@@ -399,13 +428,18 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   }
 
   const completedIds = new Set(p.completed_activity_ids);
-  const pct = activities.length > 0 ? Math.round((p.completed_count / activities.length) * 100) : 0;
   const formacoes = activities.filter(a => a.type === "formacao");
   const devocionais = activities.filter(a => a.type === "devocional");
   const encontros = activities.filter(a => a.type === "encontro");
-  const doneForm = formacoes.filter(a => completedIds.has(a.id)).length;
-  const doneDev = devocionais.filter(a => completedIds.has(a.id)).length;
-  const doneEnc = encontros.filter(a => completedIds.has(a.id)).length;
+  const legacyDoneForm = formacoes.filter(a => completedIds.has(a.id)).length;
+  const legacyDoneDev = devocionais.filter(a => completedIds.has(a.id)).length;
+  const legacyDoneEnc = encontros.filter(a => completedIds.has(a.id)).length;
+  const doneForm = Math.max(lessonCompletions.length, p.completed_lesson_count ?? 0, legacyDoneForm);
+  const doneDev = Math.max(devotionalCompletions.length, p.completed_devotional_count ?? 0, legacyDoneDev);
+  const doneEnc = Math.max(p.completed_event_count ?? 0, legacyDoneEnc);
+  const otherDone = activities.filter(a => !["formacao", "devocional", "encontro"].includes(a.type) && completedIds.has(a.id)).length;
+  const realCompletedCount = doneForm + doneDev + doneEnc + otherDone;
+  const pct = activities.length > 0 ? Math.round((realCompletedCount / activities.length) * 100) : 0;
   const age = calcAge(p.birth_date);
 
   // Attendance stats
@@ -458,7 +492,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
       return scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
     }).filter(s => s > 0);
     const testemunhoAvg = evalScores.length > 0 ? evalScores.reduce((a, b) => a + b, 0) / evalScores.length : 0;
-    const testemunhoScore = Math.round(testemunhoAvg) || (p.completed_count > 0 ? 2 : 1);
+    const testemunhoScore = Math.round(testemunhoAvg) || (realCompletedCount > 0 ? 2 : 1);
     const testemunhoLabel = testemunhoScore >= 4 ? "Exemplar" : testemunhoScore >= 3 ? "Bom" : testemunhoScore >= 2 ? "Em crescimento" : "Precisa atenção";
 
     // Overall
@@ -851,7 +885,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
             </div>
             <div className="p-4 space-y-3">
               {[
-                { label: "📊 Progresso geral", done: p.completed_count, total: activities.length, color: pct >= 70 ? "var(--gradient-green)" : pct >= 34 ? "var(--gradient-orange)" : "hsl(var(--destructive))" },
+                { label: "📊 Progresso geral", done: realCompletedCount, total: activities.length, color: pct >= 70 ? "var(--gradient-green)" : pct >= 34 ? "var(--gradient-orange)" : "hsl(var(--destructive))" },
                 { label: "📖 Devocionais", done: doneDev, total: devocionais.length, color: "var(--gradient-green)" },
                 { label: "🎓 Formação", done: doneForm, total: formacoes.length, color: "hsl(var(--secondary))" },
                 { label: "📅 Encontros", done: doneEnc, total: encontros.length, color: "hsl(var(--primary))" },
@@ -923,18 +957,16 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
               <p className="font-montserrat font-bold text-foreground text-sm">Formação nos Cursos</p>
             </div>
             <div className="p-4 space-y-3">
-              {[
-                { label: "Curso 1 — Começando a Vida Cristã", total: 16 },
-                { label: "Curso 2 — Crescimento Cristão", total: 16 },
-              ].map((course, i) => {
-                const courseActs = formacoes.slice(i * course.total, (i + 1) * course.total);
-                const done = courseActs.filter(a => completedIds.has(a.id)).length;
-                const cp = course.total > 0 ? Math.round((done / course.total) * 100) : 0;
+              {courses.map((course) => {
+                const courseLessons = lessons.filter((lesson) => lesson.course_id === course.id);
+                const done = courseLessons.filter((lesson) => lessonCompletions.some((completion) => completion.lesson_id === lesson.id)).length;
+                const total = courseLessons.length;
+                const cp = total > 0 ? Math.round((done / total) * 100) : 0;
                 return (
-                  <div key={i}>
+                  <div key={course.id}>
                     <div className="flex justify-between mb-1">
-                      <span className="font-inter text-xs text-foreground">{course.label}</span>
-                      <span className="font-inter text-xs text-muted-foreground">{done}/{course.total} · <strong className="text-foreground">{cp}%</strong></span>
+                      <span className="font-inter text-xs text-foreground">Curso {course.order_num} — {course.title}</span>
+                      <span className="font-inter text-xs text-muted-foreground">{done}/{total} · <strong className="text-foreground">{cp}%</strong></span>
                     </div>
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
                       <div className="h-full bg-secondary rounded-full" style={{ width: `${cp}%` }} />
@@ -942,6 +974,9 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                   </div>
                 );
               })}
+              {courses.length === 0 && (
+                <p className="text-center text-muted-foreground font-inter text-sm py-2">Nenhum curso liberado para este confirmando.</p>
+              )}
             </div>
           </div>
         </div>
