@@ -79,8 +79,9 @@ export function useAgendaSchedule() {
     const entries: ScheduleEntry[] = [];
     for (const event of (events ?? [])) {
       if (!event.linked_lesson_id) continue;
-      // Filter by user's area: show events with no area or matching area
-      if (event.area && currentArea && event.area !== currentArea) continue;
+      // Filter by user's area: for non-lesson events, show events with no area or matching area
+      // For lesson events (discipleship), show to all areas
+      if (!event.linked_lesson_id && event.area && currentArea && event.area !== currentArea) continue;
       const lesson = lessonMap.get(event.linked_lesson_id);
       if (!lesson) continue;
       const course = courseMap.get(lesson.course_id);
@@ -110,7 +111,8 @@ export function useAgendaSchedule() {
     setLoading(false);
   }
 
-  const today = new Date();
+  const now = new Date();
+  const today = new Date(now);
   today.setHours(0, 0, 0, 0);
 
   // Which lessons are "released" (window is open)
@@ -126,13 +128,11 @@ export function useAgendaSchedule() {
     if (today >= entry.windowStart) {
       releasedLessonIds.add(entry.lessonId);
     }
-    const eventDay = new Date(entry.eventDate);
-    eventDay.setHours(0, 0, 0, 0);
-    if (today >= entry.windowStart && today < eventDay) {
-      // Study is open from windowStart until the day BEFORE the event
+    if (today >= entry.windowStart && now < entry.eventDate) {
+      // Study is open from windowStart until the actual event time
       studyOpenLessonIds.add(entry.lessonId);
-    } else if (today >= eventDay) {
-      // After event day: late access (no points)
+    } else if (now >= entry.eventDate) {
+      // After the actual event time: late access (no points)
       lateAccessLessonIds.add(entry.lessonId);
     }
     lessonDevotionalDates.set(entry.lessonId, entry.devotionalDates);
@@ -143,10 +143,10 @@ export function useAgendaSchedule() {
   const scheduledLessonIds = new Set(schedule.map(e => e.lessonId));
 
   // Next upcoming scheduled event (window open or future)
-  const nextScheduledEvent = schedule.find(e => e.eventDate >= today) ?? null;
+  const nextScheduledEvent = schedule.find(e => e.eventDate >= now) ?? null;
 
   // Current active entry = next one with window open
-  const currentEntry = schedule.find(e => today >= e.windowStart && e.eventDate >= today) ?? null;
+  const currentEntry = schedule.find(e => today >= e.windowStart && e.eventDate >= now) ?? null;
 
   return {
     schedule,
