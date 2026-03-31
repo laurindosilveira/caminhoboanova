@@ -594,7 +594,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
               const isMe = m.user_id === myUserId;
               const initials = m.full_name.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase();
               const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : null;
-              const clickable = canManage && !isMe;
+              const clickable = true;
               return (
                 <div
                   key={m.user_id}

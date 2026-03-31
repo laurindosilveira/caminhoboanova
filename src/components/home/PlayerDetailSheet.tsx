@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { X, Trash2, ChevronRight, BookOpen, Calendar, Church, Trophy, Star } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface Props {
   userId: string;
@@ -24,13 +25,28 @@ interface ActivityItem {
   tableId?: string;
 }
 
+type LessonExpandedContent = {
+  icebreaker?: string;
+  practice?: string;
+  prayer_prompt?: string;
+  questions?: string[];
+  answers: Array<{ question_key: string; response: string }>;
+};
+
 type DevotionalExpandedContent = {
+  title?: string;
   bible_reference?: string;
+  bible_text?: string;
   reflection?: string;
   practice?: string;
+  prayer?: string;
   questions?: string[];
   answers?: Array<{ question_index: number; response: string }>;
 };
+
+type DetailModalState =
+  | { itemId: string; type: "lesson"; title: string; content: LessonExpandedContent | null }
+  | { itemId: string; type: "devotional"; title: string; content: DevotionalExpandedContent | null };
 
 export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsChanged }: Props) {
   const { role } = useAuth();
@@ -38,9 +54,8 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [expandedItem, setExpandedItem] = useState<string | null>(null);
-  const [expandedContent, setExpandedContent] = useState<any>(null);
-  const [loadingContent, setLoadingContent] = useState(false);
+  const [detailModal, setDetailModal] = useState<DetailModalState | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [totalPoints, setTotalPoints] = useState(0);
 
   useEffect(() => {
@@ -73,17 +88,17 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       supabase.from("activities").select("id, title, points, type"),
     ]);
 
-    const lessonMap = new Map((lessons ?? []).map((l) => [l.id, l]));
-    const devMap = new Map((devContent ?? []).map((d) => [d.id, d]));
-    const eventMap = new Map((events ?? []).map((e) => [e.id, e]));
-    const actMap = new Map((activities ?? []).map((a) => [a.id, a]));
+    const lessonMap = new Map((lessons ?? []).map((lesson) => [lesson.id, lesson]));
+    const devotionalMap = new Map((devContent ?? []).map((devotional) => [devotional.id, devotional]));
+    const eventMap = new Map((events ?? []).map((event) => [event.id, event]));
+    const activityMap = new Map((activities ?? []).map((activity) => [activity.id, activity]));
 
     const allItems: ActivityItem[] = [];
 
-    const lessonIds = new Set((lessonResps ?? []).map((r) => r.lesson_id));
+    const lessonIds = new Set((lessonResps ?? []).map((response) => response.lesson_id));
     lessonIds.forEach((lessonId) => {
       const lesson = lessonMap.get(lessonId);
-      const firstResp = (lessonResps ?? []).find((r) => r.lesson_id === lessonId);
+      const firstResp = (lessonResps ?? []).find((response) => response.lesson_id === lessonId);
       allItems.push({
         id: `lesson-${lessonId}`,
         type: "lesson",
@@ -96,101 +111,138 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       });
     });
 
-    (devProgress ?? []).forEach((dp) => {
-      const dev = devMap.get(dp.devotional_id);
-      const dow = new Date(dp.completed_at).getDay();
-      const pts = dow === 0 || dow === 6 ? 2 : 5;
+    (devProgress ?? []).forEach((progress) => {
+      const devotional = devotionalMap.get(progress.devotional_id);
+      const dayOfWeek = new Date(progress.completed_at).getDay();
+      const points = dayOfWeek === 0 || dayOfWeek === 6 ? 2 : 5;
       allItems.push({
-        id: `dev-${dp.id}`,
+        id: `dev-${progress.id}`,
         type: "devotional",
-        title: dev?.title || `Devocional dia ${dev?.day_number ?? "?"}`,
-        subtitle: pts === 2 ? "Recuperado no fim de semana" : "Devocional diário",
-        points: pts,
-        date: dp.completed_at,
+        title: devotional?.title || `Devocional dia ${devotional?.day_number ?? "?"}`,
+        subtitle: points === 2 ? "Recuperado no fim de semana" : "Devocional diário",
+        points,
+        date: progress.completed_at,
         deletable: true,
-        tableId: dp.id,
+        tableId: progress.id,
       });
     });
 
-    (attendance ?? []).forEach((a) => {
-      const event = eventMap.get(a.event_id);
+    (attendance ?? []).forEach((presence) => {
+      const event = eventMap.get(presence.event_id);
       allItems.push({
-        id: `att-${a.id}`,
+        id: `att-${presence.id}`,
         type: "attendance",
         title: event?.title ?? "Encontro",
         subtitle: event?.event_date ? format(new Date(event.event_date), "d 'de' MMM", { locale: ptBR }) : "",
         points: 10,
-        date: a.created_at,
+        date: presence.created_at,
         deletable: true,
-        tableId: a.id,
+        tableId: presence.id,
       });
     });
 
-    (worship ?? []).forEach((w) => {
+    (worship ?? []).forEach((service) => {
       allItems.push({
-        id: `wor-${w.id}`,
+        id: `wor-${service.id}`,
         type: "worship",
-        title: `Culto - ${w.preacher_name}`,
-        subtitle: `${format(new Date(w.worship_date), "d/MM/yyyy")} às ${w.worship_time}`,
+        title: `Culto - ${service.preacher_name}`,
+        subtitle: `${format(new Date(service.worship_date), "d/MM/yyyy")} às ${service.worship_time}`,
         points: 5,
-        date: w.created_at,
+        date: service.created_at,
         deletable: true,
-        tableId: w.id,
+        tableId: service.id,
       });
     });
 
-    (achievements ?? []).forEach((a) => {
+    (achievements ?? []).forEach((achievement) => {
       allItems.push({
-        id: `ach-${a.id}`,
+        id: `ach-${achievement.id}`,
         type: "achievement",
-        title: `Conquista: ${a.achievement_key}`,
+        title: `Conquista: ${achievement.achievement_key}`,
         subtitle: "Bônus de conquista",
-        points: a.bonus_points,
-        date: a.unlocked_at,
+        points: achievement.bonus_points,
+        date: achievement.unlocked_at,
         deletable: true,
-        tableId: a.id,
+        tableId: achievement.id,
       });
     });
 
-    (userProgress ?? []).forEach((up) => {
-      const act = actMap.get(up.activity_id);
-      if (act && act.type !== "devocional" && act.type !== "formacao" && act.type !== "encontro") {
+    (userProgress ?? []).forEach((progress) => {
+      const activity = activityMap.get(progress.activity_id);
+      if (activity && activity.type !== "devocional" && activity.type !== "formacao" && activity.type !== "encontro") {
         allItems.push({
-          id: `act-${up.id}`,
+          id: `act-${progress.id}`,
           type: "activity",
-          title: act.title,
+          title: activity.title,
           subtitle: "Atividade extra",
-          points: act.points ?? 0,
-          date: up.completed_at,
+          points: activity.points ?? 0,
+          date: progress.completed_at,
           deletable: true,
-          tableId: up.id,
+          tableId: progress.id,
         });
       }
     });
 
     allItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setItems(allItems);
-    setTotalPoints(allItems.reduce((s, i) => s + i.points, 0));
+    setTotalPoints(allItems.reduce((sum, item) => sum + item.points, 0));
     setLoading(false);
   }
 
-  async function handleExpand(item: ActivityItem) {
-    if (expandedItem === item.id) {
-      setExpandedItem(null);
-      setExpandedContent(null);
-      return;
+  function formatLessonQuestionLabel(
+    key: string,
+    lessonContent?: { icebreaker?: string; practice?: string; prayer_prompt?: string; questions?: string[] } | null
+  ) {
+    if (key === "icebreaker") return lessonContent?.icebreaker || "Quebra-gelo";
+    if (key === "practice") return lessonContent?.practice || "Prática da semana";
+    if (key === "prayer") return lessonContent?.prayer_prompt || "Oração final";
+    if (/^q\d+$/.test(key)) {
+      const index = Number(key.slice(1));
+      return lessonContent?.questions?.[index] || `Pergunta ${index + 1}`;
     }
-    setExpandedItem(item.id);
-    setLoadingContent(true);
+    return key;
+  }
 
-    if (item.type === "lesson" && item.tableId) {
-      const { data } = await supabase
-        .from("lesson_responses")
-        .select("question_key, response")
-        .eq("user_id", userId)
-        .eq("lesson_id", item.tableId);
-      setExpandedContent(data ?? []);
-    } else if (item.type === "devotional" && item.tableId) {
+  async function handleOpenDetails(item: ActivityItem) {
+    if ((item.type !== "lesson" && item.type !== "devotional") || !item.tableId) return;
+
+    setLoadingDetail(true);
+
+    if (item.type === "lesson") {
+      const [{ data: lessonContent }, { data: responses }] = await Promise.all([
+        supabase
+          .from("lesson_content")
+          .select("icebreaker, practice, prayer_prompt, questions")
+          .eq("lesson_id", item.tableId)
+          .maybeSingle(),
+        supabase
+          .from("lesson_responses")
+          .select("question_key, response")
+          .eq("user_id", userId)
+          .eq("lesson_id", item.tableId),
+      ]);
+
+      const orderedAnswers = (responses ?? []).sort((a, b) => {
+        const weight = (questionKey: string) => {
+          if (questionKey === "icebreaker") return 0;
+          if (/^q\d+$/.test(questionKey)) return 1 + Number(questionKey.slice(1));
+          if (questionKey === "practice") return 1000;
+          if (questionKey === "prayer") return 1001;
+          return 2000;
+        };
+        return weight(a.question_key) - weight(b.question_key);
+      });
+
+      setDetailModal({
+        itemId: item.id,
+        type: "lesson",
+        title: item.title,
+        content: {
+          ...(lessonContent ?? {}),
+          answers: orderedAnswers,
+        },
+      });
+    } else {
       const { data: progress } = await supabase
         .from("devotional_progress")
         .select("devotional_id")
@@ -198,12 +250,17 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         .single();
 
       if (!progress?.devotional_id) {
-        setExpandedContent(null);
+        setDetailModal({
+          itemId: item.id,
+          type: "devotional",
+          title: item.title,
+          content: null,
+        });
       } else {
         const [{ data: devotional }, { data: responses }] = await Promise.all([
           supabase
             .from("devotional_content")
-            .select("bible_reference, reflection, practice, questions")
+            .select("title, bible_reference, bible_text, reflection, practice, prayer, questions")
             .eq("id", progress.devotional_id)
             .single(),
           supabase
@@ -214,15 +271,19 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
             .order("question_index"),
         ]);
 
-        setExpandedContent({
-          ...(devotional as DevotionalExpandedContent),
-          answers: responses ?? [],
+        setDetailModal({
+          itemId: item.id,
+          type: "devotional",
+          title: item.title,
+          content: {
+            ...(devotional as DevotionalExpandedContent),
+            answers: responses ?? [],
+          },
         });
       }
-    } else {
-      setExpandedContent(null);
     }
-    setLoadingContent(false);
+
+    setLoadingDetail(false);
   }
 
   async function handleDelete(item: ActivityItem) {
@@ -256,13 +317,14 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         notes: "Removido via relatório de pontuação",
       });
 
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
+      setItems((prev) => prev.filter((current) => current.id !== item.id));
       setTotalPoints((prev) => prev - item.points);
       toast.success(`Removido: ${item.title} (-${item.points} pts)`);
       onPointsChanged?.();
     } catch (err: any) {
       toast.error("Erro ao remover: " + (err.message ?? ""));
     }
+
     setDeleting(null);
   }
 
@@ -294,6 +356,8 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     acc[item.type].points += item.points;
     return acc;
   }, {} as Record<string, { count: number; points: number }>);
+
+  const selectedDetailItem = detailModal ? items.find((item) => item.id === detailModal.itemId) ?? null : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={onClose}>
@@ -333,23 +397,26 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
           ) : items.length === 0 ? (
             <p className="text-center text-muted-foreground font-inter text-sm py-8">Nenhuma atividade pontuada.</p>
           ) : (
-            items.map((item) => (
-              <div key={item.id}>
+            items.map((item) => {
+              const canOpenDetails = item.type === "lesson" || item.type === "devotional";
+              return (
                 <div
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors cursor-pointer ${
-                    expandedItem === item.id ? "bg-primary/5 border border-primary/20" : "bg-muted/30 hover:bg-muted/50"
+                  key={item.id}
+                  onClick={() => handleOpenDetails(item)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-left ${
+                    canOpenDetails ? "bg-muted/30 hover:bg-muted/50 cursor-pointer" : "bg-muted/20 cursor-default"
                   }`}
-                  onClick={() => handleExpand(item)}
                 >
                   <div className="flex-shrink-0">{typeIcon(item.type)}</div>
                   <div className="flex-1 min-w-0">
                     <p className="font-inter text-sm text-foreground font-medium truncate">{item.title}</p>
-                    {item.subtitle && (
-                      <p className="text-muted-foreground text-[10px] font-inter">{item.subtitle}</p>
-                    )}
+                    {item.subtitle && <p className="text-muted-foreground text-[10px] font-inter">{item.subtitle}</p>}
                     <p className="text-muted-foreground text-[10px] font-inter">
                       {item.date ? format(new Date(item.date), "d/MM/yy HH:mm") : ""}
                     </p>
+                    {canOpenDetails && (
+                      <p className="text-primary text-[10px] font-inter font-semibold mt-0.5">Toque para ver as respostas</p>
+                    )}
                   </div>
                   <span className="font-montserrat font-bold text-primary text-xs flex-shrink-0">+{item.points}</span>
                   {canDelete && (
@@ -362,66 +429,110 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
-                  <ChevronRight className={`w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform ${expandedItem === item.id ? "rotate-90" : ""}`} />
+                  {canOpenDetails && <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
                 </div>
-
-                {expandedItem === item.id && (
-                  <div className="ml-10 mt-1 p-3 bg-muted/20 rounded-xl border border-border text-xs font-inter space-y-1">
-                    {loadingContent ? (
-                      <div className="h-8 bg-muted rounded animate-pulse" />
-                    ) : item.type === "lesson" && Array.isArray(expandedContent) ? (
-                      expandedContent.length > 0 ? (
-                        expandedContent.map((r: any, i: number) => (
-                          <div key={i}>
-                            <p className="text-muted-foreground font-bold">{r.question_key}</p>
-                            <p className="text-foreground">{r.response || <span className="italic text-muted-foreground">Sem resposta</span>}</p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-muted-foreground italic">Sem respostas registradas.</p>
-                      )
-                    ) : item.type === "devotional" && expandedContent ? (
-                      <div>
-                        {expandedContent.bible_reference && (
-                          <p className="text-muted-foreground font-bold">📖 {expandedContent.bible_reference}</p>
-                        )}
-                        {expandedContent.reflection && (
-                          <p className="text-foreground mt-1 whitespace-pre-wrap">{expandedContent.reflection}</p>
-                        )}
-                        {Array.isArray(expandedContent.questions) && expandedContent.questions.length > 0 && (
-                          <div className="mt-3 space-y-2">
-                            {expandedContent.questions
-                              .filter((q: string) => q.trim())
-                              .map((question: string, index: number) => {
-                                const answer = expandedContent.answers?.find((row: any) => row.question_index === index)?.response;
-                                return (
-                                  <div key={index}>
-                                    <p className="text-muted-foreground font-bold">{index + 1}. {question}</p>
-                                    <p className="text-foreground whitespace-pre-wrap">
-                                      {answer || <span className="italic text-muted-foreground">Sem resposta registrada.</span>}
-                                    </p>
-                                  </div>
-                                );
-                              })}
-                          </div>
-                        )}
-                        {expandedContent.practice && (
-                          <div className="mt-3">
-                            <p className="text-muted-foreground font-bold">Prática</p>
-                            <p className="text-foreground whitespace-pre-wrap">{expandedContent.practice}</p>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground italic">Detalhes da atividade: {typeLabel(item.type)}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
+
+      <Dialog open={!!detailModal} onOpenChange={(open) => { if (!open) setDetailModal(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-montserrat text-lg">
+              {detailModal?.type === "lesson" ? "🎓 Respostas da lição" : "📖 Respostas do devocional"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-border bg-muted/20 p-4">
+              <p className="font-montserrat font-bold text-foreground text-sm">{detailModal?.title}</p>
+              <p className="text-muted-foreground font-inter text-xs mt-1">
+                {fullName}
+                {selectedDetailItem?.date ? ` · ${format(new Date(selectedDetailItem.date), "d 'de' MMMM 'às' HH:mm", { locale: ptBR })}` : ""}
+              </p>
+            </div>
+
+            {loadingDetail ? (
+              <div className="space-y-2">
+                <div className="h-16 rounded-2xl bg-muted animate-pulse" />
+                <div className="h-24 rounded-2xl bg-muted animate-pulse" />
+              </div>
+            ) : detailModal?.type === "lesson" ? (
+              detailModal.content && detailModal.content.answers.length > 0 ? (
+                <div className="space-y-3">
+                  {detailModal.content.answers.map((answer, index) => (
+                    <div key={`${answer.question_key}-${index}`} className="rounded-2xl border border-border bg-card p-4">
+                      <p className="font-montserrat font-bold text-foreground text-sm">
+                        {formatLessonQuestionLabel(answer.question_key, detailModal.content)}
+                      </p>
+                      <p className="mt-2 text-sm font-inter text-foreground whitespace-pre-wrap">
+                        {answer.response || "Sem resposta registrada."}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm font-inter text-muted-foreground">Nenhuma resposta encontrada para esta lição.</p>
+              )
+            ) : detailModal?.content ? (
+              <div className="space-y-3">
+                {detailModal.content.bible_reference && (
+                  <div className="rounded-2xl border border-border bg-card p-4">
+                    <p className="font-montserrat font-bold text-foreground text-sm">Texto bíblico</p>
+                    <p className="mt-2 text-sm font-inter text-foreground">{detailModal.content.bible_reference}</p>
+                    {detailModal.content.bible_text && (
+                      <p className="mt-2 text-sm font-inter text-muted-foreground whitespace-pre-wrap">{detailModal.content.bible_text}</p>
+                    )}
+                  </div>
+                )}
+
+                {detailModal.content.reflection && (
+                  <div className="rounded-2xl border border-border bg-card p-4">
+                    <p className="font-montserrat font-bold text-foreground text-sm">Reflexão</p>
+                    <p className="mt-2 text-sm font-inter text-foreground whitespace-pre-wrap">{detailModal.content.reflection}</p>
+                  </div>
+                )}
+
+                {Array.isArray(detailModal.content.questions) && detailModal.content.questions.filter((question) => question.trim()).length > 0 && (
+                  <div className="space-y-3">
+                    {detailModal.content.questions
+                      .filter((question) => question.trim())
+                      .map((question, index) => {
+                        const answer = detailModal.content?.answers?.find((row) => row.question_index === index)?.response;
+                        return (
+                          <div key={index} className="rounded-2xl border border-border bg-card p-4">
+                            <p className="font-montserrat font-bold text-foreground text-sm">{index + 1}. {question}</p>
+                            <p className="mt-2 text-sm font-inter text-foreground whitespace-pre-wrap">
+                              {answer || "Sem resposta registrada."}
+                            </p>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+
+                {detailModal.content.practice && (
+                  <div className="rounded-2xl border border-border bg-card p-4">
+                    <p className="font-montserrat font-bold text-foreground text-sm">Prática</p>
+                    <p className="mt-2 text-sm font-inter text-foreground whitespace-pre-wrap">{detailModal.content.practice}</p>
+                  </div>
+                )}
+
+                {detailModal.content.prayer && (
+                  <div className="rounded-2xl border border-border bg-card p-4">
+                    <p className="font-montserrat font-bold text-foreground text-sm">Oração</p>
+                    <p className="mt-2 text-sm font-inter text-foreground whitespace-pre-wrap">{detailModal.content.prayer}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm font-inter text-muted-foreground">Nenhuma resposta encontrada para este devocional.</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

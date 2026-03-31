@@ -259,16 +259,10 @@ export default function LessonChoiceView({ lesson, onBack, onOpenStudy, onOpenEd
   }, [lesson.id, scheduledDevotionalDates, isLateAccess, isStudyCompleted]);
 
   async function handleCompleteDevotional(devotionalId: string) {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
     const now = new Date();
     const isWeekend = now.getDay() === 0 || now.getDay() === 6;
     // Late access = 0 points; weekend recovery = 2 pts; normal = 5 pts
     const pts = isLateAccess ? 0 : isWeekend ? 2 : 5;
-    await supabase.from("devotional_progress").insert({
-      user_id: user.id,
-      devotional_id: devotionalId,
-    });
     const newCompletedMap = new Map(completedDates);
     newCompletedMap.set(devotionalId, now.toISOString());
     setCompletedDates(newCompletedMap);

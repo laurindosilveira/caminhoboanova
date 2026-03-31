@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import BibleModal from "./BibleModal";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -74,6 +74,7 @@ export default function JourneyLessonView({ lesson, onBack, isAdmin = false, tar
   const [audioListened, setAudioListened] = useState(false);
   const [saveAttempted, setSaveAttempted] = useState(false);
   const [showCompletionAnim, setShowCompletionAnim] = useState(false);
+  const hasLoadedResponses = useRef(false);
 
   // Load lesson content from DB (set by admin)
   useEffect(() => {
@@ -119,6 +120,7 @@ export default function JourneyLessonView({ lesson, onBack, isAdmin = false, tar
         data.forEach(r => { map[r.question_key] = r.response; });
         setResponses(map);
       }
+      hasLoadedResponses.current = true;
     }
     loadResponses();
   }, [lesson.id, targetUserId]);
@@ -127,14 +129,49 @@ export default function JourneyLessonView({ lesson, onBack, isAdmin = false, tar
     if (isAdmin) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    await supabase.from("lesson_responses").upsert({
+    const { error } = await supabase.from("lesson_responses").upsert({
       user_id: user.id,
       lesson_id: lesson.id,
       question_key: key,
       response: value,
     }, { onConflict: "user_id,lesson_id,question_key" });
+    if (error) {
+      toast.error("Falha ao salvar a resposta da lição.", {
+        description: error.message,
+      });
+      return;
+    }
     setLastSaved(new Date());
   }, [lesson.id, isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin || !contentLoaded || !hasLoadedResponses.current) return;
+
+    const entries = Object.entries(responses);
+    if (entries.length === 0) return;
+
+    const timeoutId = window.setTimeout(async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const upserts = entries.map(([key, response]) => ({
+        user_id: user.id,
+        lesson_id: lesson.id,
+        question_key: key,
+        response,
+      }));
+
+      const { error } = await supabase
+        .from("lesson_responses")
+        .upsert(upserts, { onConflict: "user_id,lesson_id,question_key" });
+
+      if (!error) {
+        setLastSaved(new Date());
+      }
+    }, 1200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [responses, lesson.id, isAdmin, contentLoaded]);
 
   // Validation: check all required fields
   const requiredKeys = ["icebreaker", ...content.questions.map((_, i) => `q${i}`), "practice", "prayer"];
@@ -166,7 +203,16 @@ export default function JourneyLessonView({ lesson, onBack, isAdmin = false, tar
       user_id: user.id, lesson_id: lesson.id, question_key: key, response,
     }));
     if (upserts.length > 0) {
-      await supabase.from("lesson_responses").upsert(upserts, { onConflict: "user_id,lesson_id,question_key" });
+      const { error } = await supabase
+        .from("lesson_responses")
+        .upsert(upserts, { onConflict: "user_id,lesson_id,question_key" });
+      if (error) {
+        setSaving(false);
+        toast.error("Não foi possível salvar as respostas da lição.", {
+          description: error.message,
+        });
+        return;
+      }
     }
     setSaving(false);
     setLastSaved(new Date());
