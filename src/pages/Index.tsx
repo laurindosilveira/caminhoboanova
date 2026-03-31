@@ -25,6 +25,7 @@ import BottomNav, { type Tab } from "@/components/home/BottomNav";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserStats } from "@/hooks/useUserStats";
 import { useAppNotifications } from "@/hooks/useAppNotifications";
+import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
 
 type ProfileSubTab = "meu-perfil" | "minha-jornada" | "configuracoes";
 
@@ -33,6 +34,7 @@ export default function Index() {
   const [targetLessonId, setTargetLessonId] = useState<string | null>(null);
   const [profileSubTab, setProfileSubTab] = useState<ProfileSubTab>("meu-perfil");
   const { profile, role } = useAuth();
+  const { effectiveArea } = useAreaSwitch();
   const navigate = useNavigate();
   const stats = useUserStats();
   useAppNotifications();
@@ -195,7 +197,7 @@ export default function Index() {
                   streakDays={stats.streakDays}
                   completedCount={stats.completedCount}
                   community={profile?.community}
-                  area={profile?.area}
+                  area={effectiveArea || profile?.area}
                 />
 
                 {/* Banner instalar app */}

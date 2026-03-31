@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
 import { Heart, GraduationCap, Sparkles, Lock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import JourneyLessonView from "@/components/home/JourneyLessonView";
@@ -43,8 +44,10 @@ type DiscipleshipTabProps = {
 
 export default function DiscipleshipTab({ targetLessonId, onTargetLessonConsumed }: DiscipleshipTabProps = {}) {
   const { profile, role } = useAuth();
+  const { effectiveArea } = useAreaSwitch();
   const isLeaderOrAdmin = role === "admin" || role === "lider";
   const agendaSchedule = useAgendaSchedule();
+  const currentArea = effectiveArea || profile?.area || "";
 
   const [subTab, setSubTab] = useState<SubTab>("trilha");
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -84,7 +87,7 @@ export default function DiscipleshipTab({ targetLessonId, onTargetLessonConsumed
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { fetchAll(); }, [currentArea]);
 
   // Auto-open lesson when navigating from agenda
   useEffect(() => {
@@ -120,7 +123,7 @@ export default function DiscipleshipTab({ targetLessonId, onTargetLessonConsumed
       supabase.from("devotional_content").select("id, lesson_id").not("lesson_id", "is", null),
       supabase.from("devotional_progress").select("devotional_id").eq("user_id", user.id),
       supabase.from("worship_attendance").select("id").eq("user_id", user.id).eq("status", "aprovado"),
-      supabase.from("course_unlocks").select("course_id").eq("area", profile?.area ?? ""),
+      supabase.from("course_unlocks").select("course_id").eq("area", currentArea),
     ]);
 
     setActivities(acts ?? []);

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
 import { Camera, ChevronLeft, Upload, Trash2, Check, X, Clock, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -26,7 +27,9 @@ interface Photo {
 
 export default function EventPhotoGallery() {
   const { profile, role } = useAuth();
+  const { effectiveArea } = useAreaSwitch();
   const isLeaderOrAdmin = role === "admin" || role === "lider";
+  const currentArea = effectiveArea || profile?.area || "";
   const [albums, setAlbums] = useState<EventAlbum[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedAlbum, setSelectedAlbum] = useState<EventAlbum | null>(null);
@@ -38,14 +41,14 @@ export default function EventPhotoGallery() {
 
   useEffect(() => {
     fetchAlbums();
-  }, []);
+  }, [currentArea]);
 
   async function fetchAlbums() {
     setLoading(true);
     // Get events that have photos (or are past events)
     const { data: events } = await supabase
       .from("events")
-      .select("id, title, event_date")
+      .select("id, title, event_date, area")
       .order("event_date", { ascending: false });
 
     if (!events) { setLoading(false); return; }
@@ -64,7 +67,9 @@ export default function EventPhotoGallery() {
       photosByEvent.set(p.event_id, entry);
     });
 
-    const albumList: EventAlbum[] = events
+    const relevantEvents = (events ?? []).filter((event: any) => !event.area || event.area === currentArea);
+
+    const albumList: EventAlbum[] = relevantEvents
       .filter(e => {
         const info = photosByEvent.get(e.id);
         return info && info.count > 0;
@@ -82,7 +87,7 @@ export default function EventPhotoGallery() {
 
     // Also add events without photos but that are past (for upload)
     const now = new Date();
-    events.forEach(e => {
+    relevantEvents.forEach(e => {
       if (!photosByEvent.has(e.id) && new Date(e.event_date) <= now) {
         albumList.push({
           id: e.id,

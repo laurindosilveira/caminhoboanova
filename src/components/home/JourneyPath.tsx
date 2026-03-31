@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { CheckCircle2, Lock, BookOpen, ChevronDown, ChevronRight, CalendarDays, Heart, GraduationCap } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
 
 type Lesson = {
   id: string;
@@ -44,6 +45,8 @@ function ProgressRing({ pct, color, size = 56 }: { pct: number; color: string; s
 
 export default function JourneyPath() {
   const { profile } = useAuth();
+  const { effectiveArea } = useAreaSwitch();
+  const currentArea = effectiveArea || profile?.area || "";
   const [courses, setCourses] = useState<Course[]>([]);
   const [completedLessonIds, setCompletedLessonIds] = useState<Set<string>>(new Set());
   const [fullyCompletedLessonIds, setFullyCompletedLessonIds] = useState<Set<string>>(new Set());
@@ -58,8 +61,8 @@ export default function JourneyPath() {
   });
 
   useEffect(() => {
-    if (profile?.area) fetchData();
-  }, [profile?.area]);
+    if (currentArea) fetchData();
+  }, [currentArea]);
 
   async function fetchData() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -84,7 +87,7 @@ export default function JourneyPath() {
       supabase.from("events").select("id").gte("event_date", new Date(Date.now() - 90 * 86400000).toISOString()),
       supabase.from("attendance").select("event_id, status").eq("user_id", user.id),
       supabase.from("worship_attendance").select("id, status").eq("user_id", user.id).eq("status", "aprovado"),
-      supabase.from("course_unlocks").select("course_id").eq("area", profile?.area ?? ""),
+      supabase.from("course_unlocks").select("course_id").eq("area", currentArea),
     ]);
 
     const lessons = lessonsData ?? [];

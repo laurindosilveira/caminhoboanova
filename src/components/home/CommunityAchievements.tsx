@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
 import { Trophy, Flame, BookOpen, Users, Heart, Target } from "lucide-react";
 
 interface CommunityStats {
@@ -13,22 +14,22 @@ interface CommunityStats {
 
 export default function CommunityAchievements() {
   const { profile } = useAuth();
+  const { effectiveArea } = useAreaSwitch();
+  const currentArea = effectiveArea || profile?.area || "";
   const [stats, setStats] = useState<CommunityStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (profile?.community) fetchStats();
-  }, [profile?.community]);
+    if (currentArea) fetchStats();
+  }, [currentArea]);
 
   async function fetchStats() {
     setLoading(true);
-    const community = profile!.community;
-
-    // Get community member IDs
+    // Get member IDs from the selected area so admins see updated numbers when switching
     const { data: members } = await supabase
       .from("profiles")
       .select("user_id")
-      .eq("community", community as any);
+      .eq("area", currentArea as any);
 
     const memberIds = (members ?? []).map(m => m.user_id);
     if (memberIds.length === 0) {

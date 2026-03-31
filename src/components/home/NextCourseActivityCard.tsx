@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
 import { Zap, Clock, ChevronRight, BookOpen, GraduationCap, CalendarDays } from "lucide-react";
 import { useAgendaSchedule } from "@/hooks/useAgendaSchedule";
 import { format } from "date-fns";
@@ -21,6 +22,8 @@ type NextItem = {
 
 export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { onNavigateToDiscipulado: () => void }) {
   const { profile } = useAuth();
+  const { effectiveArea } = useAreaSwitch();
+  const currentArea = effectiveArea || profile?.area || "";
   const [nextItem, setNextItem] = useState<NextItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState("");
@@ -43,9 +46,9 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
   }, []);
 
   useEffect(() => {
-    if (!profile?.area || agendaSchedule.loading) return;
+    if (!currentArea || agendaSchedule.loading) return;
     fetchNext();
-  }, [profile?.area, agendaSchedule.loading, agendaSchedule.schedule]);
+  }, [currentArea, agendaSchedule.loading, agendaSchedule.schedule]);
 
   async function fetchNext() {
     if (!agendaSchedule.hasScheduledEvents) {

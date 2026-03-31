@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
 import { BarChart3, Plus, X, Check, Users, Timer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
@@ -11,6 +12,8 @@ interface Poll {
   question: string;
   options: string[];
   emoji: string;
+  community: string;
+  area: string | null;
   is_active: boolean;
   ends_at: string | null;
   created_at: string;
@@ -61,6 +64,7 @@ function PollCountdown({ endsAt }: { endsAt: string | null }) {
 
 export default function PollsSection() {
   const { profile, role, user } = useAuth();
+  const { effectiveArea } = useAreaSwitch();
   const { toast } = useToast();
   const [polls, setPolls] = useState<Poll[]>([]);
   const [votes, setVotes] = useState<PollVote[]>([]);
@@ -70,12 +74,13 @@ export default function PollsSection() {
   const [newOptions, setNewOptions] = useState(["", "", ""]);
   const [creating, setCreating] = useState(false);
   const [voting, setVoting] = useState<string | null>(null);
+  const currentArea = effectiveArea || profile?.area || "";
 
   const isManager = role === "admin" || role === "lider";
 
   useEffect(() => {
-    if (profile) fetchPolls();
-  }, [profile]);
+    if (profile && currentArea) fetchPolls();
+  }, [profile, currentArea]);
 
   async function fetchPolls() {
     setLoading(true);
@@ -88,7 +93,13 @@ export default function PollsSection() {
         .limit(10),
       supabase.from("poll_votes").select("poll_id, user_id, option_index"),
     ]);
-    setPolls((pollsData as Poll[]) ?? []);
+    const area1Communities = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
+    const filteredPolls = ((pollsData as Poll[]) ?? []).filter((poll) => {
+      if (poll.area) return poll.area === currentArea;
+      const communityArea = area1Communities.includes(poll.community) ? "Área 1" : "Área 2";
+      return communityArea === currentArea;
+    });
+    setPolls(filteredPolls);
     setVotes((votesData as PollVote[]) ?? []);
     setLoading(false);
   }
@@ -106,7 +117,7 @@ export default function PollsSection() {
       options: validOptions.map(o => o.trim()),
       created_by: user.id,
       community: profile.community,
-      area: profile.area,
+      area: currentArea,
     } as any);
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
