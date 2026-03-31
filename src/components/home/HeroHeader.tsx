@@ -1,6 +1,7 @@
 import { Flame, Star, Heart, LogOut, ArrowLeftRight } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
+import { toast } from "sonner";
 
 interface HeroHeaderProps {
   streakDays: number;
@@ -39,7 +40,13 @@ export default function HeroHeader({ streakDays, faithPoints, faithLevel, faithE
                 <select
                   id="area-switcher"
                   value={effectiveArea}
-                  onChange={e => setEffectiveArea(e.target.value)}
+                  onChange={async (e) => {
+                    try {
+                      await setEffectiveArea(e.target.value);
+                    } catch {
+                      toast.error("Nao foi possivel trocar a area agora.");
+                    }
+                  }}
                   aria-label="Selecionar área de visualização"
                   className="appearance-none bg-white/15 backdrop-blur border border-white/30 text-primary-foreground rounded-full pl-3 pr-7 py-1.5 text-xs font-inter font-semibold focus:outline-none focus:ring-2 focus:ring-white/40 cursor-pointer"
                 >

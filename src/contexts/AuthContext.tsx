@@ -25,6 +25,7 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   role: "user" | "admin" | "lider" | null;
+  adminArea: string | null;
   isSuper: boolean;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -36,6 +37,7 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   profile: null,
   role: null,
+  adminArea: null,
   isSuper: false,
   loading: true,
   signOut: async () => {},
@@ -47,18 +49,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [role, setRole] = useState<"user" | "admin" | "lider" | null>(null);
+  const [adminArea, setAdminArea] = useState<string | null>(null);
   const [isSuper, setIsSuper] = useState(false);
   const [loading, setLoading] = useState(true);
 
   async function fetchProfileAndRole(userId: string) {
-    const [profileRes, isAdminRes, isLiderRes, isSuperRes] = await Promise.all([
+    const [profileRes, isAdminRes, isLiderRes, isSuperRes, roleRowsRes] = await Promise.all([
       supabase.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
       supabase.rpc("has_role", { _user_id: userId, _role: "admin" }),
       supabase.rpc("has_role", { _user_id: userId, _role: "lider" }),
       supabase.rpc("is_super_admin", { _user_id: userId }),
+      supabase.from("user_roles").select("role, admin_area").eq("user_id", userId).in("role", ["admin", "lider"]),
     ]);
     setProfile(profileRes.data ?? null);
     setIsSuper(isSuperRes.data === true);
+    const roleRows = roleRowsRes.data ?? [];
+    const selectedRoleRow = roleRows.find((row) => row.role === "admin") ?? roleRows[0] ?? null;
+    setAdminArea(selectedRoleRow?.admin_area ?? null);
     if (!isAdminRes.error && !isLiderRes.error) {
       if (isAdminRes.data === true) setRole("admin");
       else if (isLiderRes.data === true) setRole("lider");
@@ -80,6 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           setProfile(null);
           setRole(null);
+          setAdminArea(null);
           setLoading(false);
         }
       }
@@ -102,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
     setProfile(null);
     setRole(null);
+    setAdminArea(null);
     setIsSuper(false);
   }
 
@@ -113,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, role, isSuper, loading, signOut, refreshProfile }}>
+    <AuthContext.Provider value={{ user, session, profile, role, adminArea, isSuper, loading, signOut, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
