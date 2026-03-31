@@ -49,13 +49,6 @@ interface RankingMember {
   faith_points: number;
 }
 
-type ProgressRow = { user_id: string; activity_id: string };
-type LessonResponseRow = { user_id: string; lesson_id: string };
-type DevotionalProgressRow = { user_id: string; completed_at: string };
-type AttendanceRow = { user_id: string; status: string };
-type WorshipAttendanceRow = { user_id: string; status: string };
-type ActivityRow = { id: string; points: number | null };
-
 const AREA_1_COMMUNITIES = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
 const AREA_2_COMMUNITIES = ["Martim Lutero", "Linha Brasil", "Iriá Pira 2"];
 
@@ -112,120 +105,59 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
   }, [currentArea]);
 
   const fetchAreaRanking = useCallback(async () => {
-    if (!currentArea) {
+    const communities = [...new Set(activeCommunities.filter(Boolean))];
+
+    if (communities.length === 0) {
       setMembers([]);
       setLoadingMembers(false);
       return;
     }
 
     setLoadingMembers(true);
-    const { data: profilesData } = await supabase
-      .from("profiles")
-      .select("user_id, full_name")
-      .eq("area", currentArea as any)
-      .order("full_name");
+    try {
+      const rankingResponses = await Promise.all(
+        communities.map(async (community) => {
+          const { data, error } = await supabase.rpc("get_community_ranking", {
+            _community: community as any,
+          });
 
-    const profiles = profilesData ?? [];
-    const userIds = profiles.map((profile) => profile.user_id);
+          if (error) {
+            throw error;
+          }
 
-    if (userIds.length === 0) {
-      setMembers([]);
-      setLoadingMembers(false);
-      return;
-    }
+          return (data ?? []) as RankingMember[];
+        })
+      );
 
-    const [
-      { data: activitiesData },
-      { data: progressData },
-      { data: lessonResponsesData },
-      { data: devotionalProgressData },
-      { data: attendanceData },
-      { data: worshipAttendanceData },
-    ] = await Promise.all([
-      supabase.from("activities").select("id, points"),
-      supabase.from("user_progress").select("user_id, activity_id").in("user_id", userIds),
-      supabase.from("lesson_responses").select("user_id, lesson_id").in("user_id", userIds),
-      supabase.from("devotional_progress").select("user_id, completed_at").in("user_id", userIds),
-      supabase.from("attendance").select("user_id, status").in("user_id", userIds),
-      supabase.from("worship_attendance").select("user_id, status").in("user_id", userIds),
-    ]);
-
-    const activityPointsById = new Map(
-      ((activitiesData ?? []) as ActivityRow[]).map((activity) => [activity.id, activity.points ?? 0])
-    );
-
-    const progressByUser = new Map<string, ProgressRow[]>();
-    ((progressData ?? []) as ProgressRow[]).forEach((row) => {
-      const existing = progressByUser.get(row.user_id) ?? [];
-      existing.push(row);
-      progressByUser.set(row.user_id, existing);
-    });
-
-    const lessonsByUser = new Map<string, Set<string>>();
-    ((lessonResponsesData ?? []) as LessonResponseRow[]).forEach((row) => {
-      const existing = lessonsByUser.get(row.user_id) ?? new Set<string>();
-      existing.add(row.lesson_id);
-      lessonsByUser.set(row.user_id, existing);
-    });
-
-    const devotionalsByUser = new Map<string, DevotionalProgressRow[]>();
-    ((devotionalProgressData ?? []) as DevotionalProgressRow[]).forEach((row) => {
-      const existing = devotionalsByUser.get(row.user_id) ?? [];
-      existing.push(row);
-      devotionalsByUser.set(row.user_id, existing);
-    });
-
-    const attendanceByUser = new Map<string, AttendanceRow[]>();
-    ((attendanceData ?? []) as AttendanceRow[]).forEach((row) => {
-      const existing = attendanceByUser.get(row.user_id) ?? [];
-      existing.push(row);
-      attendanceByUser.set(row.user_id, existing);
-    });
-
-    const worshipByUser = new Map<string, WorshipAttendanceRow[]>();
-    ((worshipAttendanceData ?? []) as WorshipAttendanceRow[]).forEach((row) => {
-      const existing = worshipByUser.get(row.user_id) ?? [];
-      existing.push(row);
-      worshipByUser.set(row.user_id, existing);
-    });
-
-    const combined = profiles
-      .map((profile) => {
-        const userProgress = progressByUser.get(profile.user_id) ?? [];
-        const lessonCount = (lessonsByUser.get(profile.user_id) ?? new Set<string>()).size;
-        const devotionalRows = devotionalsByUser.get(profile.user_id) ?? [];
-        const attendanceRows = attendanceByUser.get(profile.user_id) ?? [];
-        const worshipRows = worshipByUser.get(profile.user_id) ?? [];
-
-        const activityPoints = userProgress.reduce(
-          (sum, row) => sum + (activityPointsById.get(row.activity_id) ?? 0),
-          0
-        );
-        const devotionalPoints = devotionalRows.reduce((sum, row) => {
-          const day = new Date(row.completed_at).getDay();
-          return sum + (day === 0 || day === 6 ? 2 : 5);
-        }, 0);
-        const attendancePoints = attendanceRows.filter((row) => row.status === "presente").length * 10;
-        const worshipPoints = worshipRows.filter((row) => row.status === "aprovado").length * 5;
-        const lessonPoints = lessonCount * 20;
-
-        return {
-          user_id: profile.user_id,
-          full_name: profile.full_name,
-          completed_count: userProgress.length + lessonCount + devotionalRows.length,
-          faith_points: activityPoints + devotionalPoints + attendancePoints + worshipPoints + lessonPoints,
-        };
-      })
-      .sort((a, b) => {
-        if (Number(b.faith_points) !== Number(a.faith_points)) {
-          return Number(b.faith_points) - Number(a.faith_points);
-        }
-        return Number(b.completed_count) - Number(a.completed_count);
+      const dedupedMembers = new Map<string, RankingMember>();
+      rankingResponses.flat().forEach((member) => {
+        dedupedMembers.set(member.user_id, {
+          user_id: member.user_id,
+          full_name: member.full_name,
+          completed_count: Number(member.completed_count ?? 0),
+          faith_points: Number(member.faith_points ?? 0),
+        });
       });
 
-    setMembers(combined);
-    setLoadingMembers(false);
-  }, [currentArea]);
+      const combined = [...dedupedMembers.values()].sort((a, b) => {
+        if (b.faith_points !== a.faith_points) {
+          return b.faith_points - a.faith_points;
+        }
+        if (b.completed_count !== a.completed_count) {
+          return b.completed_count - a.completed_count;
+        }
+        return a.full_name.localeCompare(b.full_name, "pt-BR");
+      });
+
+      setMembers(combined);
+    } catch (error: any) {
+      console.error("Erro ao carregar ranking da area:", error);
+      setMembers([]);
+      toast.error("Nao foi possivel atualizar o ranking desta area.");
+    } finally {
+      setLoadingMembers(false);
+    }
+  }, [activeCommunities]);
 
   const fireCelebration = useCallback(() => {
     if (celebrationFired) return;
