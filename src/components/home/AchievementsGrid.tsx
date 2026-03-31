@@ -52,19 +52,26 @@ interface RankingMember {
 const AREA_1_COMMUNITIES = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
 const AREA_2_COMMUNITIES = ["Martim Lutero", "Linha Brasil", "Iriá Pira 2"];
 
+function getAreaNumber(area: string) {
+  if (/1/.test(area)) return 1;
+  if (/2/.test(area)) return 2;
+  return null;
+}
+
 export default function AchievementsGrid({ faithPoints, streakDays, completedCount }: AchievementsGridProps) {
   const { profile, role } = useAuth();
   const { effectiveArea, isOverriding } = useAreaSwitch();
   const canManage = role === "admin" || role === "lider";
   const myUserId = profile?.user_id;
   const currentArea = effectiveArea || profile?.area || "";
-  const activeCommunities = currentArea === "Área 1"
+  const areaNumber = getAreaNumber(currentArea);
+  const activeCommunities = areaNumber === 1
     ? AREA_1_COMMUNITIES
-    : currentArea === "Área 2"
+    : areaNumber === 2
     ? AREA_2_COMMUNITIES
     : profile?.community
-    ? [profile.community]
-    : [];
+      ? [profile.community]
+      : [];
   const [seasons, setSeasons] = useState<RankingSeason[]>([]);
   const [members, setMembers] = useState<RankingMember[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
@@ -88,6 +95,14 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
   const [selectedPlayer, setSelectedPlayer] = useState<{ userId: string; fullName: string } | null>(null);
   const [resettingGame, setResettingGame] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  useEffect(() => {
+    setMembers([]);
+    setSeasons([]);
+    setLoadingMembers(true);
+    setCelebrationFired(false);
+    setSelectedPlayer(null);
+  }, [currentArea]);
 
   const fetchAreaRanking = useCallback(async () => {
     if (activeCommunities.length === 0) {
