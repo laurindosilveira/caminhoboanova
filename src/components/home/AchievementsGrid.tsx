@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
 import { Trophy, Lock, Flame, RefreshCw, Share2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -48,10 +49,22 @@ interface RankingMember {
   faith_points: number;
 }
 
+const AREA_1_COMMUNITIES = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
+const AREA_2_COMMUNITIES = ["Martim Lutero", "Linha Brasil", "Iriá Pira 2"];
+
 export default function AchievementsGrid({ faithPoints, streakDays, completedCount }: AchievementsGridProps) {
   const { profile, role } = useAuth();
+  const { effectiveArea, isOverriding } = useAreaSwitch();
   const canManage = role === "admin" || role === "lider";
   const myUserId = profile?.user_id;
+  const currentArea = effectiveArea || profile?.area || "";
+  const activeCommunities = currentArea === "Área 1"
+    ? AREA_1_COMMUNITIES
+    : currentArea === "Área 2"
+    ? AREA_2_COMMUNITIES
+    : profile?.community
+    ? [profile.community]
+    : [];
   const [seasons, setSeasons] = useState<RankingSeason[]>([]);
   const [members, setMembers] = useState<RankingMember[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
@@ -76,6 +89,33 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
   const [resettingGame, setResettingGame] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
+  const fetchAreaRanking = useCallback(async () => {
+    if (activeCommunities.length === 0) {
+      setMembers([]);
+      return;
+    }
+
+    setLoadingMembers(true);
+    const rankings = await Promise.all(
+      activeCommunities.map(async (community) => {
+        const { data } = await supabase.rpc("get_community_ranking", { _community: community as any });
+        return (data ?? []) as RankingMember[];
+      })
+    );
+
+    const combined = rankings
+      .flat()
+      .sort((a, b) => {
+        if (Number(b.faith_points) !== Number(a.faith_points)) {
+          return Number(b.faith_points) - Number(a.faith_points);
+        }
+        return Number(b.completed_count) - Number(a.completed_count);
+      });
+
+    setMembers(combined);
+    setLoadingMembers(false);
+  }, [activeCommunities]);
+
   const fireCelebration = useCallback(() => {
     if (celebrationFired) return;
     const seasonIds = seasons.map(s => s.id).sort().join(",");
@@ -96,24 +136,16 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
   }, [celebrationFired, seasons, myUserId]);
 
   useEffect(() => {
-    if (!profile) return;
+    if (!profile || activeCommunities.length === 0) return;
     async function fetchSeasons() {
-      const { data } = await supabase
-        .from("ranking_seasons")
-        .select("*")
-        .eq("community", profile!.community as string);
-      setSeasons((data ?? []) as unknown as RankingSeason[]);
-    }
-    async function fetchRanking() {
-      setLoadingMembers(true);
-      const { data } = await supabase.rpc("get_community_ranking", {
-        _community: profile!.community as any,
-      });
-      setMembers((data ?? []) as RankingMember[]);
-      setLoadingMembers(false);
+      const { data } = await supabase.from("ranking_seasons").select("*");
+      const filtered = ((data ?? []) as unknown as RankingSeason[]).filter((season) =>
+        activeCommunities.includes(season.community)
+      );
+      setSeasons(filtered);
     }
     fetchSeasons();
-    fetchRanking();
+    fetchAreaRanking();
     // Fetch qualitative data
     async function fetchQualitative() {
       const { data: { user } } = await supabase.auth.getUser();
@@ -132,13 +164,13 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
         supabase.from("achievement_unlocks").select("achievement_key").eq("user_id", user.id),
         supabase.from("lessons").select("id", { count: "exact", head: true }),
         supabase.from("devotional_content").select("id", { count: "exact", head: true }),
-        supabase.from("events").select("id", { count: "exact", head: true }).gte("event_date", new Date(Date.now() - 90 * 86400000).toISOString()).or(`area.eq.${profile!.area},area.is.null`),
+        supabase.from("events").select("id", { count: "exact", head: true }).gte("event_date", new Date(Date.now() - 90 * 86400000).toISOString()).or(`area.eq.${currentArea},area.is.null`),
         supabase.from("lesson_responses").select("lesson_id").eq("user_id", user.id),
         supabase.from("activities").select("id, points"),
         supabase.from("user_progress").select("activity_id").eq("user_id", user.id),
         supabase.from("achievement_unlocks").select("bonus_points").eq("user_id", user.id),
         // Biweekly: events in last 15 days for user's area
-        supabase.from("events").select("id, linked_lesson_id").gte("event_date", fifteenDaysAgo).or(`area.eq.${profile!.area},area.is.null`),
+        supabase.from("events").select("id, linked_lesson_id").gte("event_date", fifteenDaysAgo).or(`area.eq.${currentArea},area.is.null`),
         supabase.from("attendance").select("event_id, status").eq("user_id", user.id).eq("status", "presente"),
         // Devotionals linked to lessons that have events in last 15 days
         supabase.from("devotional_content").select("id, lesson_id").not("lesson_id", "is", null),
@@ -202,7 +234,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
       });
     }
     fetchQualitative();
-  }, [profile]);
+  }, [profile, fetchAreaRanking, activeCommunities, currentArea]);
 
   const achievements: Achievement[] = [
     { id: 1, key: "streak_7", icon: "🔥", title: "7 dias seguidos", desc: "Sequência de fé incrível!", unlocked: streakDays >= 7, current: streakDays, target: 7, bonusPoints: 10 },
@@ -361,8 +393,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
         supabase.from("worship_attendance").delete().in("user_id", userIds),
       ]);
       toast.success(`✅ Pontuações resetadas para ${userIds.length} participantes!`);
-      const { data } = await supabase.rpc("get_community_ranking", { _community: profile!.community as any });
-      setMembers((data ?? []) as RankingMember[]);
+      await fetchAreaRanking();
     } catch (err: any) {
       toast.error("Erro ao resetar: " + (err.message ?? ""));
     }
@@ -462,7 +493,9 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Flame className="w-4 h-4 text-secondary" />
-            <span className="font-montserrat font-bold text-foreground text-sm">Ranking da turma</span>
+            <span className="font-montserrat font-bold text-foreground text-sm">
+              {isOverriding ? `Ranking da ${currentArea}` : "Ranking da turma"}
+            </span>
           </div>
           {canManage && (
             <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
@@ -652,8 +685,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
           fullName={selectedPlayer.fullName}
           onClose={() => setSelectedPlayer(null)}
           onPointsChanged={async () => {
-            const { data } = await supabase.rpc("get_community_ranking", { _community: profile!.community as any });
-            setMembers((data ?? []) as RankingMember[]);
+            await fetchAreaRanking();
           }}
         />
       )}
