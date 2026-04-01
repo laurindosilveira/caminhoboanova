@@ -84,18 +84,22 @@ export default function GameConfigDialog() {
 
   async function handleSave() {
     setSaving(true);
-    const config = items.map(item => ({ key: item.key, value: item.value }));
-    const { error } = await supabase.rpc("set_game_config" as any, { config });
-
-    if (error) {
-      toast.error("Erro ao salvar configurações.", { description: error.message });
-    } else {
-      toast.success("Pontuações atualizadas!", {
-        description: "Todos os rankings e cálculos já refletem os novos valores.",
-        duration: 4000,
+    for (const item of items) {
+      const { error } = await supabase.rpc("upsert_game_config_item" as any, {
+        _key: item.key,
+        _value: item.value,
       });
-      setOpen(false);
+      if (error) {
+        toast.error("Erro ao salvar configurações.", { description: error.message });
+        setSaving(false);
+        return;
+      }
     }
+    toast.success("Pontuações atualizadas!", {
+      description: "Todos os rankings e cálculos já refletem os novos valores.",
+      duration: 4000,
+    });
+    setOpen(false);
     setSaving(false);
   }
 
