@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { X, Trash2, ChevronRight, BookOpen, Calendar, Church, Trophy, Star } from "lucide-react";
+import { X, Trash2, ChevronRight, ChevronDown, ChevronUp, BookOpen, Calendar, Church, Trophy, Star, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -78,6 +78,8 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
   const [detailModal, setDetailModal] = useState<DetailModalState | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [totalPoints, setTotalPoints] = useState(0);
+  const [gaps, setGaps] = useState<{ missingLessons: { id: string; title: string }[]; missingDevotionals: { id: string; title: string; day_number: number | null }[] } | null>(null);
+  const [showGaps, setShowGaps] = useState(false);
 
   useEffect(() => {
     fetchActivities();
@@ -218,6 +220,13 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     allItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setItems(allItems);
     setTotalPoints(allItems.reduce((sum, item) => sum + item.points, 0));
+
+    // Compute gaps
+    const completedDevIds = new Set((devProgress ?? []).map((p) => p.devotional_id));
+    const missingLessons = (lessons ?? []).filter((l) => !lessonIds.has(l.id));
+    const missingDevotionals = (devContent ?? []).filter((d) => !completedDevIds.has(d.id));
+    setGaps({ missingLessons, missingDevotionals });
+
     setLoading(false);
   }
 
@@ -420,6 +429,64 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
             ))}
           </div>
         </div>
+
+        {!loading && gaps && (gaps.missingLessons.length > 0 || gaps.missingDevotionals.length > 0) && (
+          <div className="border-b border-border flex-shrink-0">
+            <button
+              onClick={() => setShowGaps((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                <span className="font-montserrat font-bold text-amber-600 dark:text-amber-400 text-xs">
+                  Lacunas
+                </span>
+                <span className="bg-amber-500/20 text-amber-700 dark:text-amber-300 font-montserrat font-bold text-[10px] px-1.5 py-0.5 rounded-full">
+                  {gaps.missingLessons.length + gaps.missingDevotionals.length}
+                </span>
+              </div>
+              {showGaps ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+            </button>
+
+            {showGaps && (
+              <div className="px-4 pb-3 space-y-3">
+                {gaps.missingLessons.length > 0 && (
+                  <div>
+                    <p className="font-inter font-semibold text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">
+                      Lições não estudadas ({gaps.missingLessons.length})
+                    </p>
+                    <div className="space-y-1">
+                      {gaps.missingLessons.map((lesson) => (
+                        <div key={lesson.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-red-500/8 border border-red-500/15">
+                          <BookOpen className="w-3.5 h-3.5 text-red-500 flex-shrink-0" />
+                          <span className="font-inter text-xs text-foreground truncate">{lesson.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {gaps.missingDevotionals.length > 0 && (
+                  <div>
+                    <p className="font-inter font-semibold text-[10px] text-muted-foreground uppercase tracking-wide mb-1.5">
+                      Devocionais não concluídos ({gaps.missingDevotionals.length})
+                    </p>
+                    <div className="space-y-1">
+                      {gaps.missingDevotionals.map((dev) => (
+                        <div key={dev.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-orange-500/8 border border-orange-500/15">
+                          <BookOpen className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
+                          <span className="font-inter text-xs text-foreground truncate">
+                            {dev.title || `Devocional dia ${dev.day_number ?? "?"}`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {loading ? (
