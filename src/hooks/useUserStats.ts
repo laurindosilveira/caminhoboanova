@@ -89,7 +89,7 @@ export function useUserStats(): UserStats {
         supabase.from("courses").select("id"),
         supabase.from("lessons").select("id, course_id"),
         supabase.from("challenge_participants").select("id, completed").eq("user_id", user.id).eq("completed", true),
-        (supabase as any).from("game_config").select("key, value"),
+        supabase.rpc("get_game_config" as any),
       ]);
 
       // Carrega configuração dinâmica com fallback nos defaults

@@ -67,8 +67,8 @@ export default function GameConfigDialog() {
   useEffect(() => {
     if (!open) return;
     async function load() {
-      const { data } = await (supabase as any).from("game_config").select("key, value");
-      const map = new Map<string, number>((data ?? []).map((r: any) => [r.key, r.value]));
+      const { data } = await supabase.rpc("get_game_config" as any);
+      const map = new Map<string, number>((data ?? []).map((r: any) => [r.key, Number(r.value)]));
       setItems(CONFIG_FIELDS.map(f => ({
         ...f,
         value: map.has(f.key) ? (map.get(f.key) as number) : DEFAULTS[f.key],
@@ -84,10 +84,8 @@ export default function GameConfigDialog() {
 
   async function handleSave() {
     setSaving(true);
-    const upserts = items.map(item => ({ key: item.key, value: item.value }));
-    const { error } = await (supabase as any)
-      .from("game_config")
-      .upsert(upserts, { onConflict: "key" });
+    const config = items.map(item => ({ key: item.key, value: item.value }));
+    const { error } = await supabase.rpc("set_game_config" as any, { config });
 
     if (error) {
       toast.error("Erro ao salvar configurações.", { description: error.message });
