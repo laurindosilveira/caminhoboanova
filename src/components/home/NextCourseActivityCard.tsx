@@ -87,22 +87,7 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
 
       const lessonId = entry.lessonId;
 
-      // If lesson not studied yet → study it
-      if (!studiedLessons.has(lessonId)) {
-        setNextItem({
-          type: "lesson",
-          title: `Lição ${entry.lessonOrder}: ${entry.lessonTitle}`,
-          subtitle: "Estude esta lição para avançar na jornada",
-          courseTitle: entry.courseTitle,
-          courseOrder: entry.courseOrder,
-          lessonOrder: entry.lessonOrder,
-          eventDate: entry.eventDate,
-        });
-        setLoading(false);
-        return;
-      }
-
-      // Lesson studied — check devotionals
+      // Check devotionals first, independent of lesson study status
       const lessonDevs = (devsByLesson[lessonId] ?? []).sort((a, b) => a.day_number - b.day_number);
       const devDates = entry.devotionalDates;
 
@@ -130,7 +115,21 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
           return;
         }
       }
-      // All devotionals done or future for this entry, continue
+
+      // No devotional available today — show lesson study if not done
+      if (!studiedLessons.has(lessonId)) {
+        setNextItem({
+          type: "lesson",
+          title: `Lição ${entry.lessonOrder}: ${entry.lessonTitle}`,
+          subtitle: "Estude esta lição para avançar na jornada",
+          courseTitle: entry.courseTitle,
+          courseOrder: entry.courseOrder,
+          lessonOrder: entry.lessonOrder,
+          eventDate: entry.eventDate,
+        });
+        setLoading(false);
+        return;
+      }
     }
 
     // Check for future scheduled events
