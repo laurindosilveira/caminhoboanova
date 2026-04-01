@@ -44,6 +44,27 @@ type DevotionalExpandedContent = {
   answers?: Array<{ question_index: number; response: string }>;
 };
 
+const ACHIEVEMENT_LABELS: Record<string, { title: string; icon: string }> = {
+  streak_7:        { icon: "🔥", title: "7 dias seguidos" },
+  first_activity:  { icon: "📖", title: "Primeiros passos" },
+  activities_5:    { icon: "🎓", title: "5 atividades" },
+  points_100:      { icon: "⭐", title: "100 pontos da fé" },
+  activities_10:   { icon: "🏆", title: "10 atividades" },
+  points_200:      { icon: "💎", title: "200 pontos" },
+  dev_10:          { icon: "❤️", title: "Oração contínua" },
+  attendance_5:    { icon: "🤝", title: "Serviço fiel" },
+  dev_20:          { icon: "📖", title: "Leitura bíblica" },
+  worship_5:       { icon: "⛪", title: "Adorador" },
+  attendance_3:    { icon: "👥", title: "Participou do encontro" },
+  chat_5:          { icon: "🎤", title: "Compartilhou testemunho" },
+  prayer_3:        { icon: "🙏", title: "Intercessor" },
+  chat_20:         { icon: "💬", title: "Voz ativa" },
+  biweekly_streak: { icon: "🏅", title: "Quinzena perfeita" },
+  streak_14:       { icon: "🛡️", title: "Guardião da Fé" },
+  streak_30:       { icon: "👁️", title: "Constância Invisível" },
+  apto:            { icon: "✝️", title: "Pronto para a Profissão de Fé" },
+};
+
 type DetailModalState =
   | { itemId: string; type: "lesson"; title: string; content: LessonExpandedContent | null }
   | { itemId: string; type: "devotional"; title: string; content: DevotionalExpandedContent | null };
@@ -165,10 +186,11 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     });
 
     (achievements ?? []).forEach((achievement) => {
+      const label = ACHIEVEMENT_LABELS[achievement.achievement_key];
       allItems.push({
         id: `ach-${achievement.id}`,
         type: "achievement",
-        title: `Conquista: ${achievement.achievement_key}`,
+        title: label ? `${label.icon} ${label.title}` : `🏆 ${achievement.achievement_key}`,
         subtitle: "Bônus de conquista",
         points: achievement.bonus_points,
         date: achievement.unlocked_at,
