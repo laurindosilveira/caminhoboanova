@@ -18,6 +18,7 @@ import { Trophy, Lock, Flame, RefreshCw, Share2, AlertTriangle } from "lucide-re
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import GameRulesDialog from "./GameRulesDialog";
+import GameConfigDialog from "./GameConfigDialog";
 import PlayerDetailSheet from "./PlayerDetailSheet";
 
 interface AchievementsGridProps {
@@ -451,6 +452,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-montserrat font-black text-foreground text-xl">🏆 Conquistas</h2>
         <div className="flex items-center gap-2">
+          {canManage && <GameConfigDialog />}
           <GameRulesDialog breakdown={{
             lessonStudyCount,
             devotionalCount: devCount,

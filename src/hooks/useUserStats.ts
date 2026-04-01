@@ -66,7 +66,19 @@ export function useUserStats(): UserStats {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setStats(s => ({ ...s, loading: false })); return; }
 
-      const [{ data: activities }, { data: progress }, { data: devProgress }, { data: lessonResponses }, { data: attendance }, { data: worshipData }, { data: achievementUnlocks }, { data: coursesData }, { data: lessonsData }, { data: challengeData }] = await Promise.all([
+      const [
+        { data: activities },
+        { data: progress },
+        { data: devProgress },
+        { data: lessonResponses },
+        { data: attendance },
+        { data: worshipData },
+        { data: achievementUnlocks },
+        { data: coursesData },
+        { data: lessonsData },
+        { data: challengeData },
+        { data: gameConfig },
+      ] = await Promise.all([
         supabase.from("activities").select("id, type, title, subtitle, order_num, points").order("order_num"),
         supabase.from("user_progress").select("activity_id, completed_at").eq("user_id", user.id),
         supabase.from("devotional_progress").select("devotional_id, completed_at").eq("user_id", user.id),
@@ -77,7 +89,20 @@ export function useUserStats(): UserStats {
         supabase.from("courses").select("id"),
         supabase.from("lessons").select("id, course_id"),
         supabase.from("challenge_participants").select("id, completed").eq("user_id", user.id).eq("completed", true),
+        (supabase as any).from("game_config").select("key, value"),
       ]);
+
+      // Carrega configuração dinâmica com fallback nos defaults
+      const cfgMap = new Map<string, number>((gameConfig ?? []).map((r: any) => [r.key, Number(r.value)]));
+      const cfg = {
+        lessonPoints:          cfgMap.get("lesson_points")             ?? 20,
+        devotionalPoints:      cfgMap.get("devotional_points")         ?? 5,
+        devotionalWeekendPts:  cfgMap.get("devotional_weekend_points") ?? 2,
+        attendancePoints:      cfgMap.get("attendance_points")         ?? 10,
+        worshipPoints:         cfgMap.get("worship_points")            ?? 5,
+        courseBonus:           cfgMap.get("course_completion_bonus")   ?? 100,
+        challengePoints:       cfgMap.get("challenge_points")          ?? 15,
+      };
 
       const acts = activities ?? [];
       const prog = progress ?? [];
@@ -88,31 +113,31 @@ export function useUserStats(): UserStats {
         ...devProg.map(p => p.completed_at),
       ];
 
-      // Points — only count from REAL tracking tables to prevent phantom points
+      // Pontos de atividades legadas
       const activityPoints = acts
         .filter(a => completedIds.has(a.id) && a.type !== "devocional" && a.type !== "formacao" && a.type !== "encontro")
         .reduce((sum, a) => sum + (a.points ?? 0), 0);
 
-      // Devotional points: 5 pts weekday, 2 pts weekend
+      // Pontos de devocionais (dia útil vs fim de semana)
       const devotionalPoints = devProg.reduce((sum, dp) => {
         const dow = new Date(dp.completed_at).getDay();
-        return sum + (dow === 0 || dow === 6 ? 2 : 5);
+        return sum + (dow === 0 || dow === 6 ? cfg.devotionalWeekendPts : cfg.devotionalPoints);
       }, 0);
 
       const completedLessonIds = new Set((lessonResponses ?? []).map(r => r.lesson_id));
-      const lessonStudyPoints = completedLessonIds.size * 20;
-      const attendancePoints = (attendance ?? []).filter(a => a.status === "presente").length * 10;
-      const worshipPoints = (worshipData ?? []).length * 5;
+      const lessonStudyPoints = completedLessonIds.size * cfg.lessonPoints;
+      const attendancePoints = (attendance ?? []).filter(a => a.status === "presente").length * cfg.attendancePoints;
+      const worshipPoints = (worshipData ?? []).length * cfg.worshipPoints;
       const achievementBonusPoints = (achievementUnlocks ?? []).reduce((sum, a) => sum + (a.bonus_points ?? 0), 0);
-      const challengePoints = (challengeData ?? []).length * 15;
+      const challengePoints = (challengeData ?? []).length * cfg.challengePoints;
 
-      // Course completion bonus: +100 per fully completed course
+      // Bônus por curso completo
       let courseBonusPoints = 0;
       const allLessons = lessonsData ?? [];
       (coursesData ?? []).forEach(course => {
         const courseLessons = allLessons.filter(l => l.course_id === course.id);
         if (courseLessons.length > 0 && courseLessons.every(l => completedLessonIds.has(l.id))) {
-          courseBonusPoints += 100;
+          courseBonusPoints += cfg.courseBonus;
         }
       });
 
@@ -123,7 +148,6 @@ export function useUserStats(): UserStats {
       const faithEnergy = calculateEnergy(allDates);
       const completedCount = completedIds.size;
 
-      // Next uncompleted activity in order
       const nextActivity = acts.find(a => !completedIds.has(a.id)) ?? null;
 
       setStats({
