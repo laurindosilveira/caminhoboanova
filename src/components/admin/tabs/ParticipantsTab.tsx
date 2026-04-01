@@ -1172,8 +1172,62 @@ export default function ParticipantsTab({ participants, activities, communities 
     return true;
   });
 
+  // ── Group summary metrics ──
+  const totalDevotionals = participants.reduce((s, p) => s + (p.completed_devotional_count ?? 0), 0);
+  const totalLessons = participants.reduce((s, p) => s + (p.completed_lesson_count ?? 0), 0);
+  const totalPresences = participants.reduce((s, p) => s + (p.completed_event_count ?? 0), 0);
+  const alertCount = Object.keys(statusReasons).filter(id => statusReasons[id]?.some(r => r.severity === "high")).length;
+  const attentionCount = Object.keys(statusReasons).filter(id => !statusReasons[id]?.some(r => r.severity === "high") && statusReasons[id]?.length > 0).length;
+  const healthyCount = participants.length - alertCount - attentionCount;
+
   return (
     <div className="space-y-4">
+
+      {/* Group health summary */}
+      <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-primary" />
+            <p className="font-montserrat font-bold text-foreground text-sm">Resumo da Turma</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="font-montserrat font-black text-foreground text-2xl">{participants.length}</span>
+            <span className="font-inter text-xs text-muted-foreground">discípulos</span>
+          </div>
+        </div>
+
+        {/* Health distribution */}
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="bg-brand-green/8 border border-brand-green/20 rounded-xl p-2.5 text-center">
+            <p className="font-montserrat font-black text-brand-green text-xl leading-none">{healthyCount}</p>
+            <p className="text-[10px] font-inter text-muted-foreground mt-0.5">saudáveis</p>
+          </div>
+          <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl p-2.5 text-center">
+            <p className="font-montserrat font-black text-amber-600 dark:text-amber-400 text-xl leading-none">{attentionCount}</p>
+            <p className="text-[10px] font-inter text-muted-foreground mt-0.5">atenção</p>
+          </div>
+          <div className="bg-destructive/8 border border-destructive/20 rounded-xl p-2.5 text-center">
+            <p className="font-montserrat font-black text-destructive text-xl leading-none">{alertCount}</p>
+            <p className="text-[10px] font-inter text-muted-foreground mt-0.5">alertas</p>
+          </div>
+        </div>
+
+        {/* Activity totals */}
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { icon: "📖", label: "Devocionais", value: totalDevotionals },
+            { icon: "🎓", label: "Estudos", value: totalLessons },
+            { icon: "📅", label: "Presenças", value: totalPresences },
+          ].map(({ icon, label, value }) => (
+            <div key={label} className="bg-muted/40 rounded-xl p-2 text-center">
+              <p className="text-sm">{icon}</p>
+              <p className="font-montserrat font-black text-foreground text-base leading-none">{value}</p>
+              <p className="text-[10px] font-inter text-muted-foreground mt-0.5">{label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Course Unlock Management */}
       {courses.length > 0 && (
         <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
@@ -1284,17 +1338,24 @@ export default function ParticipantsTab({ participants, activities, communities 
       ) : (
         <div className="space-y-3">
           {filtered.map((p) => {
-            const pct = activities.length > 0 ? Math.round((p.completed_count / activities.length) * 100) : 0;
             const status = getStatusInfo(p.completed_count, activities.length);
             const totalPts = p.faith_points ?? activities.filter(a => p.completed_activity_ids.includes(a.id)).reduce((s, a) => s + a.points, 0);
             const age = calcAge(p.birth_date);
+            const reasons = statusReasons[p.user_id] ?? [];
+            const hasHighAlert = reasons.some(r => r.severity === "high");
+            const hasAlert = reasons.length > 0;
+            const borderAccent = hasHighAlert
+              ? "border-l-4 border-l-destructive"
+              : hasAlert
+              ? "border-l-4 border-l-amber-400"
+              : "";
             return (
               <button
                 key={p.user_id}
                 onClick={() => setSelectedParticipant(p)}
-                className="w-full text-left bg-card rounded-2xl border border-border shadow-sm overflow-hidden hover:border-primary/30 transition-colors"
+                className={`w-full text-left bg-card rounded-2xl border border-border shadow-sm overflow-hidden hover:border-primary/30 transition-colors ${borderAccent}`}
               >
-                <div className="p-4">
+                <div className="p-4 pb-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       {p.avatar_url ? (
@@ -1321,16 +1382,17 @@ export default function ParticipantsTab({ participants, activities, communities 
                       {status.label}
                     </span>
                   </div>
-                  {/* Status reasons */}
-                  {statusReasons[p.user_id] && statusReasons[p.user_id].length > 0 && (
+
+                  {/* Alert reasons */}
+                  {reasons.length > 0 && (
                     <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      {statusReasons[p.user_id].map((reason, idx) => (
+                      {reasons.map((reason, idx) => (
                         <span
                           key={idx}
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-inter font-medium ${
                             reason.severity === "high"
                               ? "bg-destructive/10 text-destructive"
-                              : "bg-accent/20 text-accent-foreground"
+                              : "bg-amber-500/10 text-amber-700 dark:text-amber-400"
                           }`}
                         >
                           {reason.icon} {reason.label}
@@ -1338,6 +1400,14 @@ export default function ParticipantsTab({ participants, activities, communities 
                       ))}
                     </div>
                   )}
+                </div>
+
+                {/* Quick stats bar */}
+                <div className="px-4 py-2 border-t border-border/60 bg-muted/20 flex items-center gap-4">
+                  <span className="text-[11px] font-inter text-muted-foreground">📖 <strong className="text-foreground">{p.completed_devotional_count ?? 0}</strong></span>
+                  <span className="text-[11px] font-inter text-muted-foreground">🎓 <strong className="text-foreground">{p.completed_lesson_count ?? 0}</strong></span>
+                  <span className="text-[11px] font-inter text-muted-foreground">📅 <strong className="text-foreground">{p.completed_event_count ?? 0}</strong></span>
+                  <span className="ml-auto font-montserrat font-black text-primary text-xs">⭐ {totalPts} pts</span>
                 </div>
               </button>
             );
