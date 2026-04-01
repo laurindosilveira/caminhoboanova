@@ -115,11 +115,7 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
 
   async function loadScheduled() {
     setLoadingScheduled(true);
-    const { data } = await supabase
-      .from("push_scheduled" as any)
-      .select("*")
-      .eq("sent", false)
-      .order("scheduled_at");
+    const { data } = await supabase.rpc("get_push_scheduled_pending" as any);
     setScheduledList((data as any as ScheduledPush[]) ?? []);
     setLoadingScheduled(false);
   }
@@ -151,16 +147,14 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
       }
     } else {
       const { data: { user } } = await supabase.auth.getUser();
-      const { error: insertError } = await supabase
-        .from("push_scheduled" as any)
-        .insert({
-          title,
-          body,
-          target,
-          target_value: target === "all" ? null : targetValue,
-          scheduled_at: new Date(scheduledAt).toISOString(),
-          created_by:   user?.id,
-        } as any);
+      const { error: insertError } = await supabase.rpc("insert_push_scheduled" as any, {
+        _title:        title,
+        _body:         body,
+        _target:       target,
+        _target_value: target === "all" ? null : targetValue,
+        _scheduled_at: new Date(scheduledAt).toISOString(),
+        _created_by:   user?.id ?? null,
+      });
       if (insertError) {
         setError(insertError.message);
       } else {
@@ -174,7 +168,7 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
   }
 
   async function cancelScheduled(id: string) {
-    await supabase.from("push_scheduled" as any).delete().eq("id", id);
+    await supabase.rpc("delete_push_scheduled" as any, { _id: id });
     setScheduledList(prev => prev.filter(s => s.id !== id));
     toast.success("Agendamento cancelado.");
   }
@@ -445,19 +439,20 @@ function AutomationsSection() {
 
   async function loadConfigs() {
     setLoading(true);
-    const { data } = await supabase
-      .from("push_automation_config" as any)
-      .select("key, title, body, enabled, description")
-      .order("key");
+    const { data } = await supabase.rpc("get_push_automation_config" as any);
     setConfigs((data as any as AutomationConfig[]) ?? []);
     setLoading(false);
   }
 
   async function toggleEnabled(key: string, current: boolean) {
-    const { error } = await supabase
-      .from("push_automation_config" as any)
-      .update({ enabled: !current } as any)
-      .eq("key", key);
+    const cfg = configs.find(c => c.key === key);
+    if (!cfg) return;
+    const { error } = await supabase.rpc("update_push_automation_config" as any, {
+      _key:     key,
+      _title:   cfg.title,
+      _body:    cfg.body,
+      _enabled: !current,
+    });
     if (error) { toast.error("Erro ao atualizar."); return; }
     setConfigs(prev => prev.map(c => c.key === key ? { ...c, enabled: !current } : c));
     toast.success(!current ? "Automação ativada." : "Automação desativada.");
@@ -472,10 +467,13 @@ function AutomationsSection() {
   async function saveEdit(key: string) {
     if (!editTitle.trim() || !editBody.trim()) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("push_automation_config" as any)
-      .update({ title: editTitle.trim(), body: editBody.trim() } as any)
-      .eq("key", key);
+    const cfg = configs.find(c => c.key === key);
+    const { error } = await supabase.rpc("update_push_automation_config" as any, {
+      _key:     key,
+      _title:   editTitle.trim(),
+      _body:    editBody.trim(),
+      _enabled: cfg?.enabled ?? true,
+    });
     if (error) {
       toast.error("Erro ao salvar: " + error.message);
     } else {
