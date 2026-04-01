@@ -75,6 +75,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       { data: devContent },
       { data: events },
       { data: activities },
+      { data: gameConfig },
     ] = await Promise.all([
       supabase.from("lesson_responses").select("id, lesson_id, question_key, response, created_at").eq("user_id", userId),
       supabase.from("devotional_progress").select("id, devotional_id, completed_at").eq("user_id", userId),
@@ -86,7 +87,16 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       supabase.from("devotional_content").select("id, title, day_number, lesson_id"),
       supabase.from("events").select("id, title, event_date"),
       supabase.from("activities").select("id, title, points, type"),
+      supabase.rpc("get_game_config" as any),
     ]);
+
+    // Carrega pontuações dinâmicas do game_config
+    const cfgMap = new Map<string, number>((gameConfig ?? []).map((r: any) => [r.key, Number(r.value)]));
+    const lessonPts    = cfgMap.get("lesson_points")             ?? 20;
+    const devPts       = cfgMap.get("devotional_points")         ?? 5;
+    const devWkPts     = cfgMap.get("devotional_weekend_points") ?? 2;
+    const attPts       = cfgMap.get("attendance_points")         ?? 10;
+    const worshipPts   = cfgMap.get("worship_points")            ?? 5;
 
     const lessonMap = new Map((lessons ?? []).map((lesson) => [lesson.id, lesson]));
     const devotionalMap = new Map((devContent ?? []).map((devotional) => [devotional.id, devotional]));
@@ -104,7 +114,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         type: "lesson",
         title: lesson?.title ?? "Lição",
         subtitle: "Estudo de lição",
-        points: 20,
+        points: lessonPts,
         date: firstResp?.created_at ?? "",
         deletable: true,
         tableId: lessonId,
@@ -114,12 +124,12 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     (devProgress ?? []).forEach((progress) => {
       const devotional = devotionalMap.get(progress.devotional_id);
       const dayOfWeek = new Date(progress.completed_at).getDay();
-      const points = dayOfWeek === 0 || dayOfWeek === 6 ? 2 : 5;
+      const points = dayOfWeek === 0 || dayOfWeek === 6 ? devWkPts : devPts;
       allItems.push({
         id: `dev-${progress.id}`,
         type: "devotional",
         title: devotional?.title || `Devocional dia ${devotional?.day_number ?? "?"}`,
-        subtitle: points === 2 ? "Recuperado no fim de semana" : "Devocional diário",
+        subtitle: dayOfWeek === 0 || dayOfWeek === 6 ? "Recuperado no fim de semana" : "Devocional diário",
         points,
         date: progress.completed_at,
         deletable: true,
@@ -134,7 +144,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         type: "attendance",
         title: event?.title ?? "Encontro",
         subtitle: event?.event_date ? format(new Date(event.event_date), "d 'de' MMM", { locale: ptBR }) : "",
-        points: 10,
+        points: attPts,
         date: presence.created_at,
         deletable: true,
         tableId: presence.id,
@@ -147,7 +157,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         type: "worship",
         title: `Culto - ${service.preacher_name}`,
         subtitle: `${format(new Date(service.worship_date), "d/MM/yyyy")} às ${service.worship_time}`,
-        points: 5,
+        points: worshipPts,
         date: service.created_at,
         deletable: true,
         tableId: service.id,
