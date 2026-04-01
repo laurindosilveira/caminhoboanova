@@ -452,7 +452,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-montserrat font-black text-foreground text-xl">🏆 Conquistas</h2>
         <div className="flex items-center gap-2">
-          {canManage && <GameConfigDialog />}
+          {canManage && <GameConfigDialog onSaved={fetchAreaRanking} />}
           <GameRulesDialog breakdown={{
             lessonStudyCount,
             devotionalCount: devCount,

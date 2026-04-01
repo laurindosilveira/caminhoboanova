@@ -59,7 +59,11 @@ const DEFAULTS: Record<string, number> = {
   challenge_points: 15,
 };
 
-export default function GameConfigDialog() {
+interface GameConfigDialogProps {
+  onSaved?: () => void;
+}
+
+export default function GameConfigDialog({ onSaved }: GameConfigDialogProps) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<ConfigItem[]>([]);
   const [saving, setSaving] = useState(false);
@@ -101,6 +105,7 @@ export default function GameConfigDialog() {
     });
     setOpen(false);
     setSaving(false);
+    onSaved?.();
   }
 
   return (
