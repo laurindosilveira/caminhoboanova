@@ -54,6 +54,28 @@ interface RankingMember {
 const AREA_1_COMMUNITIES = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
 const AREA_2_COMMUNITIES = ["Martim Lutero", "Linha Brasil", "Iriá Pira 2"];
 
+// Fallback shown immediately and whenever the DB table is unavailable/empty
+const DEFAULT_ACHIEVEMENT_DEFS: AchievementDef[] = [
+  { id: "1",  key: "streak_7",        icon: "🔥",  title: "7 dias seguidos",               description: "Sequência de fé incrível!",                                      metric: "streak_days",      target: 7,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 1  },
+  { id: "2",  key: "first_activity",  icon: "📖",  title: "Primeiros passos",               description: "Completou sua 1ª atividade!",                                    metric: "completed_count",  target: 1,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 2  },
+  { id: "3",  key: "activities_5",    icon: "🎓",  title: "5 atividades",                   description: "Comprometido com a jornada!",                                    metric: "completed_count",  target: 5,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 3  },
+  { id: "4",  key: "points_100",      icon: "⭐",  title: "100 pontos da fé",               description: "Crescendo sempre!",                                               metric: "faith_points",     target: 100, bonus_points: 10, is_secret: false, is_active: true, sort_order: 4  },
+  { id: "5",  key: "activities_10",   icon: "🏆",  title: "10 atividades",                  description: "Dedicação exemplar!",                                             metric: "completed_count",  target: 10,  bonus_points: 10, is_secret: false, is_active: true, sort_order: 5  },
+  { id: "6",  key: "points_200",      icon: "💎",  title: "200 pontos",                     description: "Nível máximo de fé!",                                             metric: "faith_points",     target: 200, bonus_points: 10, is_secret: false, is_active: true, sort_order: 6  },
+  { id: "7",  key: "dev_10",          icon: "❤️", title: "Oração contínua",               description: "10 devocionais completos",                                        metric: "dev_count",        target: 10,  bonus_points: 10, is_secret: false, is_active: true, sort_order: 7  },
+  { id: "8",  key: "attendance_5",    icon: "🤝",  title: "Serviço fiel",                   description: "5 presenças em encontros",                                        metric: "attendance_count", target: 5,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 8  },
+  { id: "9",  key: "dev_20",          icon: "📖",  title: "Leitura bíblica",                description: "20 devocionais completos",                                        metric: "dev_count",        target: 20,  bonus_points: 10, is_secret: false, is_active: true, sort_order: 9  },
+  { id: "10", key: "worship_5",       icon: "⛪",  title: "Adorador",                       description: "5 cultos confirmados",                                            metric: "worship_count",    target: 5,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 10 },
+  { id: "11", key: "attendance_3",    icon: "👥",  title: "Participou do encontro",         description: "3 presenças em encontros",                                        metric: "attendance_count", target: 3,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 11 },
+  { id: "12", key: "chat_5",          icon: "🎤",  title: "Compartilhou testemunho",        description: "5 mensagens no chat",                                             metric: "chat_count",       target: 5,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 12 },
+  { id: "13", key: "prayer_3",        icon: "🙏",  title: "Intercessor",                    description: "3 pedidos de oração",                                             metric: "prayer_count",     target: 3,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 13 },
+  { id: "14", key: "chat_20",         icon: "💬",  title: "Voz ativa",                      description: "20 mensagens no chat",                                            metric: "chat_count",       target: 20,  bonus_points: 10, is_secret: false, is_active: true, sort_order: 14 },
+  { id: "15", key: "biweekly_streak", icon: "🏅",  title: "Quinzena perfeita",              description: "Completou estudo, devocionais e presença nos últimos 15 dias!",   metric: "biweekly_streak",  target: 1,   bonus_points: 30, is_secret: false, is_active: true, sort_order: 15 },
+  { id: "16", key: "streak_14",       icon: "🛡️", title: "Guardião da Fé",                description: "14 dias seguidos de dedicação!",                                   metric: "streak_days",      target: 14,  bonus_points: 25, is_secret: true,  is_active: true, sort_order: 16 },
+  { id: "17", key: "streak_30",       icon: "👁️", title: "Constância Invisível",           description: "30 dias seguidos — lendário!",                                    metric: "streak_days",      target: 30,  bonus_points: 25, is_secret: true,  is_active: true, sort_order: 17 },
+  { id: "18", key: "apto",            icon: "✝️", title: "Pronto para a Profissão de Fé", description: "Seu pastor confirmou: você está pronto!",                          metric: "is_apto",          target: 1,   bonus_points: 50, is_secret: true,  is_active: true, sort_order: 18 },
+];
+
 function getAreaNumber(area: string) {
   if (/1/.test(area)) return 1;
   if (/2/.test(area)) return 2;
@@ -99,7 +121,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
   const [selectedPlayer, setSelectedPlayer] = useState<{ userId: string; fullName: string } | null>(null);
   const [resettingGame, setResettingGame] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [achievementDefs, setAchievementDefs] = useState<AchievementDef[]>([]);
+  const [achievementDefs, setAchievementDefs] = useState<AchievementDef[]>(DEFAULT_ACHIEVEMENT_DEFS);
 
   useEffect(() => {
     setMembers([]);
@@ -108,28 +130,6 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
     setCelebrationFired(false);
     setSelectedPlayer(null);
   }, [currentArea]);
-
-  // Default definitions used as fallback when the DB table does not yet exist
-  const DEFAULT_ACHIEVEMENT_DEFS: AchievementDef[] = [
-    { id: "1",  key: "streak_7",        icon: "🔥",  title: "7 dias seguidos",               description: "Sequência de fé incrível!",                                      metric: "streak_days",      target: 7,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 1  },
-    { id: "2",  key: "first_activity",  icon: "📖",  title: "Primeiros passos",               description: "Completou sua 1ª atividade!",                                    metric: "completed_count",  target: 1,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 2  },
-    { id: "3",  key: "activities_5",    icon: "🎓",  title: "5 atividades",                   description: "Comprometido com a jornada!",                                    metric: "completed_count",  target: 5,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 3  },
-    { id: "4",  key: "points_100",      icon: "⭐",  title: "100 pontos da fé",               description: "Crescendo sempre!",                                               metric: "faith_points",     target: 100, bonus_points: 10, is_secret: false, is_active: true, sort_order: 4  },
-    { id: "5",  key: "activities_10",   icon: "🏆",  title: "10 atividades",                  description: "Dedicação exemplar!",                                             metric: "completed_count",  target: 10,  bonus_points: 10, is_secret: false, is_active: true, sort_order: 5  },
-    { id: "6",  key: "points_200",      icon: "💎",  title: "200 pontos",                     description: "Nível máximo de fé!",                                             metric: "faith_points",     target: 200, bonus_points: 10, is_secret: false, is_active: true, sort_order: 6  },
-    { id: "7",  key: "dev_10",          icon: "❤️", title: "Oração contínua",               description: "10 devocionais completos",                                        metric: "dev_count",        target: 10,  bonus_points: 10, is_secret: false, is_active: true, sort_order: 7  },
-    { id: "8",  key: "attendance_5",    icon: "🤝",  title: "Serviço fiel",                   description: "5 presenças em encontros",                                        metric: "attendance_count", target: 5,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 8  },
-    { id: "9",  key: "dev_20",          icon: "📖",  title: "Leitura bíblica",                description: "20 devocionais completos",                                        metric: "dev_count",        target: 20,  bonus_points: 10, is_secret: false, is_active: true, sort_order: 9  },
-    { id: "10", key: "worship_5",       icon: "⛪",  title: "Adorador",                       description: "5 cultos confirmados",                                            metric: "worship_count",    target: 5,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 10 },
-    { id: "11", key: "attendance_3",    icon: "👥",  title: "Participou do encontro",         description: "3 presenças em encontros",                                        metric: "attendance_count", target: 3,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 11 },
-    { id: "12", key: "chat_5",          icon: "🎤",  title: "Compartilhou testemunho",        description: "5 mensagens no chat",                                             metric: "chat_count",       target: 5,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 12 },
-    { id: "13", key: "prayer_3",        icon: "🙏",  title: "Intercessor",                    description: "3 pedidos de oração",                                             metric: "prayer_count",     target: 3,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 13 },
-    { id: "14", key: "chat_20",         icon: "💬",  title: "Voz ativa",                      description: "20 mensagens no chat",                                            metric: "chat_count",       target: 20,  bonus_points: 10, is_secret: false, is_active: true, sort_order: 14 },
-    { id: "15", key: "biweekly_streak", icon: "🏅",  title: "Quinzena perfeita",              description: "Completou estudo, devocionais e presença nos últimos 15 dias!",   metric: "biweekly_streak",  target: 1,   bonus_points: 30, is_secret: false, is_active: true, sort_order: 15 },
-    { id: "16", key: "streak_14",       icon: "🛡️", title: "Guardião da Fé",                description: "14 dias seguidos de dedicação!",                                   metric: "streak_days",      target: 14,  bonus_points: 25, is_secret: true,  is_active: true, sort_order: 16 },
-    { id: "17", key: "streak_30",       icon: "👁️", title: "Constância Invisível",           description: "30 dias seguidos — lendário!",                                    metric: "streak_days",      target: 30,  bonus_points: 25, is_secret: true,  is_active: true, sort_order: 17 },
-    { id: "18", key: "apto",            icon: "✝️", title: "Pronto para a Profissão de Fé", description: "Seu pastor confirmou: você está pronto!",                          metric: "is_apto",          target: 1,   bonus_points: 50, is_secret: true,  is_active: true, sort_order: 18 },
-  ];
 
   // Load achievement definitions from DB (refreshable by config dialog)
   // Falls back to defaults if table doesn't exist yet in this environment.
