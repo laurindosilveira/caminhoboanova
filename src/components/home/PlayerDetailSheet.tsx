@@ -44,26 +44,7 @@ type DevotionalExpandedContent = {
   answers?: Array<{ question_index: number; response: string }>;
 };
 
-const ACHIEVEMENT_LABELS: Record<string, { title: string; icon: string }> = {
-  streak_7:        { icon: "🔥", title: "7 dias seguidos" },
-  first_activity:  { icon: "📖", title: "Primeiros passos" },
-  activities_5:    { icon: "🎓", title: "5 atividades" },
-  points_100:      { icon: "⭐", title: "100 pontos da fé" },
-  activities_10:   { icon: "🏆", title: "10 atividades" },
-  points_200:      { icon: "💎", title: "200 pontos" },
-  dev_10:          { icon: "❤️", title: "Oração contínua" },
-  attendance_5:    { icon: "🤝", title: "Serviço fiel" },
-  dev_20:          { icon: "📖", title: "Leitura bíblica" },
-  worship_5:       { icon: "⛪", title: "Adorador" },
-  attendance_3:    { icon: "👥", title: "Participou do encontro" },
-  chat_5:          { icon: "🎤", title: "Compartilhou testemunho" },
-  prayer_3:        { icon: "🙏", title: "Intercessor" },
-  chat_20:         { icon: "💬", title: "Voz ativa" },
-  biweekly_streak: { icon: "🏅", title: "Quinzena perfeita" },
-  streak_14:       { icon: "🛡️", title: "Guardião da Fé" },
-  streak_30:       { icon: "👁️", title: "Constância Invisível" },
-  apto:            { icon: "✝️", title: "Pronto para a Profissão de Fé" },
-};
+type AchievementLabel = { icon: string; title: string };
 
 type DetailModalState =
   | { itemId: string; type: "lesson"; title: string; content: LessonExpandedContent | null }
@@ -84,6 +65,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
   const [bonusPoints, setBonusPoints] = useState("");
   const [bonusJustification, setBonusJustification] = useState("");
   const [grantingBonus, setGrantingBonus] = useState(false);
+  const [achievementLabels, setAchievementLabels] = useState<Map<string, AchievementLabel>>(new Map());
 
   useEffect(() => {
     fetchActivities();
@@ -103,6 +85,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       { data: events },
       { data: activities },
       { data: gameConfig },
+      { data: achDefs },
     ] = await Promise.all([
       supabase.from("lesson_responses").select("id, lesson_id, question_key, response, created_at").eq("user_id", userId),
       supabase.from("devotional_progress").select("id, devotional_id, completed_at").eq("user_id", userId),
@@ -115,6 +98,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       supabase.from("events").select("id, title, event_date"),
       supabase.from("activities").select("id, title, points, type"),
       supabase.rpc("get_game_config" as any),
+      supabase.from("achievement_definitions" as any).select("key, icon, title"),
     ]);
 
     // Carrega pontuações dinâmicas do game_config
@@ -124,6 +108,11 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     const devWkPts     = cfgMap.get("devotional_weekend_points") ?? 2;
     const attPts       = cfgMap.get("attendance_points")         ?? 10;
     const worshipPts   = cfgMap.get("worship_points")            ?? 5;
+
+    const labelMap = new Map<string, AchievementLabel>(
+      (achDefs ?? []).map((d: any) => [d.key, { icon: d.icon, title: d.title }])
+    );
+    setAchievementLabels(labelMap);
 
     const lessonMap = new Map((lessons ?? []).map((lesson) => [lesson.id, lesson]));
     const devotionalMap = new Map((devContent ?? []).map((devotional) => [devotional.id, devotional]));
@@ -193,7 +182,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
 
     (achievements ?? []).forEach((achievement) => {
       const isManualBonus = achievement.achievement_key.startsWith("bonus_lider|");
-      const label = ACHIEVEMENT_LABELS[achievement.achievement_key];
+      const label = labelMap.get(achievement.achievement_key);
       allItems.push({
         id: `ach-${achievement.id}`,
         type: "achievement",

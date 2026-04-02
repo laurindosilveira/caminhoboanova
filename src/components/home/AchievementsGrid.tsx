@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import GameRulesDialog from "./GameRulesDialog";
 import GameConfigDialog from "./GameConfigDialog";
 import PlayerDetailSheet from "./PlayerDetailSheet";
+import AchievementsConfigDialog, { AchievementDef } from "./AchievementsConfigDialog";
 
 interface AchievementsGridProps {
   faithPoints: number;
@@ -98,6 +99,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
   const [selectedPlayer, setSelectedPlayer] = useState<{ userId: string; fullName: string } | null>(null);
   const [resettingGame, setResettingGame] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [achievementDefs, setAchievementDefs] = useState<AchievementDef[]>([]);
 
   useEffect(() => {
     setMembers([]);
@@ -106,6 +108,18 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
     setCelebrationFired(false);
     setSelectedPlayer(null);
   }, [currentArea]);
+
+  // Load achievement definitions from DB (refreshable by config dialog)
+  const fetchAchievementDefs = useCallback(async () => {
+    const { data } = await supabase
+      .from("achievement_definitions" as any)
+      .select("*")
+      .eq("is_active", true)
+      .order("sort_order");
+    setAchievementDefs((data as AchievementDef[]) ?? []);
+  }, []);
+
+  useEffect(() => { fetchAchievementDefs(); }, [fetchAchievementDefs]);
 
   const fetchAreaRanking = useCallback(async () => {
     const communities = [...new Set(activeCommunities.filter(Boolean))];
@@ -285,26 +299,35 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
     fetchQualitative();
   }, [profile, fetchAreaRanking, activeCommunities, currentArea, switchNonce]);
 
-  const achievements: Achievement[] = [
-    { id: 1, key: "streak_7", icon: "🔥", title: "7 dias seguidos", desc: "Sequência de fé incrível!", unlocked: streakDays >= 7, current: streakDays, target: 7, bonusPoints: 10 },
-    { id: 2, key: "first_activity", icon: "📖", title: "Primeiros passos", desc: "Completou sua 1ª atividade!", unlocked: completedCount >= 1, current: completedCount, target: 1, bonusPoints: 10 },
-    { id: 3, key: "activities_5", icon: "🎓", title: "5 atividades", desc: "Comprometido com a jornada!", unlocked: completedCount >= 5, current: completedCount, target: 5, bonusPoints: 10 },
-    { id: 4, key: "points_100", icon: "⭐", title: "100 pontos da fé", desc: "Crescendo sempre!", unlocked: faithPoints >= 100, current: faithPoints, target: 100, bonusPoints: 10 },
-    { id: 5, key: "activities_10", icon: "🏆", title: "10 atividades", desc: "Dedicação exemplar!", unlocked: completedCount >= 10, current: completedCount, target: 10, bonusPoints: 10 },
-    { id: 6, key: "points_200", icon: "💎", title: "200 pontos", desc: "Nível máximo de fé!", unlocked: faithPoints >= 200, current: faithPoints, target: 200, bonusPoints: 10 },
-    { id: 9, key: "dev_10", icon: "❤️", title: "Oração contínua", desc: "10 devocionais completos", unlocked: devCount >= 10, current: devCount, target: 10, bonusPoints: 10 },
-    { id: 10, key: "attendance_5", icon: "🤝", title: "Serviço fiel", desc: "5 presenças em encontros", unlocked: attendanceCount >= 5, current: attendanceCount, target: 5, bonusPoints: 10 },
-    { id: 11, key: "dev_20", icon: "📖", title: "Leitura bíblica", desc: "20 devocionais completos", unlocked: devCount >= 20, current: devCount, target: 20, bonusPoints: 10 },
-    { id: 12, key: "worship_5", icon: "⛪", title: "Adorador", desc: "5 cultos confirmados", unlocked: worshipCount >= 5, current: worshipCount, target: 5, bonusPoints: 10 },
-    { id: 13, key: "attendance_3", icon: "👥", title: "Participou do encontro", desc: "3 presenças em encontros", unlocked: attendanceCount >= 3, current: attendanceCount, target: 3, bonusPoints: 10 },
-    { id: 14, key: "chat_5", icon: "🎤", title: "Compartilhou testemunho", desc: "5 mensagens no chat", unlocked: chatCount >= 5, current: chatCount, target: 5, bonusPoints: 10 },
-    { id: 15, key: "prayer_3", icon: "🙏", title: "Intercessor", desc: "3 pedidos de oração", unlocked: prayerCount >= 3, current: prayerCount, target: 3, bonusPoints: 10 },
-    { id: 16, key: "chat_20", icon: "💬", title: "Voz ativa", desc: "20 mensagens no chat", unlocked: chatCount >= 20, current: chatCount, target: 20, bonusPoints: 10 },
-    { id: 18, key: "biweekly_streak", icon: "🏅", title: "Quinzena perfeita", desc: "Completou estudo, devocionais e presença nos últimos 15 dias!", unlocked: biweeklyStreakDone, current: biweeklyStreakDone ? 1 : 0, target: 1, bonusPoints: 30 },
-    { id: 7, key: "streak_14", icon: "🛡️", title: "Guardião da Fé", desc: "14 dias seguidos de dedicação!", unlocked: streakDays >= 14, current: streakDays, target: 14, secret: true, bonusPoints: 25 },
-    { id: 8, key: "streak_30", icon: "👁️‍🗨️", title: "Constância Invisível", desc: "30 dias seguidos — lendário!", unlocked: streakDays >= 30, current: streakDays, target: 30, secret: true, bonusPoints: 25 },
-    { id: 17, key: "apto", icon: "✝️", title: "Pronto para a Profissão de Fé", desc: "Seu pastor confirmou: você está pronto!", unlocked: isApto, current: isApto ? 1 : 0, target: 1, secret: true, bonusPoints: 50 },
-  ];
+  // Map metric name -> current value
+  const metricValues: Record<string, number> = {
+    streak_days:      streakDays,
+    completed_count:  completedCount,
+    faith_points:     faithPoints,
+    dev_count:        devCount,
+    attendance_count: attendanceCount,
+    worship_count:    worshipCount,
+    chat_count:       chatCount,
+    prayer_count:     prayerCount,
+    is_apto:          isApto ? 1 : 0,
+    biweekly_streak:  biweeklyStreakDone ? 1 : 0,
+  };
+
+  const achievements: Achievement[] = achievementDefs.map((def, idx) => {
+    const current = metricValues[def.metric] ?? 0;
+    return {
+      id: idx + 1,
+      key: def.key,
+      icon: def.icon,
+      title: def.title,
+      desc: def.description,
+      unlocked: current >= def.target,
+      current,
+      target: def.target,
+      secret: def.is_secret,
+      bonusPoints: def.bonus_points,
+    };
+  });
 
   // Track newly unlocked for animation
   const [newlyUnlockedKeys, setNewlyUnlockedKeys] = useState<Set<string>>(new Set());
@@ -456,6 +479,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
         <h2 className="font-montserrat font-black text-foreground text-xl">🏆 Conquistas</h2>
         <div className="flex items-center gap-2">
           {canManage && <GameConfigDialog onSaved={fetchAreaRanking} />}
+          {canManage && <AchievementsConfigDialog onSaved={fetchAchievementDefs} />}
           <GameRulesDialog breakdown={{
             lessonStudyCount,
             devotionalCount: devCount,
