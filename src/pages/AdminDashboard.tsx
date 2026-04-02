@@ -121,10 +121,19 @@ export default function AdminDashboard() {
     setLoading(false);
   }, [fetchPlans]);
 
-  // Memoized filtered participants
+  // Memoized filtered participants (by turma — used for overview, scores, etc.)
   const filteredParticipants = useMemo(() =>
     selectedTurma
       ? participants.filter(p => (p as any).turma_id === selectedTurma.id)
+      : participants,
+    [selectedTurma, participants]
+  );
+
+  // Participants filtered only by area — used for attendance so no student is
+  // excluded just because their turma_id is unset or from a different turma.
+  const areaParticipants = useMemo(() =>
+    selectedTurma?.area
+      ? participants.filter(p => (p as any).area === selectedTurma.area)
       : participants,
     [selectedTurma, participants]
   );
@@ -217,7 +226,7 @@ export default function AdminDashboard() {
             )}
             {activeTab === "settings" && (
               <AttendanceTab
-                participants={filteredParticipants}
+                participants={areaParticipants}
                 activities={activities}
                 communities={communities}
                 adminArea={selectedTurma.area ?? profile?.area ?? ""}
