@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { X, Trash2, ChevronRight, ChevronDown, ChevronUp, BookOpen, Calendar, Church, Trophy, Star, AlertTriangle } from "lucide-react";
+import { X, Trash2, ChevronRight, ChevronDown, ChevronUp, BookOpen, Calendar, Church, Trophy, Star, AlertTriangle, Gift, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -80,6 +80,10 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
   const [totalPoints, setTotalPoints] = useState(0);
   const [gaps, setGaps] = useState<{ missingLessons: { id: string; title: string }[]; missingDevotionals: { id: string; title: string; day_number: number | null }[] } | null>(null);
   const [showGaps, setShowGaps] = useState(false);
+  const [showBonusForm, setShowBonusForm] = useState(false);
+  const [bonusPoints, setBonusPoints] = useState("");
+  const [bonusJustification, setBonusJustification] = useState("");
+  const [grantingBonus, setGrantingBonus] = useState(false);
 
   useEffect(() => {
     fetchActivities();
@@ -188,12 +192,17 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     });
 
     (achievements ?? []).forEach((achievement) => {
+      const isManualBonus = achievement.achievement_key.startsWith("bonus_lider|");
       const label = ACHIEVEMENT_LABELS[achievement.achievement_key];
       allItems.push({
         id: `ach-${achievement.id}`,
         type: "achievement",
-        title: label ? `${label.icon} ${label.title}` : `🏆 ${achievement.achievement_key}`,
-        subtitle: "Bônus de conquista",
+        title: isManualBonus
+          ? "🌟 Bônus do Líder"
+          : label ? `${label.icon} ${label.title}` : `🏆 ${achievement.achievement_key}`,
+        subtitle: isManualBonus
+          ? achievement.achievement_key.slice("bonus_lider|".length)
+          : "Bônus de conquista",
         points: achievement.bonus_points,
         date: achievement.unlocked_at,
         deletable: true,
@@ -327,6 +336,55 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     setLoadingDetail(false);
   }
 
+  async function handleGrantBonus() {
+    const pts = parseInt(bonusPoints, 10);
+    if (!pts || pts <= 0) { toast.error("Informe uma quantidade de pontos válida."); return; }
+    if (pts > 500) { toast.error("O bônus não pode ultrapassar 500 pontos por vez."); return; }
+    if (!bonusJustification.trim()) { toast.error("Informe a justificativa para o bônus."); return; }
+    if (pts > 100 && !confirm(`Confirma conceder ${pts} pontos para ${fullName}?\n\nJustificativa: ${bonusJustification.trim()}`)) return;
+
+    setGrantingBonus(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    try {
+      const key = `bonus_lider|${bonusJustification.trim()}`;
+      const { data, error } = await supabase.from("achievement_unlocks").insert({
+        user_id: userId,
+        achievement_key: key,
+        bonus_points: pts,
+      }).select("id, unlocked_at").single();
+
+      if (error) throw error;
+
+      await supabase.from("bonus_grant_log").insert({
+        granted_by: user?.id ?? "",
+        target_user_id: userId,
+        achievement_id: data.id,
+        justification: bonusJustification.trim(),
+        points_granted: pts,
+      });
+
+      setItems(prev => [{
+        id: `ach-${data.id}`,
+        type: "achievement",
+        title: "🌟 Bônus do Líder",
+        subtitle: bonusJustification.trim(),
+        points: pts,
+        date: data.unlocked_at,
+        deletable: true,
+        tableId: data.id,
+      }, ...prev]);
+      setTotalPoints(prev => prev + pts);
+      setBonusPoints("");
+      setBonusJustification("");
+      setShowBonusForm(false);
+      toast.success(`+${pts} pontos concedidos a ${fullName}`);
+      onPointsChanged?.();
+    } catch (err: any) {
+      toast.error("Erro ao conceder bônus: " + (err.message ?? ""));
+    }
+    setGrantingBonus(false);
+  }
+
   async function handleDelete(item: ActivityItem) {
     if (!confirm(`Remover "${item.title}" e descontar ${item.points} pontos?`)) return;
     setDeleting(item.id);
@@ -411,10 +469,64 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
             <p className="font-montserrat font-bold text-foreground text-base">{fullName}</p>
             <p className="text-muted-foreground font-inter text-xs">{totalPoints} pontos · {items.length} atividades</p>
           </div>
-          <button onClick={onClose} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors">
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {canDelete && (
+              <button
+                onClick={() => setShowBonusForm(v => !v)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-inter text-xs font-semibold"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Bônus
+              </button>
+            )}
+            <button onClick={onClose} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
+
+        {showBonusForm && canDelete && (
+          <div className="p-4 border-b border-border bg-primary/5 flex-shrink-0 space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <Gift className="w-4 h-4 text-primary flex-shrink-0" />
+              <p className="font-montserrat font-bold text-foreground text-sm">Conceder pontos extras</p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min="1"
+                max="500"
+                placeholder="Pts"
+                value={bonusPoints}
+                onChange={e => setBonusPoints(e.target.value)}
+                className="w-20 px-3 py-2 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <input
+                type="text"
+                placeholder="Justificativa..."
+                value={bonusJustification}
+                onChange={e => setBonusJustification(e.target.value)}
+                className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleGrantBonus}
+                disabled={grantingBonus}
+                className="flex-1 py-2 rounded-xl text-sm font-inter font-semibold text-primary-foreground disabled:opacity-50 transition-opacity"
+                style={{ background: "var(--gradient-hero)" }}
+              >
+                {grantingBonus ? "Concedendo..." : "Confirmar bônus"}
+              </button>
+              <button
+                onClick={() => { setShowBonusForm(false); setBonusPoints(""); setBonusJustification(""); }}
+                className="px-4 py-2 rounded-xl bg-muted text-foreground font-inter text-sm"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="p-4 border-b border-border flex-shrink-0">
           <p className="font-montserrat font-bold text-foreground text-xs mb-2">Resumo</p>

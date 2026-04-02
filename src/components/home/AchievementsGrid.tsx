@@ -197,9 +197,10 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       const fifteenDaysAgo = new Date(Date.now() - 15 * 86400000).toISOString();
-      const [{ count: devC }, { count: worC }, { data: attD }, { count: chatC }, { count: prayerC }, { data: planData }, { data: existingUnlocks }, { count: totalLessonsC }, { count: totalDevsC }, { count: totalEventsC }, { data: lessonResps }, { data: allActs }, { data: userProg }, { data: achUnlocks },
+      const [{ count: devC }, { count: worC }, { data: attD }, { count: chatC }, { count: prayerC }, { data: planData }, { data: existingUnlocks }, { data: allLessons }, { data: allDevContent }, { count: totalEventsC }, { data: lessonResps }, { data: allActs }, { data: userProg }, { data: achUnlocks },
         // Biweekly streak data
         { data: recentEvents }, { data: recentAttendance }, { data: recentDevContent }, { data: recentDevProgress }, { data: recentLessonResps },
+        { data: courseUnlocks },
       ] = await Promise.all([
         supabase.from("devotional_progress").select("id", { count: "exact", head: true }).eq("user_id", user.id),
         supabase.from("worship_attendance").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "aprovado"),
@@ -208,8 +209,8 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
         supabase.from("prayer_requests").select("id", { count: "exact", head: true }).eq("user_id", user.id),
         supabase.from("discipleship_plans").select("aptidao").eq("user_id", user.id).limit(1),
         supabase.from("achievement_unlocks").select("achievement_key").eq("user_id", user.id),
-        supabase.from("lessons").select("id", { count: "exact", head: true }),
-        supabase.from("devotional_content").select("id", { count: "exact", head: true }),
+        supabase.from("lessons").select("id, course_id"),
+        supabase.from("devotional_content").select("id, lesson_id"),
         supabase.from("events").select("id", { count: "exact", head: true }).gte("event_date", new Date(Date.now() - 90 * 86400000).toISOString()).or(`area.eq.${currentArea},area.is.null`),
         supabase.from("lesson_responses").select("lesson_id").eq("user_id", user.id),
         supabase.from("activities").select("id, points"),
@@ -222,7 +223,15 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
         supabase.from("devotional_content").select("id, lesson_id").not("lesson_id", "is", null),
         supabase.from("devotional_progress").select("devotional_id, completed_at").eq("user_id", user.id).gte("completed_at", fifteenDaysAgo),
         supabase.from("lesson_responses").select("lesson_id, created_at").eq("user_id", user.id).gte("created_at", fifteenDaysAgo),
+        supabase.from("course_unlocks").select("course_id").eq("area", currentArea),
       ]);
+
+      // Filter lessons/devotionals to only those belonging to courses unlocked for this area
+      const unlockedCourseIds = new Set((courseUnlocks ?? []).map((u: any) => u.course_id));
+      const areaLessonIds = new Set((allLessons ?? []).filter((l: any) => unlockedCourseIds.has(l.course_id)).map((l: any) => l.id));
+      const totalLessonsCount = areaLessonIds.size;
+      const totalDevsCount = (allDevContent ?? []).filter((d: any) => d.lesson_id && areaLessonIds.has(d.lesson_id)).length;
+
       setDevCount(devC ?? 0);
       setWorshipCount(worC ?? 0);
       setAttendanceCount((attD ?? []).length);
@@ -230,8 +239,8 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
       setPrayerCount(prayerC ?? 0);
       setIsApto(planData?.[0]?.aptidao === "apto");
       setUnlockedKeys(new Set((existingUnlocks ?? []).map(u => u.achievement_key)));
-      setTotalLessons(totalLessonsC ?? 0);
-      setTotalDevotionals(totalDevsC ?? 0);
+      setTotalLessons(totalLessonsCount);
+      setTotalDevotionals(totalDevsCount);
       setTotalEvents(totalEventsC ?? 0);
       setLessonStudyCount(new Set((lessonResps ?? []).map(r => r.lesson_id)).size);
       
@@ -266,12 +275,6 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
       // Biweekly streak: must have all done AND no weekend catch-ups
       const streakComplete = recentEventIds.length > 0 && attendedAllRecentEvents && allRecentDevsDone && allRecentLessonsStudied && !hasWeekendCatchUp;
       setBiweeklyStreakDone(streakComplete);
-      setBiweeklyProgress({
-        devsDone: recentDevsCompleted,
-        devsTotal: devsForRecentLessons.length,
-        studyDone: allRecentLessonsStudied,
-        attendanceDone: attendedAllRecentEvents,
-      });
       setBiweeklyProgress({
         devsDone: recentDevsCompleted,
         devsTotal: devsForRecentLessons.length,

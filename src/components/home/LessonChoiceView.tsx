@@ -69,8 +69,11 @@ function computeDevotionalStatuses(
   const dayOfWeek = today.getDay();
   const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
-  // Check if user already completed a devotional today
-  const completedToday = Array.from(completedMap.values()).some(dateStr => {
+  // Check if user already completed a devotional from THIS lesson today
+  // (must filter by devList IDs to avoid devocionais from other lessons blocking this one)
+  const devListIds = new Set(devList.map(d => d.id));
+  const completedToday = Array.from(completedMap.entries()).some(([devId, dateStr]) => {
+    if (!devListIds.has(devId)) return false;
     const d = new Date(dateStr);
     d.setHours(0, 0, 0, 0);
     return d.getTime() === today.getTime();
@@ -211,16 +214,23 @@ export default function LessonChoiceView({ lesson, onBack, onOpenStudy, onOpenEd
   const [completedDates, setCompletedDates] = useState<Map<string, string>>(new Map());
   const [lockedIds, setLockedIds] = useState<Set<string>>(new Set());
   const [devStatuses, setDevStatuses] = useState<Map<string, DevotionalStatus>>(new Map());
+  const [devPts, setDevPts] = useState(5);
+  const [devWkPts, setDevWkPts] = useState(2);
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
-      const [{ data: devs }, { data: prog }] = await Promise.all([
+      const [{ data: devs }, { data: prog }, { data: gameConfig }] = await Promise.all([
         supabase.from("devotional_content").select("*").eq("lesson_id", lesson.id).order("day_number"),
         user
           ? supabase.from("devotional_progress").select("devotional_id, completed_at").eq("user_id", user.id)
           : Promise.resolve({ data: [] }),
+        supabase.rpc("get_game_config" as any),
       ]);
+      const cfgMap = new Map<string, number>((gameConfig ?? []).map((r: any) => [r.key, Number(r.value)]));
+      setDevPts(cfgMap.get("devotional_points") ?? 5);
+      setDevWkPts(cfgMap.get("devotional_weekend_points") ?? 2);
+
       const devList = (devs ?? []) as DevotionalItem[];
       const progList = prog ?? [];
       const completedMap = new Map<string, string>();
@@ -261,8 +271,7 @@ export default function LessonChoiceView({ lesson, onBack, onOpenStudy, onOpenEd
   async function handleCompleteDevotional(devotionalId: string) {
     const now = new Date();
     const isWeekend = now.getDay() === 0 || now.getDay() === 6;
-    // Late access = 0 points; weekend recovery = 2 pts; normal = 5 pts
-    const pts = isLateAccess ? 0 : isWeekend ? 2 : 5;
+    const pts = isLateAccess ? 0 : isWeekend ? devWkPts : devPts;
     const newCompletedMap = new Map(completedDates);
     newCompletedMap.set(devotionalId, now.toISOString());
     setCompletedDates(newCompletedMap);
@@ -295,7 +304,7 @@ export default function LessonChoiceView({ lesson, onBack, onOpenStudy, onOpenEd
       toast.info("Devocional concluído! (sem pontuação — prazo encerrado)", { duration: 3000 });
     } else {
       toast.success(`Devocional concluído! +${pts} pontos de fé ⭐`, {
-        description: isWeekend ? "Recuperação de fim de semana (2 pts)" : "Continue firme na sua caminhada!",
+        description: isWeekend ? `Recuperação de fim de semana (${devWkPts} pts)` : "Continue firme na sua caminhada!",
         duration: 3000,
       });
     }
@@ -348,7 +357,7 @@ export default function LessonChoiceView({ lesson, onBack, onOpenStudy, onOpenEd
           id: viewingDevotional.id,
           title: viewingDevotional.title || `Dia ${viewingDevotional.day_number}`,
           subtitle: `${lesson.title} · Dia ${viewingDevotional.day_number}`,
-          points: 5,
+          points: isLateAccess ? 0 : (new Date().getDay() === 0 || new Date().getDay() === 6) ? devWkPts : devPts,
         }}
         devotionalData={{
           bible_text: viewingDevotional.bible_text,

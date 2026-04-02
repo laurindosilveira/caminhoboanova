@@ -37,7 +37,7 @@ export default function Index() {
   const { effectiveArea } = useAreaSwitch();
   const currentArea = effectiveArea || profile?.area || "";
   const navigate = useNavigate();
-  const stats = useUserStats();
+  const stats = useUserStats(currentArea);
   useAppNotifications();
 
   // Listen for lesson navigation from agenda

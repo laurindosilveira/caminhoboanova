@@ -29,6 +29,7 @@ export default function DevotionalView({ activity, onBack, onComplete, isComplet
   const [bibleModalRef, setBibleModalRef] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [attempted, setAttempted] = useState(false);
+  const [readConfirmed, setReadConfirmed] = useState(false);
 
   useEffect(() => {
     if (devotionalData) return;
@@ -82,9 +83,10 @@ export default function DevotionalView({ activity, onBack, onComplete, isComplet
   }, [activity.id]);
 
   const activeQuestions = (content?.questions ?? []).filter((question) => question.trim());
-  const allQuestionsAnswered =
-    activeQuestions.length === 0 || activeQuestions.every((_, index) => (answers[index] ?? "").trim().length > 0);
-  const canComplete = allQuestionsAnswered;
+  const hasQuestions = activeQuestions.length > 0;
+  const allQuestionsAnswered = hasQuestions && activeQuestions.every((_, index) => (answers[index] ?? "").trim().length > 0);
+  // When there are no questions, require an explicit read confirmation instead
+  const canComplete = hasQuestions ? allQuestionsAnswered : readConfirmed;
 
   async function handleComplete() {
     setAttempted(true);
@@ -301,11 +303,25 @@ export default function DevotionalView({ activity, onBack, onComplete, isComplet
         </div>
       )}
 
+      {!isCompleted && !hideCompleteButton && !hasQuestions && (
+        <label className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-muted/40 border border-border cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={readConfirmed}
+            onChange={e => setReadConfirmed(e.target.checked)}
+            className="w-4 h-4 accent-primary flex-shrink-0"
+          />
+          <p className="font-inter text-sm text-foreground">
+            Li e refleti sobre o devocional de hoje
+          </p>
+        </label>
+      )}
+
       {!isCompleted && !hideCompleteButton && attempted && !canComplete && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-destructive/10 border border-destructive/20">
           <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
           <p className="font-inter text-xs text-destructive">
-            Responda todas as perguntas para poder concluir o devocional.
+            {hasQuestions ? "Responda todas as perguntas para poder concluir o devocional." : "Confirme que leu o devocional antes de concluir."}
           </p>
         </div>
       )}

@@ -49,7 +49,7 @@ function calculateEnergy(dates: string[]): number {
   return Math.min(5, recent.length);
 }
 
-export function useUserStats(): UserStats {
+export function useUserStats(currentArea?: string): UserStats {
   const [stats, setStats] = useState<UserStats>({
     faithPoints: 0,
     faithLevel: 1,
@@ -162,7 +162,7 @@ export function useUserStats(): UserStats {
       });
     }
     fetchStats();
-  }, []);
+  }, [currentArea]);
 
   return stats;
 }

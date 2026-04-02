@@ -42,28 +42,28 @@ export function useAgendaSchedule() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (profile) fetchSchedule();
-  }, [currentArea]);
+    if (!profile) return;
 
-  // Realtime subscription for events changes
-  useEffect(() => {
+    fetchSchedule();
+
+    // Use a unique channel name per area to avoid stale channel reuse
+    const channelName = `agenda-events-realtime:${currentArea}`;
     const channel = supabase
-      .channel('agenda-events-realtime')
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'events' },
-        () => {
-          if (profile) fetchSchedule();
-        }
+        () => { fetchSchedule(); }
       )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [currentArea]);
+  }, [currentArea, profile]);
 
   async function fetchSchedule() {
     setLoading(true);
     let eventsQuery = supabase.from("events").select("id, event_date, linked_lesson_id, title, type, area")
+      .eq("type", "confirmatorio")
       .not("linked_lesson_id", "is", null)
       .order("event_date");
 
@@ -87,7 +87,10 @@ export function useAgendaSchedule() {
       const course = courseMap.get(lesson.course_id);
       if (!course) continue;
 
-      const eventDate = new Date(event.event_date);
+      // Parse date safely: if the string has no time component, appending T12:00:00
+      // avoids UTC-midnight being interpreted as the previous day in UTC-3 (Brazil).
+      const rawDate = event.event_date as string;
+      const eventDate = new Date(rawDate.includes("T") ? rawDate : rawDate + "T12:00:00");
       const businessDays = getBusinessDaysBefore(eventDate, 10);
       const windowStart = businessDays[0];
       const devotionalDates = businessDays.slice(0, 5);
@@ -128,15 +131,20 @@ export function useAgendaSchedule() {
     if (today >= entry.windowStart) {
       releasedLessonIds.add(entry.lessonId);
     }
-    if (today >= entry.windowStart && now < entry.eventDate) {
-      // Study is open from windowStart until the actual event time
-      studyOpenLessonIds.add(entry.lessonId);
-    } else if (now >= entry.eventDate) {
+    if (now >= entry.eventDate) {
       // After the actual event time: late access (no points)
       lateAccessLessonIds.add(entry.lessonId);
     }
     lessonDevotionalDates.set(entry.lessonId, entry.devotionalDates);
     lessonEventDate.set(entry.lessonId, entry.eventDate);
+  }
+
+  // Only the single earliest upcoming lesson with an open window is study-open.
+  // This prevents lesson N+1 from being accessible just because its 10-day window
+  // overlaps with lesson N's event date (e.g., weekly schedule).
+  const currentOpenEntry = schedule.find(e => today >= e.windowStart && now < e.eventDate);
+  if (currentOpenEntry) {
+    studyOpenLessonIds.add(currentOpenEntry.lessonId);
   }
 
   // All scheduled lesson IDs (regardless of window)
