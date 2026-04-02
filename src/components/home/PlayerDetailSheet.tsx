@@ -458,6 +458,9 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
 
   const selectedDetailItem = detailModal ? items.find((item) => item.id === detailModal.itemId) ?? null : null;
 
+  const [categoryModal, setCategoryModal] = useState<string | null>(null);
+  const categoryItems = categoryModal ? items.filter(i => i.type === categoryModal) : [];
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={onClose}>
       <div
@@ -532,12 +535,16 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
           <p className="font-montserrat font-bold text-foreground text-xs mb-2">Resumo</p>
           <div className="grid grid-cols-3 gap-2">
             {Object.entries(grouped).map(([type, { count, points }]) => (
-              <div key={type} className="bg-muted/50 rounded-xl p-2 text-center">
+              <button
+                key={type}
+                onClick={() => setCategoryModal(type)}
+                className="bg-muted/50 hover:bg-muted/80 active:scale-95 rounded-xl p-2 text-center transition-all cursor-pointer"
+              >
                 <div className="flex items-center justify-center mb-1">{typeIcon(type)}</div>
                 <p className="font-montserrat font-bold text-foreground text-xs">{count}</p>
                 <p className="text-muted-foreground text-[10px] font-inter">{typeLabel(type)}</p>
                 <p className="text-primary text-[10px] font-montserrat font-bold">+{points}</p>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -600,53 +607,81 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {loading ? (
-            <div className="space-y-2">
-              {[1, 2, 3, 4].map((i) => <div key={i} className="h-14 bg-muted rounded-xl animate-pulse" />)}
-            </div>
-          ) : items.length === 0 ? (
-            <p className="text-center text-muted-foreground font-inter text-sm py-8">Nenhuma atividade pontuada.</p>
-          ) : (
-            items.map((item) => {
-              const canOpenDetails = item.type === "lesson" || item.type === "devotional";
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => handleOpenDetails(item)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-left ${
-                    canOpenDetails ? "bg-muted/30 hover:bg-muted/50 cursor-pointer" : "bg-muted/20 cursor-default"
-                  }`}
-                >
-                  <div className="flex-shrink-0">{typeIcon(item.type)}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-inter text-sm text-foreground font-medium truncate">{item.title}</p>
-                    {item.subtitle && <p className="text-muted-foreground text-[10px] font-inter">{item.subtitle}</p>}
-                    <p className="text-muted-foreground text-[10px] font-inter">
-                      {item.date ? format(new Date(item.date), "d/MM/yy HH:mm") : ""}
-                    </p>
-                    {canOpenDetails && (
-                      <p className="text-primary text-[10px] font-inter font-semibold mt-0.5">Toque para ver as respostas</p>
-                    )}
-                  </div>
-                  <span className="font-montserrat font-bold text-primary text-xs flex-shrink-0">+{item.points}</span>
-                  {canDelete && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDelete(item); }}
-                      disabled={deleting === item.id}
-                      className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
-                      title="Remover atividade"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  {canOpenDetails && <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
-                </div>
-              );
-            })
-          )}
-        </div>
+        {loading && (
+          <div className="p-4 space-y-2 flex-shrink-0">
+            {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-muted rounded-xl animate-pulse" />)}
+          </div>
+        )}
+        {!loading && items.length === 0 && (
+          <p className="text-center text-muted-foreground font-inter text-sm py-8">Nenhuma atividade pontuada.</p>
+        )}
+        {!loading && items.length > 0 && (
+          <div className="px-4 pb-4 pt-2 flex-shrink-0">
+            <p className="text-muted-foreground font-inter text-[10px] text-center">Toque em uma categoria acima para ver os detalhes</p>
+          </div>
+        )}
       </div>
+
+      <Dialog open={!!categoryModal} onOpenChange={(open) => { if (!open) setCategoryModal(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-montserrat text-lg flex items-center gap-2">
+              {categoryModal && typeIcon(categoryModal)}
+              {categoryModal ? typeLabel(categoryModal) : ""}
+              <span className="text-muted-foreground font-inter text-sm font-normal ml-1">
+                {categoryItems.length} {categoryItems.length === 1 ? "item" : "itens"}
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-2 mt-2">
+            {categoryItems.length === 0 ? (
+              <p className="text-center text-muted-foreground font-inter text-sm py-8">Nenhuma atividade nesta categoria.</p>
+            ) : (
+              categoryItems.map((item) => {
+                const canOpenDetails = item.type === "lesson" || item.type === "devotional";
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => { if (canOpenDetails) handleOpenDetails(item); }}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-left ${
+                      canOpenDetails ? "bg-muted/30 hover:bg-muted/50 cursor-pointer" : "bg-muted/20 cursor-default"
+                    }`}
+                  >
+                    <div className="flex-shrink-0">{typeIcon(item.type)}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-inter text-sm text-foreground font-medium truncate">{item.title}</p>
+                      {item.subtitle && <p className="text-muted-foreground text-[10px] font-inter">{item.subtitle}</p>}
+                      <p className="text-muted-foreground text-[10px] font-inter">
+                        {item.date ? format(new Date(item.date), "d/MM/yy HH:mm") : ""}
+                      </p>
+                      {canOpenDetails && (
+                        <p className="text-primary text-[10px] font-inter font-semibold mt-0.5">Toque para ver as respostas</p>
+                      )}
+                    </div>
+                    <span className="font-montserrat font-bold text-primary text-xs flex-shrink-0">+{item.points}</span>
+                    {canDelete && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(item);
+                          setCategoryModal(null);
+                        }}
+                        disabled={deleting === item.id}
+                        className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
+                        title="Remover atividade"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {canOpenDetails && <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!detailModal} onOpenChange={(open) => { if (!open) setDetailModal(null); }}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
