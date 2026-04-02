@@ -12,14 +12,43 @@ function hideSplash() {
   }
 }
 
-// ─── PWA Auto-Update Strategy ─────────────────────────
-// 1. skipWaiting + clientsClaim in SW config → new SW takes over immediately
-// 2. Periodic check every 60s while app is visible
-// 3. Check on visibility change (user returns to app)
-// 4. Check on network reconnection (user was offline)
-// 5. Silent reload when update is ready (no user action needed)
+// ─── PWA Update Strategy ─────────────────────────────
+// Check for updates once on startup and once when the user returns to the app.
+// When a new version is available, show a non-intrusive banner instead of
+// doing a silent reload that interrupts the user mid-interaction.
 
-const CHECK_INTERVAL_MS = 60 * 1000; // 60 seconds
+const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour (not every 60s)
+
+function showUpdateBanner(updateSWFn: () => void) {
+  // Remove any existing banner
+  document.getElementById("pwa-update-banner")?.remove();
+
+  const banner = document.createElement("div");
+  banner.id = "pwa-update-banner";
+  banner.style.cssText = [
+    "position:fixed", "bottom:80px", "left:50%", "transform:translateX(-50%)",
+    "z-index:99999", "background:#1F3C88", "color:#fff",
+    "padding:10px 18px", "border-radius:999px",
+    "font-family:Inter,sans-serif", "font-size:13px",
+    "box-shadow:0 4px 24px rgba(0,0,0,0.3)",
+    "display:flex", "align-items:center", "gap:12px",
+    "max-width:calc(100vw - 32px)", "white-space:nowrap",
+  ].join(";");
+  banner.innerHTML = `
+    <span>✨ Nova versão disponível!</span>
+    <button id="pwa-update-btn" style="
+      background:#E8880A;color:#fff;border:none;border-radius:999px;
+      padding:4px 14px;font-size:13px;font-weight:700;cursor:pointer;
+    ">Atualizar</button>
+  `;
+  document.body.appendChild(banner);
+  document.getElementById("pwa-update-btn")?.addEventListener("click", () => {
+    banner.remove();
+    updateSWFn();
+  });
+  // Auto-hide after 15 seconds if user ignores
+  setTimeout(() => banner.remove(), 15000);
+}
 
 const updateSW = registerSW({
   immediate: true,
@@ -27,54 +56,29 @@ const updateSW = registerSW({
   onRegisteredSW(_swUrl, registration) {
     if (!registration) return;
 
-    // Initial check
+    // Check once on startup
     registration.update();
 
-    // Periodic background check while tab is visible
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    function startPeriodicCheck() {
-      if (intervalId) return;
-      intervalId = setInterval(() => {
-        if (!document.hidden && navigator.onLine) {
-          registration.update();
-        }
-      }, CHECK_INTERVAL_MS);
-    }
-
-    function stopPeriodicCheck() {
-      if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
+    // Periodic check — only every 1 hour, not every 60 seconds
+    setInterval(() => {
+      if (!document.hidden && navigator.onLine) {
+        registration.update();
       }
-    }
+    }, CHECK_INTERVAL_MS);
 
-    startPeriodicCheck();
-
-    // Check when user returns to the app (tab/app focus)
+    // Check when user returns to the app after being away
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden && navigator.onLine) {
         registration.update();
-        startPeriodicCheck();
-      } else {
-        stopPeriodicCheck();
       }
     });
-
-    // Check when network comes back online
-    window.addEventListener("online", () => {
-      registration.update();
-    });
   },
 
-  // When a new version is detected, reload transparently
+  // When a new version is ready: show banner, let the user decide when to reload
   onNeedRefresh() {
-    // If the user is idle or the page is not mid-interaction, reload silently
-    // The splash screen will show briefly during reload, so it feels seamless
-    window.location.reload();
+    showUpdateBanner(() => updateSW(true));
   },
 
-  // SW registered and controlling the page — nothing extra needed
   onOfflineReady() {
     console.log("[PWA] App pronta para uso offline");
   },

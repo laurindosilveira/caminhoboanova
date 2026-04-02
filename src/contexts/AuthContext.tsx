@@ -74,31 +74,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    // Set up auth state listener BEFORE getSession
+    // Track whether the initial profile fetch has been started to avoid
+    // running it twice (once from INITIAL_SESSION, once from getSession).
+    let initialFetchDone = false;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, currentSession) => {
+      (event, currentSession) => {
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
-        if (currentSession?.user) {
-          // Use setTimeout to avoid deadlock with Supabase auth callbacks
-          setTimeout(() => {
-            fetchProfileAndRole(currentSession.user.id).finally(() => setLoading(false));
-          }, 0);
-        } else {
+
+        if (!currentSession?.user) {
+          // Signed out
           setProfile(null);
           setRole(null);
           setAdminArea(null);
           setLoading(false);
+          return;
+        }
+
+        // TOKEN_REFRESHED only updates the session token — profile/role data
+        // hasn't changed, so skip the 5-query re-fetch to avoid UI re-renders.
+        if (event === "TOKEN_REFRESHED") {
+          return;
+        }
+
+        // SIGNED_IN / INITIAL_SESSION / USER_UPDATED → fetch profile
+        // Use setTimeout to avoid Supabase auth callback deadlock.
+        if (!initialFetchDone || event === "SIGNED_IN") {
+          initialFetchDone = true;
+          setTimeout(() => {
+            fetchProfileAndRole(currentSession.user.id).finally(() => setLoading(false));
+          }, 0);
         }
       }
     );
 
+    // getSession covers the case where INITIAL_SESSION never fires (some browsers).
+    // The initialFetchDone flag prevents a double fetch when both paths run.
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      if (currentSession?.user) {
+      if (currentSession?.user && !initialFetchDone) {
+        initialFetchDone = true;
         setSession(currentSession);
         setUser(currentSession.user);
         fetchProfileAndRole(currentSession.user.id).finally(() => setLoading(false));
-      } else {
+      } else if (!currentSession?.user) {
         setLoading(false);
       }
     });
