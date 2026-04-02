@@ -55,7 +55,7 @@ const AREA_1_COMMUNITIES = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Ir
 const AREA_2_COMMUNITIES = ["Martim Lutero", "Linha Brasil", "Iriá Pira 2"];
 
 // Fallback shown immediately and whenever the DB table is unavailable/empty
-const DEFAULT_ACHIEVEMENT_DEFS: AchievementDef[] = [
+export const DEFAULT_ACHIEVEMENT_DEFS: AchievementDef[] = [
   { id: "1",  key: "streak_7",        icon: "🔥",  title: "7 dias seguidos",               description: "Sequência de fé incrível!",                                      metric: "streak_days",      target: 7,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 1  },
   { id: "2",  key: "first_activity",  icon: "📖",  title: "Primeiros passos",               description: "Completou sua 1ª atividade!",                                    metric: "completed_count",  target: 1,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 2  },
   { id: "3",  key: "activities_5",    icon: "🎓",  title: "5 atividades",                   description: "Comprometido com a jornada!",                                    metric: "completed_count",  target: 5,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 3  },

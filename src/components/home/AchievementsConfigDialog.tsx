@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Trophy, Plus, Trash2, Save, X, GripVertical } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { DEFAULT_ACHIEVEMENT_DEFS } from "./AchievementsGrid";
 
 export type AchievementDef = {
   id: string;
@@ -65,11 +66,28 @@ export default function AchievementsConfigDialog({ onSaved }: Props) {
 
   async function loadDefs() {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("achievement_definitions" as any)
       .select("*")
       .order("sort_order");
-    setDefs((data as AchievementDef[]) ?? []);
+
+    const rows = (data as AchievementDef[]) ?? [];
+
+    if ((error || rows.length === 0) && !error) {
+      // Table exists but is empty — seed with defaults so the user can edit them
+      const seedRows = DEFAULT_ACHIEVEMENT_DEFS.map(({ id: _id, ...rest }) => rest);
+      const { data: seeded } = await supabase
+        .from("achievement_definitions" as any)
+        .insert(seedRows)
+        .select("*");
+      setDefs((seeded as AchievementDef[]) ?? DEFAULT_ACHIEVEMENT_DEFS);
+    } else if (error) {
+      // Table may not exist yet — show defaults as read-only preview
+      setDefs(DEFAULT_ACHIEVEMENT_DEFS);
+    } else {
+      setDefs(rows);
+    }
+
     setLoading(false);
   }
 
