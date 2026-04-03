@@ -115,7 +115,7 @@ export default function AdminDashboard() {
     });
 
     setActivities(activitiesData ?? []);
-    setParticipants(participantList);
+    setParticipants(participantList.sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? "", "pt-BR", { sensitivity: "base" })));
     setTurmas(turmasData ?? []);
     await fetchPlans(participantList.map(p => p.user_id));
     setLoading(false);
