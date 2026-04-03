@@ -150,6 +150,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   const [worshipRecords, setWorshipRecords] = useState<WorshipRecord[]>([]);
   const [timelineFilter, setTimelineFilter] = useState<TimelineCategory | "todos">("todos");
   const [showAvatarZoom, setShowAvatarZoom] = useState(false);
+  const [aptidaoThresholds, setAptidaoThresholds] = useState({ apto: 3.5, acompanhamento: 2.5 });
   const now = new Date();
   const month = now.getMonth() + 1;
   const year = now.getFullYear();
@@ -174,6 +175,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
         { data: challengeParticipations },
         { data: coursesData },
         { data: unlocksData },
+        { data: gameConfig },
       ] = await Promise.all([
         supabase.from("spiritual_assessments").select("*").eq("user_id", p.user_id).eq("month", month).eq("year", year).maybeSingle(),
         supabase.from("discipleship_plans").select("*").eq("user_id", p.user_id).maybeSingle(),
@@ -190,7 +192,14 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
         supabase.from("challenge_participants").select("challenge_id, completed, completed_at, joined_at, response_text, file_url").eq("user_id", p.user_id),
         supabase.from("courses").select("id, title, order_num").order("order_num"),
         supabase.from("course_unlocks").select("course_id").eq("area", p.area),
+        supabase.rpc("get_game_config" as any),
       ]);
+
+      const cfgMap = new Map<string, number>((gameConfig ?? []).map((r: any) => [r.key, Number(r.value)]));
+      setAptidaoThresholds({
+        apto:           cfgMap.get("aptidao_apto_threshold")           ?? 3.5,
+        acompanhamento: cfgMap.get("aptidao_acompanhamento_threshold") ?? 2.5,
+      });
 
       setAssessment(ass ?? null);
       if (planData) setPlan(prev => ({ ...prev, ...planData }));
@@ -531,7 +540,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
 
     // Overall
     const overall = (conhecimentoScore + vidaScore + comunhaoScore + testemunhoScore) / 4;
-    const aptidao = overall >= 3.5 ? "apto" : overall >= 2.5 ? "acompanhamento" : "nao_apto";
+    const aptidao = overall >= aptidaoThresholds.apto ? "apto" : overall >= aptidaoThresholds.acompanhamento ? "acompanhamento" : "nao_apto";
     const aptidaoLabel = aptidao === "apto" ? "✅ Apto para Profissão de Fé" : aptidao === "acompanhamento" ? "🟡 Em acompanhamento" : "🔴 Não apto no momento";
 
     return {
