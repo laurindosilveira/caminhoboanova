@@ -105,7 +105,6 @@ export function useAgendaSchedule() {
     const entries: ScheduleEntry[] = [];
     for (const event of (events ?? [])) {
       if (!event.linked_lesson_id) continue;
-      if (event.area && currentArea && event.area !== currentArea) continue;
       const lesson = lessonMap.get(event.linked_lesson_id);
       if (!lesson) continue;
       const course = courseMap.get(lesson.course_id);
