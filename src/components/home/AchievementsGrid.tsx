@@ -51,7 +51,7 @@ interface RankingMember {
   faith_points: number;
 }
 
-import { AREA_COMMUNITIES, ALL_COMMUNITIES } from "@/config/areas";
+import { getCommunitiesForArea } from "@/config/areas";
 
 // Fallback shown immediately and whenever the DB table is unavailable/empty
 export const DEFAULT_ACHIEVEMENT_DEFS: AchievementDef[] = [
@@ -75,28 +75,19 @@ export const DEFAULT_ACHIEVEMENT_DEFS: AchievementDef[] = [
   { id: "18", key: "apto",            icon: "✝️", title: "Pronto para a Profissão de Fé", description: "Seu pastor confirmou: você está pronto!",                          metric: "is_apto",          target: 1,   bonus_points: 50, is_secret: true,  is_active: true, sort_order: 18 },
 ];
 
-function getAreaNumber(area: string) {
-  if (/1/.test(area)) return 1;
-  if (/2/.test(area)) return 2;
-  return null;
-}
-
 export default function AchievementsGrid({ faithPoints, streakDays, completedCount }: AchievementsGridProps) {
   const { profile, role } = useAuth();
   const { effectiveArea, isOverriding, switchNonce } = useAreaSwitch();
   const canManage = role === "admin" || role === "lider";
   const myUserId = profile?.user_id;
   const currentArea = effectiveArea || profile?.area || "";
-  const areaNumber = getAreaNumber(currentArea);
   const activeCommunities = useMemo(() =>
-    areaNumber === 1
-      ? AREA_1_COMMUNITIES
-      : areaNumber === 2
-      ? AREA_2_COMMUNITIES
+    currentArea
+      ? getCommunitiesForArea(currentArea)
       : profile?.community
         ? [profile.community]
         : [],
-  [areaNumber, profile?.community]);
+  [currentArea, profile?.community]);
   const [seasons, setSeasons] = useState<RankingSeason[]>([]);
   const [members, setMembers] = useState<RankingMember[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
