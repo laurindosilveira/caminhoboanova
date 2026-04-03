@@ -66,18 +66,38 @@ export function useAgendaSchedule() {
 
   async function fetchSchedule() {
     setLoading(true);
-    let eventsQuery = supabase
+    const eventsWithReleaseDaysQuery = supabase
       .from("events")
       .select("id, event_date, linked_lesson_id, title, type, area, released_devotional_days")
       .eq("type", "confirmatorio")
       .not("linked_lesson_id", "is", null)
       .order("event_date");
 
-    const [{ data: events }, { data: lessons }, { data: courses }] = await Promise.all([
-      eventsQuery,
+    const eventsFallbackQuery = supabase
+      .from("events")
+      .select("id, event_date, linked_lesson_id, title, type, area")
+      .eq("type", "confirmatorio")
+      .not("linked_lesson_id", "is", null)
+      .order("event_date");
+
+    const [{ data: eventsWithReleaseDays, error: eventsError }, { data: lessons }, { data: courses }] = await Promise.all([
+      eventsWithReleaseDaysQuery,
       supabase.from("lessons").select("id, title, order_num, course_id").order("order_num"),
       supabase.from("courses").select("id, title, order_num").order("order_num"),
     ]);
+
+    let events = eventsWithReleaseDays;
+    if (eventsError) {
+      console.warn("useAgendaSchedule: falling back to events query without released_devotional_days", eventsError.message);
+      const { data: fallbackEvents, error: fallbackError } = await eventsFallbackQuery;
+      if (fallbackError) {
+        console.error("useAgendaSchedule: failed to load events", fallbackError.message);
+        setSchedule([]);
+        setLoading(false);
+        return;
+      }
+      events = fallbackEvents as any[];
+    }
 
     const lessonMap = new Map((lessons ?? []).map(l => [l.id, l]));
     const courseMap = new Map((courses ?? []).map(c => [c.id, c]));
