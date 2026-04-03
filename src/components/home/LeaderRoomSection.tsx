@@ -226,6 +226,7 @@ export default function LeaderRoomSection({ asTab = false }: { asTab?: boolean }
       { data: progressData },
       { data: lessonResponsesData },
       { data: devotionalProgressData },
+      { data: attendanceData },
     ] = await Promise.all([
       supabase.from("activities").select("*").order("order_num"),
       profilesQuery,
@@ -234,6 +235,7 @@ export default function LeaderRoomSection({ asTab = false }: { asTab?: boolean }
       supabase.from("user_progress").select("user_id, activity_id"),
       supabase.from("lesson_responses").select("user_id, lesson_id"),
       supabase.from("devotional_progress").select("user_id, devotional_id, completed_at"),
+      supabase.from("attendance").select("user_id, status").eq("status", "presente"),
     ]);
 
     const myId = userResult.data.user?.id ?? "";
@@ -250,7 +252,7 @@ export default function LeaderRoomSection({ asTab = false }: { asTab?: boolean }
       const devotionals = (devotionalProgressData ?? []).filter((progress) => progress.user_id === p.user_id);
       const devotionalCount = devotionals.length;
       const completedActivityIds = userProgress.map((pr) => pr.activity_id);
-      const completedEventCount = completedActivityIds.filter((activityId) => activityMap.get(activityId)?.type === "encontro").length;
+      const completedEventCount = (attendanceData ?? []).filter(a => a.user_id === p.user_id).length;
       const activityPoints = completedActivityIds.reduce((sum, activityId) => sum + (activityMap.get(activityId)?.points ?? 0), 0);
       const devotionalPoints = devotionals.reduce((sum, progress) => {
         const completedAt = new Date(progress.completed_at);
