@@ -53,6 +53,11 @@ interface RankingMember {
 
 import { getCommunitiesForArea } from "@/config/areas";
 
+function getSafeName(name?: string | null) {
+  const normalized = (name ?? "").trim();
+  return normalized || "Participante";
+}
+
 // Fallback shown immediately and whenever the DB table is unavailable/empty
 export const DEFAULT_ACHIEVEMENT_DEFS: AchievementDef[] = [
   { id: "1",  key: "streak_7",        icon: "🔥",  title: "7 dias seguidos",               description: "Sequência de fé incrível!",                                      metric: "streak_days",      target: 7,   bonus_points: 10, is_secret: false, is_active: true, sort_order: 1  },
@@ -167,7 +172,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
       rankingResponses.flat().forEach((member) => {
         dedupedMembers.set(member.user_id, {
           user_id: member.user_id,
-          full_name: member.full_name,
+          full_name: getSafeName(member.full_name),
           completed_count: Number(member.completed_count ?? 0),
           faith_points: Number(member.faith_points ?? 0),
         });
@@ -180,7 +185,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
         if (b.completed_count !== a.completed_count) {
           return b.completed_count - a.completed_count;
         }
-        return a.full_name.localeCompare(b.full_name, "pt-BR");
+        return getSafeName(a.full_name).localeCompare(getSafeName(b.full_name), "pt-BR");
       });
 
       setMembers(combined);
@@ -217,7 +222,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
     async function fetchSeasons() {
       const { data } = await supabase.from("ranking_seasons").select("*");
       const filtered = ((data ?? []) as unknown as RankingSeason[]).filter((season) =>
-        activeCommunities.includes(season.community)
+        season?.community && activeCommunities.includes(season.community)
       );
       setSeasons(filtered);
     }
@@ -225,6 +230,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
     fetchAreaRanking();
     // Fetch qualitative data
     async function fetchQualitative() {
+      try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       const fifteenDaysAgo = new Date(Date.now() - 15 * 86400000).toISOString();
@@ -312,6 +318,9 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
         studyDone: allRecentLessonsStudied,
         attendanceDone: attendedAllRecentEvents,
       });
+      } catch (error) {
+        console.error("Erro ao carregar dados qualitativos das conquistas:", error);
+      }
     }
     fetchQualitative();
   }, [profile, fetchAreaRanking, activeCommunities, currentArea, switchNonce]);
@@ -640,13 +649,14 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
           <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
             {members.map((m, i) => {
               const isMe = m.user_id === myUserId;
-              const initials = m.full_name.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase();
+              const displayName = getSafeName(m.full_name);
+              const initials = displayName.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase();
               const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : null;
               const clickable = true;
               return (
                 <div
                   key={m.user_id}
-                  onClick={() => clickable && setSelectedPlayer({ userId: m.user_id, fullName: m.full_name })}
+                  onClick={() => clickable && setSelectedPlayer({ userId: m.user_id, fullName: displayName })}
                   className={`flex items-center gap-3 px-4 py-3 ${
                     i < members.length - 1 ? "border-b border-border" : ""
                   } ${isMe ? "bg-primary/5" : ""} ${clickable ? "cursor-pointer hover:bg-muted/50 active:bg-muted transition-colors" : ""}`}

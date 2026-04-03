@@ -22,6 +22,7 @@ import PushActivationBanner from "@/components/home/PushActivationBanner";
 import RemindersSection from "@/components/home/RemindersSection";
 import PersonalizedGreeting from "@/components/home/PersonalizedGreeting";
 import BottomNav, { type Tab } from "@/components/home/BottomNav";
+import ErrorBoundary from "@/components/shared/ErrorBoundary";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserStats } from "@/hooks/useUserStats";
 import { useAppNotifications } from "@/hooks/useAppNotifications";
@@ -150,12 +151,25 @@ export default function Index() {
         {/* ===== CONQUISTAS ===== */}
         {activeTab === "conquistas" && (
           <div key={`conquistas-${currentArea}`} className="pt-4">
-            <AchievementsGrid
-              faithPoints={stats.faithPoints}
-              streakDays={stats.streakDays}
-              completedCount={stats.completedCount}
-            />
-            <TypingMetricsPanel />
+            <ErrorBoundary
+              fallback={
+                <div className="px-5 py-6">
+                  <div className="rounded-2xl border border-border bg-card p-5 text-center">
+                    <h2 className="font-montserrat font-black text-foreground text-lg">Conquistas</h2>
+                    <p className="mt-2 text-muted-foreground text-sm font-inter">
+                      Ocorreu um erro ao carregar esta aba. Atualize a pagina e tente novamente.
+                    </p>
+                  </div>
+                </div>
+              }
+            >
+              <AchievementsGrid
+                faithPoints={stats.faithPoints}
+                streakDays={stats.streakDays}
+                completedCount={stats.completedCount}
+              />
+              <TypingMetricsPanel />
+            </ErrorBoundary>
           </div>
         )}
 
