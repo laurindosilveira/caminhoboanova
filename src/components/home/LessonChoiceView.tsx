@@ -41,6 +41,10 @@ type Props = {
   onOpenEditDevotionals?: () => void;
   /** Schedule-based devotional dates (from agenda). If provided, overrides default anchoring. */
   scheduledDevotionalDates?: Date[];
+  /** Auto-open the currently available devotional when this view mounts. */
+  autoOpenAvailableDevotional?: boolean;
+  /** Called after the auto-open request is handled. */
+  onAutoOpenAvailableDevotionalConsumed?: () => void;
   /** Event date for display */
   eventDate?: Date;
   /** Whether the study is locked (event day or past deadline) */
@@ -203,7 +207,20 @@ function computeDevotionalStatuses(
   return { statuses, lockedSet };
 }
 
-export default function LessonChoiceView({ lesson, onBack, onOpenStudy, onOpenEdit, onOpenEditDevotionals, scheduledDevotionalDates, eventDate, isStudyLocked, isLateAccess, isStudyCompleted = true }: Props) {
+export default function LessonChoiceView({
+  lesson,
+  onBack,
+  onOpenStudy,
+  onOpenEdit,
+  onOpenEditDevotionals,
+  scheduledDevotionalDates,
+  autoOpenAvailableDevotional = false,
+  onAutoOpenAvailableDevotionalConsumed,
+  eventDate,
+  isStudyLocked,
+  isLateAccess,
+  isStudyCompleted = true,
+}: Props) {
   const { role } = useAuth();
   const isLeaderOrAdmin = role === "admin" || role === "lider";
   const [devotionals, setDevotionals] = useState<DevotionalItem[]>([]);
@@ -267,6 +284,27 @@ export default function LessonChoiceView({ lesson, onBack, onOpenStudy, onOpenEd
     }
     load();
   }, [lesson.id, scheduledDevotionalDates, isLateAccess, isStudyCompleted]);
+
+  useEffect(() => {
+    if (!autoOpenAvailableDevotional || loading || devotionals.length === 0) return;
+
+    const availableDevotional = devotionals.find((dev) => (devStatuses.get(dev.id) ?? "future") === "available");
+
+    if (availableDevotional) {
+      setShowDevotionals(false);
+      setViewingDevotional(availableDevotional);
+    } else {
+      setShowDevotionals(true);
+    }
+
+    onAutoOpenAvailableDevotionalConsumed?.();
+  }, [
+    autoOpenAvailableDevotional,
+    loading,
+    devotionals,
+    devStatuses,
+    onAutoOpenAvailableDevotionalConsumed,
+  ]);
 
   async function handleCompleteDevotional(devotionalId: string) {
     const now = new Date();

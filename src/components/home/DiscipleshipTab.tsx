@@ -40,10 +40,11 @@ const subTabVariants = {
 // ─── MAIN COMPONENT ──────────────────────────────────────
 type DiscipleshipTabProps = {
   targetLessonId?: string | null;
+  targetLessonMode?: "choice" | "devotional";
   onTargetLessonConsumed?: () => void;
 };
 
-export default function DiscipleshipTab({ targetLessonId, onTargetLessonConsumed }: DiscipleshipTabProps = {}) {
+export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "choice", onTargetLessonConsumed }: DiscipleshipTabProps = {}) {
   const { profile, role } = useAuth();
   const { effectiveArea } = useAreaSwitch();
   const isLeaderOrAdmin = role === "admin" || role === "lider";
@@ -61,6 +62,7 @@ export default function DiscipleshipTab({ targetLessonId, onTargetLessonConsumed
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [selectedLessonMode, setSelectedLessonMode] = useState<"choice" | "study" | "edit" | "edit-devotionals">("choice");
+  const [autoOpenDevotionalLessonId, setAutoOpenDevotionalLessonId] = useState<string | null>(null);
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
   const [completedLessonIds, setCompletedLessonIds] = useState<Set<string>>(new Set());
   const [fullyCompletedLessonIds, setFullyCompletedLessonIds] = useState<Set<string>>(new Set());
@@ -97,13 +99,14 @@ export default function DiscipleshipTab({ targetLessonId, onTargetLessonConsumed
       if (lesson) {
         setSelectedLesson(lesson);
         setSelectedLessonMode("choice");
+        setAutoOpenDevotionalLessonId(targetLessonMode === "devotional" ? lesson.id : null);
         setSubTab("trilha");
         const course = courses.find(c => c.lessons.some(l => l.id === targetLessonId));
         if (course) setExpandedCourse(course.id);
       }
       onTargetLessonConsumed?.();
     }
-  }, [targetLessonId, loading, courses]);
+  }, [targetLessonId, targetLessonMode, loading, courses, onTargetLessonConsumed]);
 
   async function fetchAll() {
     setLoading(true);
@@ -379,6 +382,8 @@ export default function DiscipleshipTab({ targetLessonId, onTargetLessonConsumed
         onOpenStudy={() => setSelectedLessonMode("study")}
         onOpenEdit={isLeaderOrAdmin ? () => setSelectedLessonMode("edit") : undefined}
         onOpenEditDevotionals={isLeaderOrAdmin ? () => setSelectedLessonMode("edit-devotionals") : undefined}
+        autoOpenAvailableDevotional={autoOpenDevotionalLessonId === selectedLesson.id}
+        onAutoOpenAvailableDevotionalConsumed={() => setAutoOpenDevotionalLessonId(null)}
         scheduledDevotionalDates={agendaSchedule.lessonDevotionalDates.get(selectedLesson.id)}
         eventDate={agendaSchedule.lessonEventDate.get(selectedLesson.id) ?? undefined}
         isStudyLocked={false}

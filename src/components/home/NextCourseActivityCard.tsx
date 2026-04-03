@@ -9,6 +9,7 @@ import { ptBR } from "date-fns/locale";
 
 type NextItem = {
   type: "lesson" | "devotional";
+  lessonId: string;
   title: string;
   subtitle: string;
   courseTitle: string;
@@ -101,6 +102,7 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
           const completedCount = lessonDevs.filter(d => completedDevIds.has(d.id)).length;
           setNextItem({
             type: "devotional",
+            lessonId,
             title: dev.title || `Devocional ${dev.day_number}`,
             subtitle: dev.bible_reference || "",
             courseTitle: entry.courseTitle,
@@ -122,6 +124,7 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
           type: "lesson",
           title: `Lição ${entry.lessonOrder}: ${entry.lessonTitle}`,
           subtitle: "Estude esta lição para avançar na jornada",
+          lessonId,
           courseTitle: entry.courseTitle,
           courseOrder: entry.courseOrder,
           lessonOrder: entry.lessonOrder,
@@ -228,6 +231,15 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
   const devPct = nextItem.totalDevotionals && nextItem.totalDevotionals > 0
     ? Math.round(((nextItem.completedDevotionals ?? 0) / nextItem.totalDevotionals) * 100)
     : 0;
+  const handleOpenNextItem = () => {
+    window.dispatchEvent(new CustomEvent("navigate-to-lesson", {
+      detail: {
+        lessonId: nextItem.lessonId,
+        mode: isDevotional ? "devotional" : "choice",
+      },
+    }));
+    onNavigateToDiscipulado();
+  };
 
   return (
     <div className="px-5 pt-5">
@@ -302,7 +314,7 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
 
           {/* CTA */}
           <button
-            onClick={onNavigateToDiscipulado}
+            onClick={handleOpenNextItem}
             className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl font-montserrat font-black text-sm text-primary-foreground bg-gradient-orange shadow-xl shadow-secondary/40 active:scale-95 transition-all"
           >
             {isDevotional ? "FAZER DEVOCIONAL →" : "ESTUDAR LIÇÃO →"}

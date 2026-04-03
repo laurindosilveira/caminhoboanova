@@ -29,10 +29,12 @@ import { useAppNotifications } from "@/hooks/useAppNotifications";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
 
 type ProfileSubTab = "meu-perfil" | "minha-jornada" | "configuracoes";
+type LessonNavigationMode = "choice" | "devotional";
 
 export default function Index() {
   const [activeTab, setActiveTab] = useState<Tab>("jornada");
   const [targetLessonId, setTargetLessonId] = useState<string | null>(null);
+  const [targetLessonMode, setTargetLessonMode] = useState<LessonNavigationMode>("choice");
   const [profileSubTab, setProfileSubTab] = useState<ProfileSubTab>("meu-perfil");
   const { profile, role } = useAuth();
   const { effectiveArea } = useAreaSwitch();
@@ -45,8 +47,10 @@ export default function Index() {
   useEffect(() => {
     const handler = (e: Event) => {
       const lessonId = (e as CustomEvent).detail?.lessonId;
+      const mode = (e as CustomEvent).detail?.mode as LessonNavigationMode | undefined;
       if (lessonId) {
         setTargetLessonId(lessonId);
+        setTargetLessonMode(mode === "devotional" ? "devotional" : "choice");
         setActiveTab("discipulado");
       }
     };
@@ -184,7 +188,11 @@ export default function Index() {
           <DiscipleshipTab
             key={`discipulado-${currentArea}`}
             targetLessonId={targetLessonId}
-            onTargetLessonConsumed={() => setTargetLessonId(null)}
+            targetLessonMode={targetLessonMode}
+            onTargetLessonConsumed={() => {
+              setTargetLessonId(null);
+              setTargetLessonMode("choice");
+            }}
           />
         )}
 

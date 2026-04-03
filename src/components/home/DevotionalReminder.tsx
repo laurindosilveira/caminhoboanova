@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAgendaSchedule } from "@/hooks/useAgendaSchedule";
 import { Sparkles, X, ChevronRight, Star } from "lucide-react";
 
 type DevotionalStats = {
   totalCompleted: number;
+  currentLessonId: string;
   currentLessonTitle: string;
   currentLessonOrder: number;
   currentLessonCompleted: number;
@@ -19,8 +21,11 @@ export default function DevotionalReminder({ onNavigateToDiscipulado }: Props) {
   const [stats, setStats] = useState<DevotionalStats | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const agendaSchedule = useAgendaSchedule();
 
   useEffect(() => {
+    if (agendaSchedule.loading) return;
+
     async function check() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoading(false); return; }
@@ -52,15 +57,35 @@ export default function DevotionalReminder({ onNavigateToDiscipulado }: Props) {
         if (completedSet.has(d.id)) lessonDevMap[d.lesson_id].completed++;
       });
 
-      // Find the FIRST accessible lesson with pending devotionals
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
       let currentLesson: DevotionalStats | null = null;
-      for (const l of accessibleLessons as any[]) {
-        const info = lessonDevMap[l.id];
-        if (info && info.completed < info.total) {
+
+      for (const entry of agendaSchedule.schedule) {
+        if (today < entry.windowStart) continue;
+
+        const lessonDevs = (devs ?? [])
+          .filter((d: any) => d.lesson_id === entry.lessonId)
+          .sort((a: any, b: any) => a.day_number - b.day_number);
+
+        let hasAvailableToday = false;
+        for (let i = 0; i < lessonDevs.length; i++) {
+          const devotional = lessonDevs[i];
+          const releaseDate = entry.devotionalDates[i];
+          if (!releaseDate || completedSet.has(devotional.id)) continue;
+          if (today >= releaseDate) {
+            hasAvailableToday = true;
+            break;
+          }
+        }
+
+        if (hasAvailableToday) {
+          const info = lessonDevMap[entry.lessonId] ?? { total: lessonDevs.length, completed: 0 };
           currentLesson = {
             totalCompleted,
-            currentLessonTitle: l.title,
-            currentLessonOrder: l.order_num,
+            currentLessonId: entry.lessonId,
+            currentLessonTitle: entry.lessonTitle,
+            currentLessonOrder: entry.lessonOrder,
             currentLessonCompleted: info.completed,
             currentLessonTotal: info.total,
             hasAnyPending: true,
@@ -69,10 +94,30 @@ export default function DevotionalReminder({ onNavigateToDiscipulado }: Props) {
         }
       }
 
+      // Find the FIRST accessible lesson with pending devotionals
+      if (!currentLesson) {
+        for (const l of accessibleLessons as any[]) {
+          const info = lessonDevMap[l.id];
+          if (info && info.completed < info.total) {
+            currentLesson = {
+              totalCompleted,
+              currentLessonId: l.id,
+              currentLessonTitle: l.title,
+              currentLessonOrder: l.order_num,
+              currentLessonCompleted: info.completed,
+              currentLessonTotal: info.total,
+              hasAnyPending: true,
+            };
+            break;
+          }
+        }
+      }
+
       if (!currentLesson && totalCompleted > 0) {
         // All done!
         currentLesson = {
           totalCompleted,
+          currentLessonId: "",
           currentLessonTitle: "",
           currentLessonOrder: 0,
           currentLessonCompleted: 0,
@@ -85,7 +130,7 @@ export default function DevotionalReminder({ onNavigateToDiscipulado }: Props) {
       setLoading(false);
     }
     check();
-  }, []);
+  }, [agendaSchedule.loading, agendaSchedule.schedule]);
 
   if (loading || dismissed || !stats) return null;
 
@@ -126,6 +171,18 @@ export default function DevotionalReminder({ onNavigateToDiscipulado }: Props) {
     return "Cada dia conta na sua jornada de fé! ✨";
   };
 
+  const handleOpenDevotional = () => {
+    if (stats.currentLessonId) {
+      window.dispatchEvent(new CustomEvent("navigate-to-lesson", {
+        detail: {
+          lessonId: stats.currentLessonId,
+          mode: "devotional",
+        },
+      }));
+    }
+    onNavigateToDiscipulado();
+  };
+
   return (
     <div className="mx-5 mb-3 rounded-2xl border border-brand-green/30 bg-brand-green/5 p-4 relative overflow-hidden">
       <button
@@ -158,7 +215,7 @@ export default function DevotionalReminder({ onNavigateToDiscipulado }: Props) {
       </div>
 
       <button
-        onClick={onNavigateToDiscipulado}
+        onClick={handleOpenDevotional}
         className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-brand-green/15 text-brand-green font-inter text-xs font-semibold hover:bg-brand-green/25 transition-colors"
       >
         {stats.totalCompleted > 0 ? "Continuar Devocional" : "Começar Devocional"}
