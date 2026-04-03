@@ -1170,7 +1170,7 @@ export default function ParticipantsTab({ participants, activities, communities 
     if (statusFilter === "andamento" && (pct < 34 || pct >= 70)) return false;
     if (statusFilter === "avancado" && pct < 70) return false;
     return true;
-  });
+  }).sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? "", "pt-BR", { sensitivity: "base" }));
 
   // ── Group summary metrics ──
   const totalDevotionals = participants.reduce((s, p) => s + (p.completed_devotional_count ?? 0), 0);
