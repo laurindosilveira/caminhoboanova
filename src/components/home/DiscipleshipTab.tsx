@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
-import { Heart, GraduationCap, Sparkles, Lock } from "lucide-react";
+import { Heart, GraduationCap, Sparkles, Lock, ClipboardList, BookOpen } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import JourneyLessonView from "@/components/home/JourneyLessonView";
 import LessonContentEditor from "@/components/admin/tabs/LessonContentEditor";
@@ -26,7 +26,8 @@ import CourseTrailSection from "./discipleship/CourseTrailSection";
 const SUB_TABS = [
   { key: "trilha" as const, label: "Trilha", icon: GraduationCap, activeIconClass: "text-secondary" },
   { key: "saude" as const, label: "Saúde", icon: Heart, activeIconClass: "text-brand-green" },
-  { key: "crescimento" as const, label: "Crescimento", icon: Sparkles, activeIconClass: "text-primary" },
+  { key: "avaliacao" as const, label: "Avaliação", icon: ClipboardList, activeIconClass: "text-accent-foreground" },
+  { key: "pastoral" as const, label: "Pastoral", icon: BookOpen, activeIconClass: "text-primary" },
 ];
 type SubTab = typeof SUB_TABS[number]["key"];
 
@@ -405,7 +406,7 @@ export default function DiscipleshipTab({ targetLessonId, onTargetLessonConsumed
             <button
               key={tab.key}
               onClick={() => setSubTab(tab.key)}
-              className={`flex-1 relative flex items-center justify-center gap-2 py-3 rounded-xl font-inter text-xs font-bold transition-all duration-200 ${
+              className={`flex-1 relative flex flex-col items-center justify-center gap-1 py-2.5 rounded-xl font-inter text-[11px] font-bold transition-all duration-200 ${
                 isActive
                   ? "text-foreground shadow-md"
                   : "text-muted-foreground hover:text-foreground hover:bg-card/50"
@@ -418,10 +419,8 @@ export default function DiscipleshipTab({ targetLessonId, onTargetLessonConsumed
                   transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 />
               )}
-              <span className="relative z-10 flex items-center gap-2">
-                <Icon className={`w-5 h-5 ${isActive ? tab.activeIconClass : "text-muted-foreground"}`} />
-                <span>{tab.label}</span>
-              </span>
+              <Icon className={`relative z-10 w-4 h-4 ${isActive ? tab.activeIconClass : "text-muted-foreground"}`} />
+              <span className="relative z-10">{tab.label}</span>
             </button>
           );
         })}
@@ -458,6 +457,11 @@ export default function DiscipleshipTab({ targetLessonId, onTargetLessonConsumed
               completedActs={completedActs} totalActs={totalActs} pct={pct}
             />
             <ThermometerSection dimensions={thermometerDimensions} />
+          </motion.div>
+        )}
+
+        {subTab === "avaliacao" && (
+          <motion.div key="avaliacao" variants={subTabVariants} initial="initial" animate="animate" exit="exit" className="space-y-4">
             <AssessmentSection
               assessment={assessment}
               showAssessment={showAssessment}
@@ -472,8 +476,10 @@ export default function DiscipleshipTab({ targetLessonId, onTargetLessonConsumed
           </motion.div>
         )}
 
-        {subTab === "crescimento" && (
-          <motion.div key="crescimento" variants={subTabVariants} initial="initial" animate="animate" exit="exit" className="space-y-4">
+        {subTab === "pastoral" && (
+          <motion.div key="pastoral" variants={subTabVariants} initial="initial" animate="animate" exit="exit" className="space-y-4">
+            <GrowthPlanSection plan={plan} />
+            <RewardsSection rewards={spiritualRewards} />
             <HelpSection
               helpSent={helpSent}
               showHelpModal={showHelpModal}
@@ -485,8 +491,6 @@ export default function DiscipleshipTab({ targetLessonId, onTargetLessonConsumed
               helpSending={helpSending}
               onSendHelp={handleSendHelp}
             />
-            <RewardsSection rewards={spiritualRewards} />
-            <GrowthPlanSection plan={plan} />
           </motion.div>
         )}
       </AnimatePresence>

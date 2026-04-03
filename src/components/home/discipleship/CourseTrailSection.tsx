@@ -70,7 +70,7 @@ export default function CourseTrailSection({
             isCourseUnlocked ? "border-border" : "border-border opacity-75"
           }`}>
             <button
-              onClick={() => isCourseUnlocked ? onExpandCourse(isOpen ? null : course.id) : toast.info("🔒 Este curso ainda não foi liberado pelo seu líder.")}
+              onClick={() => isCourseUnlocked ? onExpandCourse(isOpen ? null : course.id) : toast.info("Este curso ainda não foi liberado pelo líder.")}
               className={`w-full flex items-center gap-3 p-4 text-left ${!isCourseUnlocked ? "cursor-default" : ""}`}
             >
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
@@ -133,15 +133,15 @@ export default function CourseTrailSection({
 
                     let lockMessage = "";
                     if (isNotScheduled) {
-                      lockMessage = "📅 Aguardando agendamento";
+                      lockMessage = "Aguardando agenda";
                     } else if (isLateAccess) {
-                      lockMessage = "⚠️ Atrasado — sem pontuação";
+                      lockMessage = "Acesso tardio — sem pontuação";
                     } else if (isLocked) {
                       const entry = agendaSchedule.schedule.find(e => e.lessonId === lesson.id);
                       if (entry) {
-                        lockMessage = `🔜 Liberada em ${entry.windowStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
+                        lockMessage = `Disponível em ${entry.windowStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
                       } else {
-                        lockMessage = "🔒 Ainda não liberada";
+                        lockMessage = "Ainda não liberada";
                       }
                     }
 
@@ -151,8 +151,8 @@ export default function CourseTrailSection({
                         onClick={() => {
                           if (isLocked || isNotScheduled) {
                             toast.info(isNotScheduled
-                              ? "📅 Esta lição ainda não foi agendada pelo seu líder."
-                              : "🔒 Esta lição ainda não foi liberada. Aguarde a data da agenda!", {
+                              ? "Esta lição ainda não foi agendada pelo líder."
+                              : "Esta lição ainda não foi liberada.", {
                               duration: 3000,
                             });
                             return;
