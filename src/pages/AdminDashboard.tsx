@@ -102,7 +102,34 @@ export default function AdminDashboard() {
 
     const myId = userResult.data.user?.id ?? "";
     const profilesList = (profilesData ?? []).filter(p => p.user_id !== myId);
-    const { data: progressData } = await supabase.from("user_progress").select("user_id, activity_id");
+
+    const [{ data: progressData }, { data: lessonRespsData }, { data: devProgressData }, { data: attendanceData }] = await Promise.all([
+      supabase.from("user_progress").select("user_id, activity_id"),
+      supabase.from("lesson_responses").select("user_id, lesson_id"),
+      supabase.from("devotional_progress").select("user_id"),
+      supabase.from("attendance").select("user_id, status").eq("status", "presente"),
+    ]);
+
+    // lesson count = unique lessons per user
+    const lessonCountMap: Record<string, number> = {};
+    (lessonRespsData ?? []).forEach((r: any) => {
+      if (!lessonCountMap[r.user_id]) lessonCountMap[r.user_id] = new Set<string>() as any;
+    });
+    const lessonSets: Record<string, Set<string>> = {};
+    (lessonRespsData ?? []).forEach((r: any) => {
+      if (!lessonSets[r.user_id]) lessonSets[r.user_id] = new Set();
+      lessonSets[r.user_id].add(r.lesson_id);
+    });
+
+    const devCountMap: Record<string, number> = {};
+    (devProgressData ?? []).forEach((r: any) => {
+      devCountMap[r.user_id] = (devCountMap[r.user_id] ?? 0) + 1;
+    });
+
+    const attCountMap: Record<string, number> = {};
+    (attendanceData ?? []).forEach((r: any) => {
+      attCountMap[r.user_id] = (attCountMap[r.user_id] ?? 0) + 1;
+    });
 
     const participantList: Participant[] = profilesList.map((p) => {
       const userProgress = (progressData ?? []).filter((pr) => pr.user_id === p.user_id);
@@ -111,6 +138,9 @@ export default function AdminDashboard() {
         completed_count: userProgress.length,
         completed_activity_ids: userProgress.map((pr) => pr.activity_id),
         turma_id: p.turma_id,
+        completed_lesson_count: lessonSets[p.user_id]?.size ?? 0,
+        completed_devotional_count: devCountMap[p.user_id] ?? 0,
+        completed_event_count: attCountMap[p.user_id] ?? 0,
       } as any;
     });
 
