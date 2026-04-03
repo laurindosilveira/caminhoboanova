@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { AREAS, ALL_COMMUNITIES } from "@/config/areas";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
@@ -274,7 +275,7 @@ export default function AgendaTab() {
 
       {/* Area filter */}
       <div className="flex gap-1.5">
-        {["all", "Área 1", "Área 2"].map(val => (
+        {["all", ...AREAS].map(val => (
           <button
             key={val}
             onClick={() => setAreaFilter(val)}
@@ -346,8 +347,7 @@ export default function AgendaTab() {
               <select value={form.area} onChange={e => setForm(f => ({ ...f, area: e.target.value }))}
                 className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
                 <option value="">Todas as áreas</option>
-                <option value="Área 1">Área 1</option>
-                <option value="Área 2">Área 2</option>
+                {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
             <div className="space-y-1">
@@ -355,13 +355,7 @@ export default function AgendaTab() {
               <select value={form.community} onChange={e => setForm(f => ({ ...f, community: e.target.value }))}
                 className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
                 <option value="">Todas</option>
-                <option value="Martim Lutero">Martim Lutero</option>
-                <option value="Bom Pastor">Bom Pastor</option>
-                <option value="Rincão Fundo">Rincão Fundo</option>
-                <option value="Rincão Frente">Rincão Frente</option>
-                <option value="Linha Brasil">Linha Brasil</option>
-                <option value="Iriá Pira 1">Iriá Pira 1</option>
-                <option value="Iriá Pira 2">Iriá Pira 2</option>
+                {ALL_COMMUNITIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           </div>

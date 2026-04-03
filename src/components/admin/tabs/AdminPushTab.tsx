@@ -9,11 +9,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 
-const AREAS = ["Área 1", "Área 2"];
-const COMMUNITIES = [
-  "Martim Lutero", "Bom Pastor", "Rincão Fundo", "Rincão Frente",
-  "Linha Brasil", "Iriá Pira 1", "Iriá Pira 2",
-];
+import { AREAS, ALL_COMMUNITIES as COMMUNITIES } from "@/config/areas";
 
 type TargetType = "all" | "area" | "community" | "turma";
 type SendMode   = "agora" | "agendar";

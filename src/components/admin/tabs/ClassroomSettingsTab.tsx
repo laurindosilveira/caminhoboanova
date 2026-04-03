@@ -7,12 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 
-const AREAS = ["Área 1", "Área 2"];
-
-const COMMUNITIES = [
-  "Martim Lutero", "Bom Pastor", "Rincão Fundo", "Rincão Frente",
-  "Linha Brasil", "Iriá Pira 1", "Iriá Pira 2",
-];
+import { AREAS, ALL_COMMUNITIES as COMMUNITIES } from "@/config/areas";
 
 interface Settings {
   whatsapp_link: string;

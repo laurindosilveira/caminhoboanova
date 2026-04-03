@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { AREAS } from "@/config/areas";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
@@ -795,8 +796,7 @@ export default function UserAgendaTab() {
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   <option value="">Todas</option>
-                  <option value="Área 1">Área 1</option>
-                  <option value="Área 2">Área 2</option>
+                  {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
                 </select>
               </div>
               <div>

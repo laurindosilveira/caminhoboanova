@@ -16,9 +16,7 @@ const AdminOverviewTab = lazy(() => import("@/components/admin/tabs/AdminOvervie
 const AdminAlertsTab = lazy(() => import("@/components/admin/tabs/AdminAlertsTab"));
 const AdminLeadersTab = lazy(() => import("@/components/admin/tabs/AdminLeadersTab"));
 
-const AREA_1_COMMUNITIES = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
-const AREA_2_COMMUNITIES = ["Martim Lutero", "Linha Brasil", "Iriá Pira 2"];
-const ALL_COMMUNITIES = [...AREA_1_COMMUNITIES, ...AREA_2_COMMUNITIES];
+import { AREAS, AREA_COMMUNITIES, ALL_COMMUNITIES, getCommunitiesForArea } from "@/config/areas";
 
 type Activity = {
   id: string; type: string; title: string; subtitle: string | null; order_num: number; points: number;
@@ -169,9 +167,7 @@ export default function AdminDashboard() {
   );
 
   const communities = useMemo(() =>
-    selectedTurma?.area
-      ? (selectedTurma.area === "Área 1" ? AREA_1_COMMUNITIES : AREA_2_COMMUNITIES)
-      : ALL_COMMUNITIES,
+    selectedTurma?.area ? getCommunitiesForArea(selectedTurma.area) : ALL_COMMUNITIES,
     [selectedTurma]
   );
 
@@ -293,15 +289,16 @@ function TurmaSelector({
   onSelectTurma: (t: Turma) => void;
   onBack: () => void;
 }) {
-  const area1Turmas = turmas.filter(t => t.area === "Área 1");
-  const area2Turmas = turmas.filter(t => t.area === "Área 2");
-
+  const areaIcons: Record<string, string> = { "Área 1": "⛪", "Área 2": "✝️" };
+  const allAreasToShow = AREAS.map(a => ({
+    name: a,
+    turmas: turmas.filter(t => t.area === a),
+    communities: getCommunitiesForArea(a),
+    icon: areaIcons[a] ?? "📍",
+  }));
   const areasToShow = isSuper
-    ? [{ name: "Área 1", turmas: area1Turmas, communities: AREA_1_COMMUNITIES, icon: "⛪" },
-       { name: "Área 2", turmas: area2Turmas, communities: AREA_2_COMMUNITIES, icon: "✝️" }]
-    : adminArea === "Área 1"
-      ? [{ name: "Área 1", turmas: area1Turmas, communities: AREA_1_COMMUNITIES, icon: "⛪" }]
-      : [{ name: "Área 2", turmas: area2Turmas, communities: AREA_2_COMMUNITIES, icon: "✝️" }];
+    ? allAreasToShow
+    : allAreasToShow.filter(a => a.name === adminArea);
 
   // Filter turmas by search
   const searchLower = turmaSearch.toLowerCase().trim();

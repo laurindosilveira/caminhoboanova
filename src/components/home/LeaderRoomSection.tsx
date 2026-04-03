@@ -17,9 +17,7 @@ const LeaderGuideContent = lazy(() => import("@/components/home/LeaderGuideConte
 import LeaderWaitingRoom from "@/components/home/LeaderWaitingRoom";
 
 
-const AREA_1_COMMUNITIES = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
-const AREA_2_COMMUNITIES = ["Martim Lutero", "Linha Brasil", "Iriá Pira 2"];
-const ALL_COMMUNITIES = [...AREA_1_COMMUNITIES, ...AREA_2_COMMUNITIES];
+import { AREA_COMMUNITIES, ALL_COMMUNITIES, getCommunitiesForArea } from "@/config/areas";
 
 type Activity = {
   id: string; type: string; title: string; subtitle: string | null; order_num: number; points: number;
@@ -300,9 +298,7 @@ export default function LeaderRoomSection({ asTab = false }: { asTab?: boolean }
 
   if (!canView) return null;
 
-  const communities = turmaArea === "Área 1" ? AREA_1_COMMUNITIES
-    : turmaArea === "Área 2" ? AREA_2_COMMUNITIES
-    : ALL_COMMUNITIES;
+  const communities = getCommunitiesForArea(turmaArea ?? "");
 
   return (
     <div className={asTab ? "px-5" : "mx-5"}>

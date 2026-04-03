@@ -10,22 +10,10 @@ const Calendar = lazy(() => import("lucide-react").then(m => ({ default: m.Calen
 const Users = lazy(() => import("lucide-react").then(m => ({ default: m.Users })));
 const Flame = lazy(() => import("lucide-react").then(m => ({ default: m.Flame })));
 
-const COMMUNITIES = [
-  "Bom Pastor",
-  "Martim Lutero",
-  "Rincão Fundo",
-  "Rincão Frente",
-  "Linha Brasil",
-  "Iriá Pira 1",
-  "Iriá Pira 2",
-] as const;
-
-type Community = typeof COMMUNITIES[number];
-
-function getCommunityArea(community: Community): "Área 1" | "Área 2" {
-  const area1 = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
-  return area1.includes(community) ? "Área 1" : "Área 2";
-}
+import { ALL_COMMUNITIES, getAreaForCommunity } from "@/config/areas";
+const COMMUNITIES = ALL_COMMUNITIES as unknown as readonly [string, ...string[]];
+type Community = string;
+function getCommunityArea(community: Community) { return getAreaForCommunity(community); }
 
 const registerSchema = z.object({
   fullName: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres").max(100),

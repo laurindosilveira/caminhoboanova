@@ -48,12 +48,7 @@ const ROLE_CFG = {
   },
 };
 
-const AREAS = ["Área 1", "Área 2"];
-
-const AREA_COMMUNITIES: Record<string, string[]> = {
-  "Área 1": ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"],
-  "Área 2": ["Martim Lutero", "Linha Brasil", "Iriá Pira 2"],
-};
+import { AREAS, AREA_COMMUNITIES } from "@/config/areas";
 
 type UsersTabProps = {
   onSelectTurma?: (turma: { id: string; name: string; area: string | null; year: number }) => void;

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getAreaForCommunity } from "@/config/areas";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
@@ -93,11 +94,9 @@ export default function PollsSection() {
         .limit(10),
       supabase.from("poll_votes").select("poll_id, user_id, option_index"),
     ]);
-    const area1Communities = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
     const filteredPolls = ((pollsData as Poll[]) ?? []).filter((poll) => {
       if (poll.area) return poll.area === currentArea;
-      const communityArea = area1Communities.includes(poll.community) ? "Área 1" : "Área 2";
-      return communityArea === currentArea;
+      return getAreaForCommunity(poll.community) === currentArea;
     });
     setPolls(filteredPolls);
     setVotes((votesData as PollVote[]) ?? []);

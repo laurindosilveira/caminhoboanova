@@ -1,4 +1,5 @@
 import { Flame, Star, Heart, LogOut, ArrowLeftRight } from "lucide-react";
+import { AREAS } from "@/config/areas";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
 import { toast } from "sonner";
@@ -50,8 +51,7 @@ export default function HeroHeader({ streakDays, faithPoints, faithLevel, faithE
                   aria-label="Selecionar área de visualização"
                   className="appearance-none bg-white/15 backdrop-blur border border-white/30 text-primary-foreground rounded-full pl-3 pr-7 py-1.5 text-xs font-inter font-semibold focus:outline-none focus:ring-2 focus:ring-white/40 cursor-pointer"
                 >
-                  <option value="Área 1" className="text-foreground">Área 1</option>
-                  <option value="Área 2" className="text-foreground">Área 2</option>
+                  {AREAS.map(a => <option key={a} value={a} className="text-foreground">{a}</option>)}
                 </select>
                 <ArrowLeftRight className="w-3 h-3 text-primary-foreground/70 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
               </div>

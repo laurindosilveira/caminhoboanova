@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { AREAS, ALL_COMMUNITIES } from "@/config/areas";
 import {
   BookOpen, GraduationCap, CalendarDays, Zap, Users,
   AlertTriangle, CheckCircle2, Flame, Heart, Star, ChevronRight, Trophy, Lock
@@ -20,15 +21,13 @@ type Participant = {
 };
 type PlanInfo = { health_status: string; is_priority: boolean; needs_pastor?: boolean };
 
-const COMMUNITY_COLORS: Record<string, string> = {
-  "Rincão Frente": "bg-primary/10 text-primary",
-  "Rincão Fundo": "bg-secondary/10 text-secondary",
-  "Bom Pastor": "bg-brand-green/10 text-brand-green",
-  "Iriá Pira 1": "bg-accent/20 text-accent-foreground",
-  "Martim Lutero": "bg-primary/10 text-primary",
-  "Linha Brasil": "bg-secondary/10 text-secondary",
-  "Iriá Pira 2": "bg-brand-green/10 text-brand-green",
-};
+const COLOR_PALETTE = [
+  "bg-primary/10 text-primary", "bg-secondary/10 text-secondary",
+  "bg-brand-green/10 text-brand-green", "bg-accent/20 text-accent-foreground",
+];
+const COMMUNITY_COLORS: Record<string, string> = Object.fromEntries(
+  ALL_COMMUNITIES.map((c, i) => [c, COLOR_PALETTE[i % COLOR_PALETTE.length]])
+);
 
 const HEALTH_CFG = {
   saudavel: { label: "🟢 Saudável", color: "text-brand-green", bg: "bg-brand-green/10", dot: "bg-brand-green" },

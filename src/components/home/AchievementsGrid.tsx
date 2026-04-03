@@ -51,8 +51,7 @@ interface RankingMember {
   faith_points: number;
 }
 
-const AREA_1_COMMUNITIES = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
-const AREA_2_COMMUNITIES = ["Martim Lutero", "Linha Brasil", "Iriá Pira 2"];
+import { AREA_COMMUNITIES, ALL_COMMUNITIES } from "@/config/areas";
 
 // Fallback shown immediately and whenever the DB table is unavailable/empty
 export const DEFAULT_ACHIEVEMENT_DEFS: AchievementDef[] = [

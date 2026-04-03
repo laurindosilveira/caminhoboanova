@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getAreaForCommunity } from "@/config/areas";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
@@ -65,14 +66,10 @@ export default function AnnouncementsSection() {
           .limit(25),
         supabase.from("message_reactions").select("message_id, emoji, user_id"),
       ]);
-      const area1Communities = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
       const msgs = ((data ?? []) as Message[]).filter((msg) => {
         if (!msg.area && !msg.community && !msg.turma_id) return true;
         if (msg.area) return msg.area === currentArea;
-        if (msg.community) {
-          const communityArea = area1Communities.includes(msg.community) ? "Área 1" : "Área 2";
-          return communityArea === currentArea;
-        }
+        if (msg.community) return getAreaForCommunity(msg.community) === currentArea;
         return true;
       }).slice(0, 5);
       setMessages(msgs);

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { AREAS } from "@/config/areas";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Users, TrendingUp, AlertTriangle, BarChart3, Trophy, Filter, Calendar, Activity } from "lucide-react";
@@ -171,10 +172,10 @@ export default function AdminOverviewTab({
   }, [filteredAtt, filteredDev, filteredLessons]);
 
   // === Area distribution ===
-  const areaData = [
-    { name: "Área 1", value: filteredParticipants.filter(p => p.area === "Área 1").length },
-    { name: "Área 2", value: filteredParticipants.filter(p => p.area === "Área 2").length },
-  ].filter(d => d.value > 0);
+  const areaData = AREAS.map(area => ({
+    name: area,
+    value: filteredParticipants.filter(p => p.area === area).length,
+  })).filter(d => d.value > 0);
 
   // === Engagement radar (per turma) ===
   const radarData = useMemo(() => {

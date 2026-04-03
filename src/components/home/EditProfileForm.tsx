@@ -7,15 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
-const COMMUNITIES = [
-  "Martim Lutero",
-  "Bom Pastor",
-  "Rincão Fundo",
-  "Rincão Frente",
-  "Linha Brasil",
-  "Iriá Pira 1",
-  "Iriá Pira 2",
-] as const;
+import { ALL_COMMUNITIES, getAreaForCommunity } from "@/config/areas";
+const COMMUNITIES = ALL_COMMUNITIES as unknown as readonly [string, ...string[]];
 
 const CONFIRMATION_YEARS = [
   { value: "", label: "Não definido" },
@@ -148,9 +141,7 @@ export default function EditProfileForm() {
     if (!user?.id) return;
     setSaving(true);
     try {
-      const areaVal = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"].includes(values.community)
-        ? "Área 1"
-        : "Área 2";
+      const areaVal = getAreaForCommunity(values.community);
 
       const { error } = await supabase
         .from("profiles")

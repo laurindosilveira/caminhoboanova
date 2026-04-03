@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { getAreaForCommunity } from "@/config/areas";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
@@ -143,13 +144,9 @@ export default function CommunityTab() {
         .select("*")
         .lte("start_date", today)
         .gte("end_date", today);
-      const area1Communities = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
       const visibleChallenges = (challengesData ?? []).filter((challenge: any) => {
         if (challenge.area) return challenge.area === currentArea;
-        if (challenge.community) {
-          const challengeArea = area1Communities.includes(challenge.community) ? "Área 1" : "Área 2";
-          return challengeArea === currentArea;
-        }
+        if (challenge.community) return getAreaForCommunity(challenge.community) === currentArea;
         return true;
       });
       const cIds = visibleChallenges.map((c: any) => c.id);

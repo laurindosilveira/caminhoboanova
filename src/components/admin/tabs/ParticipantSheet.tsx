@@ -105,10 +105,7 @@ type Course = { id: string; title: string; order_num: number };
 type LessonCompletion = { lesson_id: string; completed_at: string | null };
 type DevotionalCompletion = { devotional_id: string; lesson_id: string | null; completed_at: string };
 
-const COMMUNITIES_LIST = ["Martim Lutero","Bom Pastor","Rincão Fundo","Rincão Frente","Linha Brasil","Iriá Pira 1","Iriá Pira 2"] as const;
-function getArea(community: string) {
-  return ["Rincão Frente","Rincão Fundo","Bom Pastor","Iriá Pira 1"].includes(community) ? "Área 1" : "Área 2";
-}
+import { ALL_COMMUNITIES as COMMUNITIES_LIST, getAreaForCommunity as getArea } from "@/config/areas";
 
 export default function ParticipantSheet({ participant: p, activities, onBack }: {
   participant: Participant; activities: Activity[]; onBack: () => void;

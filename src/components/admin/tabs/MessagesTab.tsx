@@ -13,8 +13,7 @@ type Message = {
 
 type Turma = { id: string; name: string; area: string | null };
 
-const AREA_1_COMMUNITIES = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
-const AREA_2_COMMUNITIES = ["Martim Lutero", "Linha Brasil", "Iriá Pira 2"];
+import { getAreaForCommunity, getCommunitiesForArea } from "@/config/areas";
 
 export default function MessagesTab() {
   const { profile } = useAuth();
@@ -32,7 +31,7 @@ export default function MessagesTab() {
   const [loadingViewers, setLoadingViewers] = useState(false);
   const [sendingPush, setSendingPush] = useState<string | null>(null);
 
-  const communities = effectiveArea === "Área 1" ? AREA_1_COMMUNITIES : AREA_2_COMMUNITIES;
+  const communities = getCommunitiesForArea(effectiveArea ?? "");
 
   useEffect(() => {
     fetchMessages();
@@ -51,9 +50,7 @@ export default function MessagesTab() {
       if (m.area && m.area === effectiveArea) return true;
       // Messages for a community in the effective area
       if (m.community) {
-        const area1Communities = ["Rincão Frente", "Rincão Fundo", "Bom Pastor", "Iriá Pira 1"];
-        const communityArea = area1Communities.includes(m.community) ? "Área 1" : "Área 2";
-        return communityArea === effectiveArea;
+        return getAreaForCommunity(m.community) === effectiveArea;
       }
       // Turma messages — show if turma belongs to effective area
       if (m.turma_id) {

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { AREAS } from "@/config/areas";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Trash2, GraduationCap, Calendar, Pencil, Archive, CheckCircle2, RotateCcw, ChevronDown, ChevronUp, Download, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -235,7 +236,6 @@ export default function TurmasManagement({ onSelectTurma }: Props) {
   }
 
   const currentYear = new Date().getFullYear();
-  const AREAS = ["Área 1", "Área 2"];
 
   const activeTurmas = turmas.filter(t => t.is_active);
   const archivedTurmas = turmas.filter(t => !t.is_active);
