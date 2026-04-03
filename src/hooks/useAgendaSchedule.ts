@@ -81,7 +81,7 @@ export function useAgendaSchedule() {
       if (!event.linked_lesson_id) continue;
       // Filter by user's area: for non-lesson events, show events with no area or matching area
       // For lesson events (discipleship), show to all areas
-      if (!event.linked_lesson_id && event.area && currentArea && event.area !== currentArea) continue;
+      if (event.area && currentArea && event.area !== currentArea) continue;
       const lesson = lessonMap.get(event.linked_lesson_id);
       if (!lesson) continue;
       const course = courseMap.get(lesson.course_id);
