@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { AREAS, ALL_COMMUNITIES } from "@/config/areas";
+import { EVENT_TYPES, getEventEmoji, getEventColor } from "@/config/eventTypes";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
@@ -29,18 +30,6 @@ type LessonOption = {
   course_id: string;
 };
 
-const EVENT_TYPES = [
-  { value: "encontro", label: "Encontro", color: "bg-primary/10 text-primary" },
-  { value: "culto", label: "Culto", color: "bg-brand-green/10 text-brand-green" },
-  { value: "jemiac", label: "JEMIAC", color: "bg-secondary/10 text-secondary" },
-  { value: "retiro", label: "Retiro", color: "bg-secondary/10 text-secondary" },
-  { value: "confirmatorio", label: "Ens. Confirmatório", color: "bg-primary/10 text-primary" },
-  { value: "evento", label: "Evento", color: "bg-accent/20 text-accent-foreground" },
-];
-
-const TYPE_EMOJI: Record<string, string> = {
-  encontro: "📅", culto: "⛪", jemiac: "✝️", retiro: "🏕️", confirmatorio: "📖", evento: "🎉",
-};
 
 const EMPTY_FORM = {
   title: "", description: "", event_date: "", location: "", type: "encontro", area: "", community: "", linked_lesson_id: "",
@@ -414,7 +403,7 @@ export default function AgendaTab() {
               <div key={event.id} className="bg-card rounded-2xl border border-border p-4 shadow-sm">
                 <div className="flex items-start gap-3">
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex flex-col items-center justify-center flex-shrink-0">
-                    <span className="text-lg leading-none">{TYPE_EMOJI[event.type] ?? "📅"}</span>
+                    <span className="text-lg leading-none">{getEventEmoji(event.type)}</span>
                     <span className="font-montserrat font-black text-primary text-xs">{format(dateObj, "d", { locale: ptBR })}</span>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -423,7 +412,7 @@ export default function AgendaTab() {
                       {format(dateObj, "EEEE, d 'de' MMMM 'às' HH:mm", { locale: ptBR })}
                     </p>
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      {typeInfo && <span className={`px-2 py-0.5 rounded-md text-[10px] font-inter font-medium ${typeInfo.color}`}>{typeInfo.label}</span>}
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-inter font-medium ${getEventColor(event.type)}`}>{typeInfo?.label ?? event.type}</span>
                       {event.location && (
                         <span className="flex items-center gap-1 text-muted-foreground text-[10px] font-inter">
                           <MapPin className="w-3 h-3" />{event.location}

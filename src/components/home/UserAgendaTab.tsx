@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { AREAS } from "@/config/areas";
+import { EVENT_TYPES as EVENT_TYPES_LIST, getEventEmoji, getEventColor, getEventLabel } from "@/config/eventTypes";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
@@ -34,14 +35,10 @@ type LessonContentInfo = { lesson_id: string; summary: string; bible_texts: stri
 type AttendanceRecord = { event_id: string; status: string };
 type LessonInfo = { id: string; title: string; order_num: number; course_title: string; course_order: number };
 
+// Extra local type not in global config (pastoral only)
 const EVENT_TYPES: Record<string, { label: string; color: string; emoji: string }> = {
-  encontro:      { label: "Encontro",          color: "bg-primary/10 text-primary",              emoji: "📅" },
-  culto:         { label: "Culto",             color: "bg-brand-green/10 text-brand-green",      emoji: "⛪" },
-  jemiac:        { label: "JEMIAC",            color: "bg-secondary/10 text-secondary",          emoji: "✝️" },
-  retiro:        { label: "Retiro",            color: "bg-secondary/10 text-secondary",          emoji: "🏕️" },
-  confirmatorio: { label: "Ens. Confirmatório", color: "bg-primary/10 text-primary",             emoji: "📖" },
-  evento:        { label: "Evento",            color: "bg-accent/20 text-accent-foreground",     emoji: "🎉" },
-  conversa:      { label: "Conversa Pastoral", color: "bg-secondary/10 text-secondary",          emoji: "💬" },
+  ...Object.fromEntries(EVENT_TYPES_LIST.map(t => [t.value, { label: t.label, color: t.color, emoji: t.emoji }])),
+  conversa: { label: "Conversa Pastoral", color: "bg-secondary/10 text-secondary", emoji: "💬" },
 };
 
 const EVENT_TYPE_OPTIONS = Object.entries(EVENT_TYPES).map(([key, val]) => ({ value: key, label: `${val.emoji} ${val.label}` }));

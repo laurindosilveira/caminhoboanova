@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { EVENT_TYPES, getEventEmoji } from "@/config/eventTypes";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -53,17 +54,7 @@ const STATUS_CFG: Record<AttendanceStatus, { label: string; icon: React.ReactNod
   },
 };
 
-const TYPE_EMOJI: Record<string, string> = {
-  encontro: "📅", culto: "⛪", jemiac: "✝️", retiro: "🏕️", confirmatorio: "📖", evento: "🎉",
-};
-const AGENDA_EVENT_TYPES = [
-  { value: "encontro", label: "Encontro" },
-  { value: "culto", label: "Culto" },
-  { value: "jemiac", label: "JEMIAC" },
-  { value: "retiro", label: "Retiro" },
-  { value: "confirmatorio", label: "Ens. Confirmatório" },
-  { value: "evento", label: "Evento" },
-];
+const AGENDA_EVENT_TYPES = EVENT_TYPES;
 const SCORE_LABELS = ["", "Fraco", "Regular", "Bom", "Muito bom", "Excelente"];
 
 type WorshipRequest = {
@@ -635,12 +626,7 @@ export default function AttendanceTab({ participants, activities, communities, i
 
   const EVENT_TYPES_FILTER = [
     { value: null, label: "Todos" },
-    { value: "encontro", label: "📅 Encontros" },
-    { value: "culto", label: "⛪ Cultos" },
-    { value: "jemiac", label: "✝️ JEMIAC" },
-    { value: "retiro", label: "🏕️ Retiros" },
-    { value: "confirmatorio", label: "📖 Ens. Confirmatório" },
-    { value: "evento", label: "🎉 Eventos" },
+    ...EVENT_TYPES.map(t => ({ value: t.value, label: `${t.emoji} ${t.label}` })),
   ];
 
   // Filter events by admin area and selected type
@@ -771,12 +757,6 @@ export default function AttendanceTab({ participants, activities, communities, i
 
       {/* Event attendance requests - filtered by event type */}
       {(() => {
-        const TYPE_EMOJI_LOCAL: Record<string, string> = {
-          encontro: "📅", culto: "⛪", jemiac: "✝️", retiro: "🏕️", confirmatorio: "📖", evento: "🎉",
-        };
-        const TYPE_LABEL: Record<string, string> = {
-          encontro: "Encontros", culto: "Cultos", jemiac: "JEMIAC", retiro: "Retiros", confirmatorio: "Ens. Confirmatório", evento: "Eventos",
-        };
         const filtered = filterType
           ? worshipRequests.filter(w => w.event_type === filterType)
           : worshipRequests;
@@ -787,8 +767,8 @@ export default function AttendanceTab({ participants, activities, communities, i
 
         const renderWorshipCard = (w: WorshipRequest, isPending: boolean) => {
           const isSaving = savingWorship === w.id;
-          const emoji = TYPE_EMOJI_LOCAL[w.event_type] ?? "📅";
-          const typeLabel = TYPE_LABEL[w.event_type] ?? w.event_type;
+          const emoji = getEventEmoji(w.event_type);
+          const typeLabel = EVENT_TYPES.find(t => t.value === w.event_type)?.label ?? w.event_type;
           return (
             <div key={w.id} className={`bg-card rounded-2xl border ${isPending ? "border-accent/50" : "border-border"} p-4 shadow-sm space-y-2`}>
               <div className="flex items-center gap-3">
@@ -897,7 +877,7 @@ export default function AttendanceTab({ participants, activities, communities, i
                 className="w-full flex items-center gap-3 p-4 text-left hover:bg-muted/30 transition-colors"
               >
                 <div className="w-12 h-12 rounded-xl bg-primary/10 flex flex-col items-center justify-center flex-shrink-0">
-                  <span className="text-lg leading-none">{TYPE_EMOJI[event.type] ?? "📅"}</span>
+                  <span className="text-lg leading-none">{getEventEmoji(event.type)}</span>
                   <span className="font-montserrat font-black text-primary text-xs">
                     {format(dateObj, "d", { locale: ptBR })}
                   </span>

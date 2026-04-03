@@ -34,11 +34,12 @@ function calculateStreak(dates: string[]): number {
   return streak;
 }
 
-function calculateLevel(points: number): number {
-  if (points >= 200) return 5;
-  if (points >= 100) return 4;
-  if (points >= 60) return 3;
-  if (points >= 20) return 2;
+function calculateLevel(points: number, thresholds: number[]): number {
+  // thresholds = [level2, level3, level4, level5]
+  if (points >= thresholds[3]) return 5;
+  if (points >= thresholds[2]) return 4;
+  if (points >= thresholds[1]) return 3;
+  if (points >= thresholds[0]) return 2;
   return 1;
 }
 
@@ -103,6 +104,12 @@ export function useUserStats(currentArea?: string): UserStats {
         courseBonus:           cfgMap.get("course_completion_bonus")   ?? 100,
         challengePoints:       cfgMap.get("challenge_points")          ?? 15,
       };
+      const levelThresholds = [
+        cfgMap.get("level_2_threshold") ?? 20,
+        cfgMap.get("level_3_threshold") ?? 60,
+        cfgMap.get("level_4_threshold") ?? 100,
+        cfgMap.get("level_5_threshold") ?? 200,
+      ];
 
       const acts = activities ?? [];
       const prog = progress ?? [];
@@ -143,7 +150,7 @@ export function useUserStats(currentArea?: string): UserStats {
 
       const faithPoints = activityPoints + devotionalPoints + lessonStudyPoints + attendancePoints + worshipPoints + achievementBonusPoints + courseBonusPoints + challengePoints;
 
-      const faithLevel = calculateLevel(faithPoints);
+      const faithLevel = calculateLevel(faithPoints, levelThresholds);
       const streakDays = calculateStreak(allDates);
       const faithEnergy = calculateEnergy(allDates);
       const completedCount = completedIds.size;
