@@ -226,7 +226,6 @@ export default function LeaderRoomSection({ asTab = false }: { asTab?: boolean }
       { data: progressData },
       { data: lessonResponsesData },
       { data: devotionalProgressData },
-      { data: attendanceData },
     ] = await Promise.all([
       supabase.from("activities").select("*").order("order_num"),
       profilesQuery,
@@ -235,11 +234,16 @@ export default function LeaderRoomSection({ asTab = false }: { asTab?: boolean }
       supabase.from("user_progress").select("user_id, activity_id"),
       supabase.from("lesson_responses").select("user_id, lesson_id"),
       supabase.from("devotional_progress").select("user_id, devotional_id, completed_at"),
-      supabase.from("attendance").select("user_id, status").eq("status", "presente"),
     ]);
 
     const myId = userResult.data.user?.id ?? "";
     const profilesList = (profilesData ?? []).filter(p => p.user_id !== myId);
+
+    // Fetch attendance filtered by the exact user_ids we loaded (avoids RLS issues)
+    const userIds = profilesList.map(p => p.user_id);
+    const { data: attendanceData } = userIds.length > 0
+      ? await supabase.from("attendance").select("user_id, status").in("user_id", userIds).eq("status", "presente")
+      : { data: [] };
     const activityMap = new Map((activitiesData ?? []).map((activity) => [activity.id, activity]));
 
     const participantList: Participant[] = profilesList.map((p) => {
