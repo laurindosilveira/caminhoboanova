@@ -8,7 +8,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 type NextItem = {
-  type: "lesson" | "devotional";
+  type: "lesson" | "devotional" | "waiting_devotional";
   lessonId: string;
   title: string;
   subtitle: string;
@@ -19,6 +19,7 @@ type NextItem = {
   totalDevotionals?: number;
   completedDevotionals?: number;
   eventDate?: Date;
+  nextReleaseDate?: Date;
 };
 
 export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { onNavigateToDiscipulado: () => void }) {
@@ -89,8 +90,12 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
       const lessonId = entry.lessonId;
 
       // Check devotionals first, independent of lesson study status
-      const lessonDevs = (devsByLesson[lessonId] ?? []).sort((a, b) => a.day_number - b.day_number);
+      const lessonDevs = (devsByLesson[lessonId] ?? [])
+        .filter((dev) => !entry.releasedDayNumbers || entry.releasedDayNumbers.includes(dev.day_number))
+        .sort((a, b) => a.day_number - b.day_number);
       const devDates = entry.devotionalDates;
+      let nextFutureDev: typeof lessonDevs[number] | null = null;
+      let nextFutureDate: Date | null = null;
 
       for (let i = 0; i < lessonDevs.length; i++) {
         const dev = lessonDevs[i];
@@ -98,7 +103,12 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
 
         // Check if this devotional is released (today >= its scheduled date)
         const devDate = devDates[i];
-        if (devDate && today >= devDate) {
+        if (!devDate) continue;
+
+        const normalizedDevDate = new Date(devDate);
+        normalizedDevDate.setHours(0, 0, 0, 0);
+
+        if (today >= normalizedDevDate) {
           const completedCount = lessonDevs.filter(d => completedDevIds.has(d.id)).length;
           setNextItem({
             type: "devotional",
@@ -116,9 +126,36 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
           setLoading(false);
           return;
         }
+
+        nextFutureDev = dev;
+        nextFutureDate = normalizedDevDate;
+        break;
       }
 
       // No devotional available today — show lesson study if not done
+      if (nextFutureDev && nextFutureDate) {
+        const completedCount = lessonDevs.filter(d => completedDevIds.has(d.id)).length;
+        const isSaturday = today.getDay() === 6;
+        setNextItem({
+          type: "waiting_devotional",
+          lessonId,
+          title: nextFutureDev.title || `Devocional ${nextFutureDev.day_number}`,
+          subtitle: isSaturday
+            ? "Hoje o sábado é reservado para recuperar devocionais atrasados desta semana."
+            : `O próximo devocional desta lição será liberado em ${format(nextFutureDate, "d 'de' MMMM", { locale: ptBR })}.`,
+          courseTitle: entry.courseTitle,
+          courseOrder: entry.courseOrder,
+          lessonOrder: entry.lessonOrder,
+          devotionalDay: nextFutureDev.day_number,
+          totalDevotionals: lessonDevs.length,
+          completedDevotionals: completedCount,
+          eventDate: entry.eventDate,
+          nextReleaseDate: nextFutureDate,
+        });
+        setLoading(false);
+        return;
+      }
+
       if (!studiedLessons.has(lessonId)) {
         setNextItem({
           type: "lesson",
@@ -227,11 +264,16 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
     );
   }
 
-  const isDevotional = nextItem.type === "devotional";
+  const isDevotional = nextItem.type !== "lesson";
+  const isWaitingDevotional = nextItem.type === "waiting_devotional";
   const devPct = nextItem.totalDevotionals && nextItem.totalDevotionals > 0
     ? Math.round(((nextItem.completedDevotionals ?? 0) / nextItem.totalDevotionals) * 100)
     : 0;
   const handleOpenNextItem = () => {
+    if (isWaitingDevotional) {
+      onNavigateToDiscipulado();
+      return;
+    }
     window.dispatchEvent(new CustomEvent("navigate-to-lesson", {
       detail: {
         lessonId: nextItem.lessonId,
@@ -280,9 +322,9 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
           {/* Content */}
           <div className="flex items-start gap-4 mb-4">
             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 shadow-lg ${
-              isDevotional ? "bg-gradient-orange shadow-secondary/30" : "bg-primary shadow-primary/30"
+              isDevotional || isWaitingDevotional ? "bg-gradient-orange shadow-secondary/30" : "bg-primary shadow-primary/30"
             }`}>
-              {isDevotional ? <BookOpen className="w-7 h-7 text-primary-foreground" /> : <GraduationCap className="w-7 h-7 text-primary-foreground" />}
+              {isDevotional || isWaitingDevotional ? <BookOpen className="w-7 h-7 text-primary-foreground" /> : <GraduationCap className="w-7 h-7 text-primary-foreground" />}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-muted-foreground text-[10px] font-inter mb-0.5 uppercase tracking-wide">
@@ -298,7 +340,7 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
           </div>
 
           {/* Devotional progress */}
-          {isDevotional && nextItem.totalDevotionals && (
+          {(isDevotional || isWaitingDevotional) && nextItem.totalDevotionals && (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-muted-foreground text-xs font-inter">

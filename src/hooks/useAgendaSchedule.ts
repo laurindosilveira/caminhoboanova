@@ -14,7 +14,11 @@ export type ScheduleEntry = {
   courseTitle: string;
   courseOrder: number;
   windowStart: Date;
-  devotionalDates: Date[]; // 5 dates for devotional days 1..5
+  devotionalDates: Date[]; // business-day release dates indexed by devotional day_number - 1
+  /** Day numbers the leader chose to release. null = all released. */
+  releasedDayNumbers: number[] | null;
+  /** True when this event is < 10 calendar days from the previous one (auto-limit to 5 devotionals). */
+  autoLimited: boolean;
 };
 
 /**
@@ -62,7 +66,9 @@ export function useAgendaSchedule() {
 
   async function fetchSchedule() {
     setLoading(true);
-    let eventsQuery = supabase.from("events").select("id, event_date, linked_lesson_id, title, type, area")
+    let eventsQuery = supabase
+      .from("events")
+      .select("id, event_date, linked_lesson_id, title, type, area, released_devotional_days")
       .eq("type", "confirmatorio")
       .not("linked_lesson_id", "is", null)
       .order("event_date");
@@ -79,8 +85,6 @@ export function useAgendaSchedule() {
     const entries: ScheduleEntry[] = [];
     for (const event of (events ?? [])) {
       if (!event.linked_lesson_id) continue;
-      // Filter by user's area: for non-lesson events, show events with no area or matching area
-      // For lesson events (discipleship), show to all areas
       if (event.area && currentArea && event.area !== currentArea) continue;
       const lesson = lessonMap.get(event.linked_lesson_id);
       if (!lesson) continue;
@@ -93,7 +97,28 @@ export function useAgendaSchedule() {
       const eventDate = new Date(rawDate.includes("T") ? rawDate : rawDate + "T12:00:00");
       const businessDays = getBusinessDaysBefore(eventDate, 10);
       const windowStart = businessDays[0];
-      const devotionalDates = businessDays.slice(0, 5);
+      // Keep the full business-day window so lessons with 6+ devotionals
+      // can continue releasing on the following week before the event.
+      const devotionalDates = businessDays;
+
+      // Auto-limit: if this event is < 10 calendar days from the previous one,
+      // cap released devotionals at day numbers 1–5.
+      const prevEntry = entries[entries.length - 1];
+      const autoLimited = prevEntry
+        ? Math.round((eventDate.getTime() - prevEntry.eventDate.getTime()) / 86400000) < 10
+        : false;
+
+      // Leader-selected release days (null = all)
+      const rawReleased: number[] | null = (event as any).released_devotional_days ?? null;
+
+      let releasedDayNumbers: number[] | null;
+      if (autoLimited) {
+        // Keep only days 1–5 even if leader selected more
+        const base = rawReleased ?? null;
+        releasedDayNumbers = base ? base.filter(d => d <= 5) : [1, 2, 3, 4, 5];
+      } else {
+        releasedDayNumbers = rawReleased;
+      }
 
       entries.push({
         eventId: event.id,
@@ -107,6 +132,8 @@ export function useAgendaSchedule() {
         courseOrder: course.order_num,
         windowStart,
         devotionalDates,
+        releasedDayNumbers,
+        autoLimited,
       });
     }
 
@@ -126,34 +153,28 @@ export function useAgendaSchedule() {
   const lateAccessLessonIds = new Set<string>();
   const lessonDevotionalDates = new Map<string, Date[]>();
   const lessonEventDate = new Map<string, Date>();
+  const lessonReleasedDays = new Map<string, number[] | null>();
 
   for (const entry of schedule) {
     if (today >= entry.windowStart) {
       releasedLessonIds.add(entry.lessonId);
     }
     if (now >= entry.eventDate) {
-      // After the actual event time: late access (no points)
       lateAccessLessonIds.add(entry.lessonId);
     }
     lessonDevotionalDates.set(entry.lessonId, entry.devotionalDates);
     lessonEventDate.set(entry.lessonId, entry.eventDate);
+    lessonReleasedDays.set(entry.lessonId, entry.releasedDayNumbers);
   }
 
   // Only the single earliest upcoming lesson with an open window is study-open.
-  // This prevents lesson N+1 from being accessible just because its 10-day window
-  // overlaps with lesson N's event date (e.g., weekly schedule).
   const currentOpenEntry = schedule.find(e => today >= e.windowStart && now < e.eventDate);
   if (currentOpenEntry) {
     studyOpenLessonIds.add(currentOpenEntry.lessonId);
   }
 
-  // All scheduled lesson IDs (regardless of window)
   const scheduledLessonIds = new Set(schedule.map(e => e.lessonId));
-
-  // Next upcoming scheduled event (window open or future)
   const nextScheduledEvent = schedule.find(e => e.eventDate >= now) ?? null;
-
-  // Current active entry = next one with window open
   const currentEntry = schedule.find(e => today >= e.windowStart && e.eventDate >= now) ?? null;
 
   return {
@@ -165,6 +186,7 @@ export function useAgendaSchedule() {
     scheduledLessonIds,
     lessonDevotionalDates,
     lessonEventDate,
+    lessonReleasedDays,
     nextScheduledEvent,
     currentEntry,
     hasScheduledEvents: schedule.length > 0,
