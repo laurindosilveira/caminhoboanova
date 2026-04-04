@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
 import { useCustomEventTypes } from "@/hooks/useCustomEventTypes";
-import { CalendarDays, MapPin, Users, BookOpen, ChevronDown, ChevronUp, Plus, Pencil, Trash2, Save, X, Clock, Timer, ExternalLink, CalendarIcon, Check, LayoutList, CalendarRange, Download, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
+import { CalendarDays, MapPin, Users, BookOpen, ChevronDown, ChevronUp, Plus, Pencil, Trash2, Save, X, Clock, Timer, ExternalLink, CalendarIcon, Check, LayoutList, CalendarRange, Download, ChevronLeft, ChevronRight, Sparkles, CheckCircle2, XCircle, ClipboardList } from "lucide-react";
 import { differenceInDays, differenceInHours, startOfWeek, endOfWeek, addWeeks, subWeeks, isSameDay, isWithinInterval, format } from "date-fns";
 import WorshipConfirmation from "./WorshipConfirmation";
 import { ptBR } from "date-fns/locale";
@@ -186,6 +186,16 @@ export default function UserAgendaTab() {
   const [newTypeForm, setNewTypeForm] = useState({ label: "", emoji: "📅", gives_points: false, points: 10 });
   const [savingType, setSavingType] = useState(false);
 
+  // Pending attendance approval (leaders only)
+  type PendingAttendance = {
+    id: string; event_id: string; user_id: string; status: string;
+    justification: string | null; created_at: string;
+    full_name?: string; community?: string; event_title?: string; event_date?: string;
+  };
+  const [showPendingModal, setShowPendingModal] = useState(false);
+  const [pendingAttendance, setPendingAttendance] = useState<PendingAttendance[]>([]);
+  const [savingApproval, setSavingApproval] = useState<string | null>(null);
+
   useEffect(() => {
     async function fetch() {
       setLoading(true);
@@ -237,6 +247,11 @@ export default function UserAgendaTab() {
     }
     if (profile) fetch();
   }, [profile, currentArea]);
+
+  // Fetch pending attendance whenever events list changes (leaders only)
+  useEffect(() => {
+    if (canManage && events.length > 0) fetchPendingAttendance();
+  }, [events, canManage]);
 
   // Realtime
   useEffect(() => {
@@ -462,6 +477,47 @@ export default function UserAgendaTab() {
     }
   }
 
+  async function fetchPendingAttendance() {
+    if (!canManage) return;
+    // Filter by events in this area
+    const areaEventIds = events.filter(e => !e.area || e.area === currentArea).map(e => e.id);
+    if (areaEventIds.length === 0) { setPendingAttendance([]); return; }
+    const { data } = await supabase
+      .from("attendance")
+      .select("id, event_id, user_id, status, justification, created_at")
+      .in("event_id", areaEventIds)
+      .in("status", ["pendente_presente", "pendente_falta"])
+      .order("created_at", { ascending: false });
+    if (!data || data.length === 0) { setPendingAttendance([]); return; }
+    const userIds = [...new Set(data.map(a => a.user_id))];
+    const eventIds = [...new Set(data.map(a => a.event_id))];
+    const [{ data: profilesData }, { data: eventsData }] = await Promise.all([
+      supabase.from("profiles").select("id, full_name, community").in("id", userIds),
+      supabase.from("events").select("id, title, event_date").in("id", eventIds),
+    ]);
+    const profileMap = new Map((profilesData ?? []).map((p: any) => [p.id, p]));
+    const evMap = new Map((eventsData ?? []).map((e: any) => [e.id, e]));
+    setPendingAttendance(data.map(a => ({
+      ...a,
+      full_name: profileMap.get(a.user_id)?.full_name ?? "Desconhecido",
+      community: profileMap.get(a.user_id)?.community ?? "",
+      event_title: evMap.get(a.event_id)?.title ?? "Evento",
+      event_date: evMap.get(a.event_id)?.event_date ?? a.created_at,
+    })));
+  }
+
+  async function handleAttendanceApproval(id: string, action: "presente" | "justificou" | "rejeitado") {
+    setSavingApproval(id);
+    if (action === "rejeitado") {
+      await supabase.from("attendance").delete().eq("id", id);
+    } else {
+      await supabase.from("attendance").update({ status: action }).eq("id", id);
+    }
+    setPendingAttendance(prev => prev.filter(a => a.id !== id));
+    toast.success(action === "presente" ? "Presença aprovada ✅" : action === "justificou" ? "Falta justificada ✓" : "Solicitação rejeitada");
+    setSavingApproval(null);
+  }
+
   async function handleCreateType() {
     if (!newTypeForm.label.trim()) { toast.error("Digite um nome para o tipo"); return; }
     setSavingType(true);
@@ -520,6 +576,18 @@ export default function UserAgendaTab() {
               <CalendarRange className="w-3.5 h-3.5" />
             </button>
           </div>
+          {canManage && pendingAttendance.length > 0 && (
+            <button
+              onClick={() => { setShowPendingModal(true); }}
+              className="relative h-8 px-2.5 rounded-xl text-xs gap-1.5 border border-accent/40 text-accent-foreground bg-accent/10 hover:bg-accent/20 transition-colors flex items-center gap-1.5"
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Presenças</span>
+              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-destructive text-white text-[10px] font-bold flex items-center justify-center px-1">
+                {pendingAttendance.length}
+              </span>
+            </button>
+          )}
           {canManage && (
             <Button size="sm" variant="outline" className="h-8 rounded-xl text-xs gap-1.5 border-primary/40 text-primary" onClick={openCreateForm}>
               <Plus className="w-3.5 h-3.5" /> Novo Evento
@@ -793,6 +861,85 @@ export default function UserAgendaTab() {
           </div>
         </div>
       )}
+
+      {/* ── MODAL DE APROVAÇÃO DE PRESENÇAS ────────── */}
+      <Dialog open={showPendingModal} onOpenChange={(open) => { if (!open) setShowPendingModal(false); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-montserrat font-bold text-foreground flex items-center gap-2">
+              <ClipboardList className="w-4 h-4 text-primary" />
+              Aprovação de Presenças
+              {pendingAttendance.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-inter font-bold bg-primary/10 text-primary">
+                  {pendingAttendance.length} pendente{pendingAttendance.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            {pendingAttendance.length === 0 ? (
+              <div className="text-center py-8">
+                <CheckCircle2 className="w-10 h-10 text-brand-green mx-auto mb-2 opacity-60" />
+                <p className="font-inter text-sm text-muted-foreground">Nenhuma solicitação pendente</p>
+              </div>
+            ) : (
+              pendingAttendance.map(a => {
+                const isSaving = savingApproval === a.id;
+                const isPresence = a.status === "pendente_presente";
+                const eventDate = a.event_date ? new Date(a.event_date) : null;
+                return (
+                  <div key={a.id} className="bg-muted/30 rounded-2xl border border-border p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${isPresence ? "bg-brand-green/10" : "bg-accent/20"}`}>
+                        {isPresence
+                          ? <CheckCircle2 className="w-5 h-5 text-brand-green" />
+                          : <Clock className="w-5 h-5 text-accent-foreground" />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-inter font-semibold text-sm text-foreground">{a.full_name}</p>
+                        {a.community && <p className="font-inter text-[10px] text-muted-foreground">{a.community}</p>}
+                        <p className="font-inter text-xs text-foreground mt-0.5">📅 {a.event_title}</p>
+                        {eventDate && (
+                          <p className="font-inter text-[10px] text-muted-foreground">
+                            {format(eventDate, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                          </p>
+                        )}
+                        <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-inter font-semibold ${isPresence ? "bg-brand-green/10 text-brand-green" : "bg-accent/20 text-accent-foreground"}`}>
+                          {isPresence ? "Solicitando presença" : "Solicitando justificativa"}
+                        </span>
+                      </div>
+                    </div>
+                    {a.justification && (
+                      <div className="px-3 py-2 rounded-xl bg-muted text-xs font-inter text-muted-foreground italic">
+                        "{a.justification}"
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleAttendanceApproval(a.id, isPresence ? "presente" : "justificou")}
+                        disabled={!!isSaving}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-brand-green/10 hover:bg-brand-green/20 text-brand-green font-inter text-xs font-semibold transition-colors disabled:opacity-50"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {isSaving ? "Salvando..." : "Aprovar"}
+                      </button>
+                      <button
+                        onClick={() => handleAttendanceApproval(a.id, "rejeitado")}
+                        disabled={!!isSaving}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive font-inter text-xs font-semibold transition-colors disabled:opacity-50"
+                      >
+                        <XCircle className="w-3.5 h-3.5" />
+                        Rejeitar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── MODAL DE CRIAR TIPO DE EVENTO ────────── */}
       <Dialog open={showCreateTypeModal} onOpenChange={(open) => { if (!open) setShowCreateTypeModal(false); }}>
