@@ -20,9 +20,11 @@ type Props = {
   isCompleted: boolean;
   devotionalData?: DevotionalContent;
   hideCompleteButton?: boolean;
+  /** True when this completion happens during the recovery window (lower points). */
+  isRecovery?: boolean;
 };
 
-export default function DevotionalView({ activity, onBack, onComplete, isCompleted, devotionalData, hideCompleteButton }: Props) {
+export default function DevotionalView({ activity, onBack, onComplete, isCompleted, devotionalData, hideCompleteButton, isRecovery = false }: Props) {
   const [content, setContent] = useState<DevotionalContent | null>(devotionalData ?? null);
   const [loading, setLoading] = useState(!devotionalData);
   const [completing, setCompleting] = useState(false);
@@ -116,6 +118,7 @@ export default function DevotionalView({ activity, onBack, onComplete, isComplet
     const { error: progressError } = await supabase.from("devotional_progress").insert({
       user_id: user.id,
       devotional_id: activity.id,
+      is_recovery: isRecovery,
     });
 
     if (progressError) {

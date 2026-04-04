@@ -90,19 +90,43 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
       const lessonId = entry.lessonId;
 
       // Check devotionals first, independent of lesson study status
-      const lessonDevs = (devsByLesson[lessonId] ?? [])
-        .filter((dev) => !entry.releasedDayNumbers || entry.releasedDayNumbers.includes(dev.day_number))
-        .sort((a, b) => a.day_number - b.day_number);
-      const devDates = entry.devotionalDates;
+      const allLessonDevs = (devsByLesson[lessonId] ?? []).sort((a, b) => a.day_number - b.day_number);
+      const lessonDevs = allLessonDevs
+        .filter((dev) => !entry.releasedDayNumbers || entry.releasedDayNumbers.includes(dev.day_number));
+
+      // In 5_days mode, primary devs missed in week 1 get recovery dates from devotionalDates[5+]
+      const is5days = entry.devotionalMode === "5_days";
+      const primaryDevs = is5days ? lessonDevs.filter(d => d.day_number <= 5) : lessonDevs;
+      const missedPrimary = is5days
+        ? primaryDevs.filter(d => {
+            const pd = new Date(entry.devotionalDates[d.day_number - 1]);
+            pd.setHours(0, 0, 0, 0);
+            return !completedDevIds.has(d.id) && pd < today;
+          })
+        : [];
+
+      // Build a map of devId → release date (primary or recovery)
+      const devReleaseDateMap = new Map<string, Date>();
+      lessonDevs.forEach((dev, i) => {
+        const primaryDate = entry.devotionalDates[is5days ? dev.day_number - 1 : i];
+        if (primaryDate) devReleaseDateMap.set(dev.id, primaryDate);
+      });
+      // Override with recovery dates for missed primary devs
+      missedPrimary.forEach((dev, i) => {
+        const recoveryDate = entry.devotionalDates[5 + i];
+        if (recoveryDate) devReleaseDateMap.set(dev.id, recoveryDate);
+      });
+
       let nextFutureDev: typeof lessonDevs[number] | null = null;
       let nextFutureDate: Date | null = null;
 
-      for (let i = 0; i < lessonDevs.length; i++) {
-        const dev = lessonDevs[i];
+      for (const dev of lessonDevs) {
         if (completedDevIds.has(dev.id)) continue;
 
-        // Check if this devotional is released (today >= its scheduled date)
-        const devDate = devDates[i];
+        // In 5_days mode, skip day_number > 5
+        if (is5days && dev.day_number > 5) continue;
+
+        const devDate = devReleaseDateMap.get(dev.id);
         if (!devDate) continue;
 
         const normalizedDevDate = new Date(devDate);

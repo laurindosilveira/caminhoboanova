@@ -385,6 +385,8 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
         autoOpenAvailableDevotional={autoOpenDevotionalLessonId === selectedLesson.id}
         onAutoOpenAvailableDevotionalConsumed={() => setAutoOpenDevotionalLessonId(null)}
         scheduledDevotionalDates={agendaSchedule.lessonDevotionalDates.get(selectedLesson.id)}
+        releasedDayNumbers={agendaSchedule.lessonReleasedDays.get(selectedLesson.id)}
+        devotionalMode={agendaSchedule.lessonDevotionalMode.get(selectedLesson.id) ?? "10_days"}
         eventDate={agendaSchedule.lessonEventDate.get(selectedLesson.id) ?? undefined}
         isStudyLocked={false}
         isLateAccess={isLateAccess}

@@ -82,7 +82,7 @@ export function useUserStats(currentArea?: string): UserStats {
       ] = await Promise.all([
         supabase.from("activities").select("id, type, title, subtitle, order_num, points").order("order_num"),
         supabase.from("user_progress").select("activity_id, completed_at").eq("user_id", user.id),
-        supabase.from("devotional_progress").select("devotional_id, completed_at").eq("user_id", user.id),
+        supabase.from("devotional_progress").select("devotional_id, completed_at, is_recovery").eq("user_id", user.id),
         supabase.from("lesson_responses").select("lesson_id").eq("user_id", user.id),
         supabase.from("attendance").select("event_id, status").eq("user_id", user.id),
         supabase.from("worship_attendance").select("id, status").eq("user_id", user.id).eq("status", "aprovado"),
@@ -99,6 +99,7 @@ export function useUserStats(currentArea?: string): UserStats {
         lessonPoints:          cfgMap.get("lesson_points")             ?? 20,
         devotionalPoints:      cfgMap.get("devotional_points")         ?? 5,
         devotionalWeekendPts:  cfgMap.get("devotional_weekend_points") ?? 2,
+        devotionalRecoveryPts: cfgMap.get("devotional_recovery_points") ?? 2,
         attendancePoints:      cfgMap.get("attendance_points")         ?? 10,
         worshipPoints:         cfgMap.get("worship_points")            ?? 5,
         courseBonus:           cfgMap.get("course_completion_bonus")   ?? 100,
@@ -125,8 +126,9 @@ export function useUserStats(currentArea?: string): UserStats {
         .filter(a => completedIds.has(a.id) && a.type !== "devocional" && a.type !== "formacao" && a.type !== "encontro")
         .reduce((sum, a) => sum + (a.points ?? 0), 0);
 
-      // Pontos de devocionais (dia útil vs fim de semana)
-      const devotionalPoints = devProg.reduce((sum, dp) => {
+      // Pontos de devocionais: recovery = valor reduzido, fim de semana = weekendPts, normal = devotionalPoints
+      const devotionalPoints = devProg.reduce((sum, dp: any) => {
+        if (dp.is_recovery) return sum + cfg.devotionalRecoveryPts;
         const dow = new Date(dp.completed_at).getDay();
         return sum + (dow === 0 || dow === 6 ? cfg.devotionalWeekendPts : cfg.devotionalPoints);
       }, 0);
