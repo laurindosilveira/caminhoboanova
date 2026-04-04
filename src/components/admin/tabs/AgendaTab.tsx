@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { AREAS, ALL_COMMUNITIES } from "@/config/areas";
-import { EVENT_TYPES, getEventEmoji, getEventColor } from "@/config/eventTypes";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
-import { CalendarDays, Plus, X, MapPin, Users, BookOpen, Pencil, Check } from "lucide-react";
+import { useCustomEventTypes } from "@/hooks/useCustomEventTypes";
+import { CalendarDays, Plus, X, MapPin, Users, BookOpen, Pencil, Check, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -30,15 +30,18 @@ type LessonOption = {
   course_id: string;
 };
 
-
 const EMPTY_FORM = {
   title: "", description: "", event_date: "", location: "", type: "encontro", area: "", community: "", linked_lesson_id: "",
 };
+
+const EMOJI_OPTIONS = ["📅","⛪","✝️","🏕️","📖","🎉","💬","🙏","🎶","🌿","🤝","⭐","🔔","🎯","🏠","🌟"];
 
 export default function AgendaTab() {
   const { profile } = useAuth();
   const { effectiveArea } = useAreaSwitch();
   const currentArea = effectiveArea || profile?.area || "";
+  const { allTypes, customTypes, getLabel, getEmoji, getColor, refetch: refetchTypes } = useCustomEventTypes(currentArea);
+
   const [events, setEvents] = useState<Event[]>([]);
   const [areaFilter, setAreaFilter] = useState<string>(currentArea);
   const [lessons, setLessons] = useState<LessonOption[]>([]);
@@ -51,6 +54,16 @@ export default function AgendaTab() {
   const [showCascadeDialog, setShowCascadeDialog] = useState(false);
   const [cascadePending, setCascadePending] = useState<{ eventId: string; oldLessonId: string | null; newLessonId: string } | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
+
+  // ── Create custom event type modal state ──
+  const [showCreateTypeModal, setShowCreateTypeModal] = useState(false);
+  const [newTypeForm, setNewTypeForm] = useState({
+    label: "",
+    emoji: "📅",
+    gives_points: false,
+    points: 10,
+  });
+  const [savingType, setSavingType] = useState(false);
 
   useEffect(() => { fetchEvents(); fetchLessons(); }, []);
 
@@ -103,7 +116,6 @@ export default function AgendaTab() {
     if (!form.title || !form.event_date) return;
     setSaving(true);
 
-    // Append Brazil timezone offset so Supabase stores the correct local time
     const eventDateWithTz = form.event_date ? form.event_date + ":00-03:00" : form.event_date;
 
     const payload = {
@@ -118,18 +130,15 @@ export default function AgendaTab() {
     };
 
     if (editingFullEventId) {
-      // Editing existing event
       const oldEvent = events.find(e => e.id === editingFullEventId);
       const oldLessonId = oldEvent?.linked_lesson_id ?? null;
       const newLessonId = payload.linked_lesson_id;
 
-      // Check cascade for lesson change
       if (oldLessonId !== newLessonId && newLessonId && oldEvent) {
         const subsequentWithLessons = events.filter(
           e => e.id !== editingFullEventId && e.event_date > oldEvent.event_date && e.linked_lesson_id
         );
         if (subsequentWithLessons.length > 0) {
-          // Save other fields first, then handle cascade
           await supabase.from("events").update({ ...payload, linked_lesson_id: oldLessonId }).eq("id", editingFullEventId);
           setCascadePending({ eventId: editingFullEventId, oldLessonId, newLessonId });
           setShowCascadeDialog(true);
@@ -143,7 +152,6 @@ export default function AgendaTab() {
       await supabase.from("events").update(payload).eq("id", editingFullEventId);
       toast.success("Evento atualizado!");
     } else {
-      // Creating new event
       const { data: { user } } = await supabase.auth.getUser();
       await supabase.from("events").insert({ ...payload, created_by: user?.id });
       toast.success("Evento criado!");
@@ -236,6 +244,53 @@ export default function AgendaTab() {
     fetchEvents();
   }
 
+  async function handleCreateType() {
+    if (!newTypeForm.label.trim()) return;
+    setSavingType(true);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // Generate a unique slug value
+    const slug = `custom_${newTypeForm.label.toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "")}_${Date.now()}`;
+
+    const { data, error } = await supabase
+      .from("custom_event_types")
+      .insert({
+        value: slug,
+        label: newTypeForm.label.trim(),
+        emoji: newTypeForm.emoji,
+        gives_points: newTypeForm.gives_points,
+        points: newTypeForm.gives_points ? newTypeForm.points : 0,
+        area: currentArea || null,
+        created_by: user?.id,
+      } as any)
+      .select()
+      .single();
+
+    if (error) {
+      toast.error("Erro ao criar tipo de evento", { description: error.message });
+    } else {
+      toast.success(`Tipo "${newTypeForm.label}" criado!`);
+      await refetchTypes();
+      // Auto-select the new type in the form
+      setForm(f => ({ ...f, type: (data as any).value }));
+      setShowCreateTypeModal(false);
+      setNewTypeForm({ label: "", emoji: "📅", gives_points: false, points: 10 });
+    }
+    setSavingType(false);
+  }
+
+  async function handleDeleteCustomType(id: string, value: string) {
+    if (!confirm("Excluir este tipo de evento? Eventos existentes com este tipo não serão afetados.")) return;
+    await supabase.from("custom_event_types").delete().eq("id", id);
+    // If the form currently uses this type, reset to "encontro"
+    if (form.type === value) setForm(f => ({ ...f, type: "encontro" }));
+    await refetchTypes();
+    toast.success("Tipo removido");
+  }
+
   const getLessonLabel = (lessonId: string | null) => {
     if (!lessonId) return null;
     const lesson = lessons.find(l => l.id === lessonId);
@@ -263,7 +318,7 @@ export default function AgendaTab() {
       </div>
 
       {/* Area filter */}
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 flex-wrap">
         {["all", ...AREAS].map(val => (
           <button
             key={val}
@@ -279,6 +334,142 @@ export default function AgendaTab() {
         ))}
       </div>
 
+      {/* ── Create custom event type modal ── */}
+      {showCreateTypeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 animate-in fade-in px-4"
+          onClick={() => setShowCreateTypeModal(false)}>
+          <div className="w-full max-w-sm bg-card rounded-2xl shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between"
+              style={{ background: "var(--gradient-hero)" }}>
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary-foreground" />
+                <p className="font-montserrat font-bold text-primary-foreground text-sm">Novo Tipo de Evento</p>
+              </div>
+              <button onClick={() => setShowCreateTypeModal(false)}
+                className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center">
+                <X className="w-4 h-4 text-primary-foreground" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Label */}
+              <div>
+                <label className="font-inter text-xs font-semibold text-muted-foreground mb-1.5 block">Nome do tipo *</label>
+                <input
+                  type="text"
+                  value={newTypeForm.label}
+                  onChange={e => setNewTypeForm(f => ({ ...f, label: e.target.value }))}
+                  placeholder="Ex: Visita Pastoral, Reunião de Líderes..."
+                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+
+              {/* Emoji picker */}
+              <div>
+                <label className="font-inter text-xs font-semibold text-muted-foreground mb-1.5 block">Ícone</label>
+                <div className="flex flex-wrap gap-2">
+                  {EMOJI_OPTIONS.map(em => (
+                    <button key={em}
+                      onClick={() => setNewTypeForm(f => ({ ...f, emoji: em }))}
+                      className={`w-9 h-9 rounded-xl text-lg transition-all ${
+                        newTypeForm.emoji === em
+                          ? "bg-primary/20 ring-2 ring-primary scale-110"
+                          : "bg-muted hover:bg-muted/80"
+                      }`}>
+                      {em}
+                    </button>
+                  ))}
+                  {/* Custom emoji input */}
+                  <input
+                    type="text"
+                    value={EMOJI_OPTIONS.includes(newTypeForm.emoji) ? "" : newTypeForm.emoji}
+                    onChange={e => e.target.value && setNewTypeForm(f => ({ ...f, emoji: e.target.value.slice(-2) }))}
+                    placeholder="ou cole"
+                    className="flex-1 min-w-[70px] px-2 py-1 rounded-xl border border-border bg-background text-foreground font-inter text-xs focus:outline-none focus:ring-2 focus:ring-primary text-center"
+                  />
+                </div>
+              </div>
+
+              {/* Points toggle */}
+              <div className="bg-muted/30 rounded-xl p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-inter text-sm font-semibold text-foreground">Dá pontuação?</p>
+                    <p className="font-inter text-[10px] text-muted-foreground mt-0.5">
+                      Participar deste evento somará pontos de fé
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setNewTypeForm(f => ({ ...f, gives_points: !f.gives_points }))}
+                    className={`relative w-11 h-6 rounded-full transition-colors ${
+                      newTypeForm.gives_points ? "bg-brand-green" : "bg-muted-foreground/30"
+                    }`}>
+                    <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                      newTypeForm.gives_points ? "left-6" : "left-1"
+                    }`} />
+                  </button>
+                </div>
+
+                {newTypeForm.gives_points && (
+                  <div className="flex items-center gap-3">
+                    <label className="font-inter text-xs text-muted-foreground whitespace-nowrap">Pontos por presença:</label>
+                    <div className="flex items-center gap-2 flex-1">
+                      <button
+                        onClick={() => setNewTypeForm(f => ({ ...f, points: Math.max(1, f.points - 1) }))}
+                        className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center font-bold text-foreground">
+                        −
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={newTypeForm.points}
+                        onChange={e => setNewTypeForm(f => ({ ...f, points: Math.max(1, parseInt(e.target.value) || 1) }))}
+                        className="flex-1 px-2 py-1.5 rounded-xl border border-border bg-background text-foreground font-montserrat font-bold text-base text-center focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                      <button
+                        onClick={() => setNewTypeForm(f => ({ ...f, points: Math.min(100, f.points + 1) }))}
+                        className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center font-bold text-foreground">
+                        +
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Area info */}
+              {currentArea && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/10">
+                  <MapPin className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                  <p className="font-inter text-xs text-primary">
+                    Este tipo ficará visível apenas para <strong>{currentArea}</strong>
+                  </p>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={handleCreateType}
+                  disabled={savingType || !newTypeForm.label.trim()}
+                  className="flex-1 py-3 rounded-xl text-sm font-inter font-medium text-primary-foreground disabled:opacity-50"
+                  style={{ background: "var(--gradient-hero)" }}>
+                  {savingType ? "Criando..." : "Criar tipo"}
+                </button>
+                <button
+                  onClick={() => setShowCreateTypeModal(false)}
+                  className="px-4 py-3 rounded-xl bg-muted text-foreground font-inter text-sm">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Cascade confirmation dialog */}
       {showCascadeDialog && cascadePending && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-in fade-in" onClick={() => { setShowCascadeDialog(false); setCascadePending(null); }}>
@@ -291,17 +482,10 @@ export default function AgendaTab() {
               </p>
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={() => executeCascade(false)}
-                className="flex-1 py-2.5 rounded-xl bg-muted text-foreground font-inter text-sm font-medium"
-              >
+              <button onClick={() => executeCascade(false)} className="flex-1 py-2.5 rounded-xl bg-muted text-foreground font-inter text-sm font-medium">
                 Só este evento
               </button>
-              <button
-                onClick={() => executeCascade(true)}
-                className="flex-1 py-2.5 rounded-xl text-primary-foreground font-inter text-sm font-medium"
-                style={{ background: "var(--gradient-hero)" }}
-              >
+              <button onClick={() => executeCascade(true)} className="flex-1 py-2.5 rounded-xl text-primary-foreground font-inter text-sm font-medium" style={{ background: "var(--gradient-hero)" }}>
                 Prorrogar todos
               </button>
             </div>
@@ -349,10 +533,52 @@ export default function AgendaTab() {
             </div>
           </div>
 
-          <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value, linked_lesson_id: "" }))}
-            className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
-            {EVENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-          </select>
+          {/* Type selector — shows all types + "criar novo" */}
+          <div className="space-y-1">
+            <label className="font-inter text-xs font-medium text-muted-foreground">Tipo de evento</label>
+            <div className="flex gap-2">
+              <select
+                value={form.type}
+                onChange={e => {
+                  if (e.target.value === "__create_new__") {
+                    setShowCreateTypeModal(true);
+                  } else {
+                    setForm(f => ({ ...f, type: e.target.value, linked_lesson_id: "" }));
+                  }
+                }}
+                className="flex-1 px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
+              >
+                {allTypes.map(t => (
+                  <option key={t.value} value={t.value}>
+                    {t.emoji} {t.label}
+                  </option>
+                ))}
+                <option value="__create_new__">➕ Criar novo tipo...</option>
+              </select>
+              <button
+                onClick={() => setShowCreateTypeModal(true)}
+                title="Criar novo tipo de evento"
+                className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center hover:bg-primary/20 transition-colors flex-shrink-0">
+                <Sparkles className="w-4 h-4 text-primary" />
+              </button>
+            </div>
+
+            {/* Show point info for custom types */}
+            {(() => {
+              const custom = customTypes.find(t => t.value === form.type);
+              if (!custom) return null;
+              return (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-green/5 border border-brand-green/20">
+                  <span className="text-xs">⭐</span>
+                  <p className="font-inter text-[10px] text-brand-green font-medium">
+                    {custom.gives_points
+                      ? `Tipo personalizado · ${custom.points} pts por presença`
+                      : "Tipo personalizado · sem pontuação"}
+                  </p>
+                </div>
+              );
+            })()}
+          </div>
 
           <div className="space-y-1">
             <label className="font-inter text-xs font-medium text-muted-foreground">📖 Vincular a um estudo (opcional)</label>
@@ -380,6 +606,23 @@ export default function AgendaTab() {
               Cancelar
             </button>
           </div>
+
+          {/* Manage custom types */}
+          {customTypes.filter(t => !t.area || t.area === currentArea).length > 0 && (
+            <div className="pt-2 border-t border-border space-y-2">
+              <p className="font-inter text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Tipos personalizados desta área</p>
+              {customTypes.filter(t => !t.area || t.area === currentArea).map(t => (
+                <div key={t.id} className="flex items-center justify-between px-3 py-2 rounded-xl bg-muted/30">
+                  <span className="font-inter text-xs text-foreground">{t.emoji} {t.label}{t.gives_points ? ` · ${t.points} pts` : ""}</span>
+                  <button
+                    onClick={() => handleDeleteCustomType(t.id, t.value)}
+                    className="w-6 h-6 rounded-lg bg-destructive/10 flex items-center justify-center hover:bg-destructive/20 transition-colors">
+                    <X className="w-3 h-3 text-destructive" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -395,7 +638,6 @@ export default function AgendaTab() {
       ) : (
         <div className="space-y-3">
           {filteredEvents.map(event => {
-            const typeInfo = EVENT_TYPES.find(t => t.value === event.type);
             const dateObj = new Date(event.event_date);
             const lessonLabel = getLessonLabel(event.linked_lesson_id);
             const isEditingLesson = editingEventId === event.id;
@@ -403,7 +645,7 @@ export default function AgendaTab() {
               <div key={event.id} className="bg-card rounded-2xl border border-border p-4 shadow-sm">
                 <div className="flex items-start gap-3">
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex flex-col items-center justify-center flex-shrink-0">
-                    <span className="text-lg leading-none">{getEventEmoji(event.type)}</span>
+                    <span className="text-lg leading-none">{getEmoji(event.type)}</span>
                     <span className="font-montserrat font-black text-primary text-xs">{format(dateObj, "d", { locale: ptBR })}</span>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -412,7 +654,9 @@ export default function AgendaTab() {
                       {format(dateObj, "EEEE, d 'de' MMMM 'às' HH:mm", { locale: ptBR })}
                     </p>
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-inter font-medium ${getEventColor(event.type)}`}>{typeInfo?.label ?? event.type}</span>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-inter font-medium ${getColor(event.type)}`}>
+                        {getLabel(event.type)}
+                      </span>
                       {event.location && (
                         <span className="flex items-center gap-1 text-muted-foreground text-[10px] font-inter">
                           <MapPin className="w-3 h-3" />{event.location}
@@ -423,6 +667,16 @@ export default function AgendaTab() {
                           <Users className="w-3 h-3" />{event.area}
                         </span>
                       )}
+                      {/* Points badge for custom types */}
+                      {(() => {
+                        const ct = customTypes.find(t => t.value === event.type);
+                        if (!ct || !ct.gives_points) return null;
+                        return (
+                          <span className="flex items-center gap-0.5 text-brand-green text-[10px] font-inter font-semibold">
+                            ⭐ {ct.points} pts
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     {/* Linked lesson display / edit */}

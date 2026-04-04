@@ -79,6 +79,7 @@ export function useUserStats(currentArea?: string): UserStats {
         { data: lessonsData },
         { data: challengeData },
         { data: gameConfig },
+        { data: customEventTypesData },
       ] = await Promise.all([
         supabase.from("activities").select("id, type, title, subtitle, order_num, points").order("order_num"),
         supabase.from("user_progress").select("activity_id, completed_at").eq("user_id", user.id),
@@ -91,6 +92,7 @@ export function useUserStats(currentArea?: string): UserStats {
         supabase.from("lessons").select("id, course_id"),
         supabase.from("challenge_participants").select("id, completed").eq("user_id", user.id).eq("completed", true),
         supabase.rpc("get_game_config" as any),
+        supabase.from("custom_event_types").select("value, gives_points, points"),
       ]);
 
       // Carrega configuração dinâmica com fallback nos defaults
@@ -133,9 +135,33 @@ export function useUserStats(currentArea?: string): UserStats {
         return sum + (dow === 0 || dow === 6 ? cfg.devotionalWeekendPts : cfg.devotionalPoints);
       }, 0);
 
+      // Map custom event type value → points
+      const customTypeMap = new Map<string, { gives_points: boolean; points: number }>(
+        (customEventTypesData ?? []).map((t: any) => [t.value, { gives_points: t.gives_points, points: t.points }])
+      );
+
+      // Fetch event types for attended events so we can apply per-type custom points
+      const presentAttendance = (attendance ?? []).filter(a => a.status === "presente");
+      const attendedEventIds = presentAttendance.map(a => a.event_id).filter(Boolean);
+      let eventTypeById = new Map<string, string>();
+      if (attendedEventIds.length > 0) {
+        const { data: eventsData } = await supabase
+          .from("events")
+          .select("id, type")
+          .in("id", attendedEventIds);
+        (eventsData ?? []).forEach((e: any) => eventTypeById.set(e.id, e.type));
+      }
+
       const completedLessonIds = new Set((lessonResponses ?? []).map(r => r.lesson_id));
       const lessonStudyPoints = completedLessonIds.size * cfg.lessonPoints;
-      const attendancePoints = (attendance ?? []).filter(a => a.status === "presente").length * cfg.attendancePoints;
+
+      // Attendance: custom type with gives_points=true → custom pts; otherwise → default cfg.attendancePoints
+      const attendancePoints = presentAttendance.reduce((sum, a) => {
+        const eventType = eventTypeById.get(a.event_id);
+        const custom = eventType ? customTypeMap.get(eventType) : undefined;
+        if (custom && custom.gives_points) return sum + custom.points;
+        return sum + cfg.attendancePoints;
+      }, 0);
       const worshipPoints = (worshipData ?? []).length * cfg.worshipPoints;
       const achievementBonusPoints = (achievementUnlocks ?? []).reduce((sum, a) => sum + (a.bonus_points ?? 0), 0);
       const challengePoints = (challengeData ?? []).length * cfg.challengePoints;
