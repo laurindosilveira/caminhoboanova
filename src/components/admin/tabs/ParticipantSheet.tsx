@@ -748,12 +748,12 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
 
   const SECTIONS = [
     { id: "overview" as const, label: "Visão Geral" },
+    { id: "liberacoes" as const, label: `Liberações (${manualReleaseDrafts.length})` },
     { id: "plan" as const, label: "Plano" },
     { id: "notes" as const, label: `Notas (${notes.length})` },
     { id: "presenca" as const, label: "Presença" },
     { id: "timeline" as const, label: "Timeline" },
     { id: "jornada" as const, label: "Jornada" },
-    { id: "liberacoes" as const, label: `Liberações (${manualReleaseDrafts.length})` },
     { id: "parecer" as const, label: "📄 Parecer" },
     { id: "relatorio" as const, label: "Relatório" },
   ];
@@ -981,12 +981,20 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
       )}
 
       {/* Quick action buttons */}
+      <button
+        onClick={() => setActiveSection("liberacoes")}
+        className="w-full flex items-center justify-center gap-2 p-3 rounded-2xl border border-primary/20 bg-primary/10 hover:bg-primary/15 transition-colors text-primary"
+      >
+        <BookOpen className="w-4 h-4" />
+        <span className="font-inter text-sm font-bold">Liberar devocional para este participante</span>
+      </button>
+
+      {/* Quick action buttons */}
       <div className="grid grid-cols-2 gap-2">
         {[
           { icon: MessageSquare, label: "Enviar mensagem", action: () => setActiveSection("notes") },
           { icon: FileText, label: "Registrar acomp.", action: () => { setActiveSection("notes"); setShowNoteForm(true); } },
           { icon: Calendar, label: "Agendar conversa", action: () => setShowScheduleForm(true) },
-          { icon: BookOpen, label: "Liberar devocional", action: () => setActiveSection("liberacoes") },
           { icon: AlertTriangle, label: plan.health_status === "critico" ? "⚠️ Crítico" : "Marcar crítico", action: () => setPlan(prev => ({ ...prev, health_status: prev.health_status === "critico" ? "atencao" : "critico" })) },
         ].map(({ icon: Icon, label, action }) => (
           <button key={label} onClick={action}
@@ -1897,3 +1905,5 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
     </div>
   );
 }
+
+
