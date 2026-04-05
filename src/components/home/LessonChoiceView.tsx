@@ -59,6 +59,33 @@ type Props = {
   isStudyCompleted?: boolean;
 };
 
+function normalizeDate(date: Date) {
+  const normalized = new Date(date);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized;
+}
+
+function getWeekendRecoveryWindow(today: Date) {
+  const day = today.getDay();
+  if (day !== 0 && day !== 6) return null;
+
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (day === 0 ? 6 : 5));
+  monday.setHours(0, 0, 0, 0);
+
+  const friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4);
+  friday.setHours(0, 0, 0, 0);
+
+  return { monday, friday };
+}
+
+function isRecoverableOnWeekend(scheduledDate: Date, today: Date) {
+  const recoveryWindow = getWeekendRecoveryWindow(today);
+  if (!recoveryWindow) return false;
+  return scheduledDate >= recoveryWindow.monday && scheduledDate <= recoveryWindow.friday;
+}
+
 /**
  * Compute devotional statuses based on scheduled dates from the agenda.
  *
@@ -86,13 +113,11 @@ function computeDevotionalStatuses(
 
   if (devList.length === 0) return { statuses, lockedSet, recoverySet };
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = normalizeDate(new Date());
 
   // Helper: check if a date equals today
   function isToday(d: Date) {
-    const c = new Date(d); c.setHours(0, 0, 0, 0);
-    return c.getTime() === today.getTime();
+    return normalizeDate(d).getTime() === today.getTime();
   }
 
   // Has ANY devotional from THIS lesson been completed today?
@@ -107,6 +132,71 @@ function computeDevotionalStatuses(
   const released = releasedDayNumbers
     ? new Set(releasedDayNumbers)
     : null; // null = all released
+  const recoveryDateMap = new Map<string, Date>();
+
+  if (scheduledDates.length > 0) {
+    const scheduledDayLimit = devotionalMode === "5_days" ? 5 : Number.POSITIVE_INFINITY;
+    const activeDevs = devList
+      .filter((dev) => dev.day_number <= scheduledDayLimit)
+      .sort((a, b) => a.day_number - b.day_number);
+
+    for (const dev of devList) {
+      if (dev.day_number > scheduledDayLimit) {
+        statuses.set(dev.id, "future");
+        lockedSet.add(dev.id);
+      }
+    }
+
+    for (const dev of activeDevs) {
+      if (released && !released.has(dev.day_number)) {
+        statuses.set(dev.id, "future");
+        lockedSet.add(dev.id);
+        continue;
+      }
+
+      if (completedMap.has(dev.id)) {
+        statuses.set(dev.id, "completed");
+        continue;
+      }
+
+      const scheduledDate = scheduledDates[dev.day_number - 1]
+        ? normalizeDate(new Date(scheduledDates[dev.day_number - 1]))
+        : null;
+
+      if (!scheduledDate) {
+        statuses.set(dev.id, "future");
+        lockedSet.add(dev.id);
+        continue;
+      }
+
+      if (scheduledDate > today) {
+        statuses.set(dev.id, "future");
+        lockedSet.add(dev.id);
+        continue;
+      }
+
+      if (isToday(scheduledDate)) {
+        if (completedToday) {
+          statuses.set(dev.id, "future");
+          lockedSet.add(dev.id);
+        } else {
+          statuses.set(dev.id, "available");
+        }
+        continue;
+      }
+
+      if (completedRecoveryIds.has(dev.id) || isRecoverableOnWeekend(scheduledDate, today)) {
+        statuses.set(dev.id, "recovery");
+        recoverySet.add(dev.id);
+        continue;
+      }
+
+      statuses.set(dev.id, "locked");
+      lockedSet.add(dev.id);
+    }
+
+    return { statuses, lockedSet, recoverySet };
+  }
 
   if (devotionalMode === "5_days" && scheduledDates.length >= 5) {
     // Primary dates: scheduledDates[0..4] → day_number 1..5
@@ -122,26 +212,6 @@ function computeDevotionalStatuses(
       }
     }
 
-    // Identify missed primary devs (for recovery slot assignment)
-    const missedPrimaryDevs: DevotionalItem[] = [];
-    for (const dev of primaryDevs) {
-      const primaryDate = new Date(scheduledDates[dev.day_number - 1]);
-      primaryDate.setHours(0, 0, 0, 0);
-      if (!completedMap.has(dev.id) && primaryDate < today) {
-        missedPrimaryDevs.push(dev);
-      }
-    }
-
-    // Assign recovery dates to missed devs in order
-    const recoveryDateMap = new Map<string, Date>(); // devId -> recovery date
-    missedPrimaryDevs.forEach((dev, i) => {
-      const recoveryDate = scheduledDates[5 + i];
-      if (recoveryDate) {
-        const rd = new Date(recoveryDate); rd.setHours(0, 0, 0, 0);
-        recoveryDateMap.set(dev.id, rd);
-      }
-    });
-
     for (const dev of primaryDevs) {
       // Not in released list → treat as future (hidden by leader)
       if (released && !released.has(dev.day_number)) {
@@ -154,15 +224,12 @@ function computeDevotionalStatuses(
         continue;
       }
 
-      const primaryDate = new Date(scheduledDates[dev.day_number - 1]);
-      primaryDate.setHours(0, 0, 0, 0);
+      const primaryDate = normalizeDate(new Date(scheduledDates[dev.day_number - 1]));
 
       if (primaryDate > today) {
         statuses.set(dev.id, "future");
         lockedSet.add(dev.id);
-      } else if (primaryDate <= today) {
-        const inPrimaryWindow = primaryDate.getTime() === today.getTime();
-        if (inPrimaryWindow) {
+      } else if (isToday(primaryDate)) {
           // Today is primary day
           if (completedToday) {
             statuses.set(dev.id, "future");
