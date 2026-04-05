@@ -521,21 +521,27 @@ export type Database = {
       }
       devotional_progress: {
         Row: {
+          awarded_points: number | null
           completed_at: string
           devotional_id: string
           id: string
+          override_release_id: string | null
           user_id: string
         }
         Insert: {
+          awarded_points?: number | null
           completed_at?: string
           devotional_id: string
           id?: string
+          override_release_id?: string | null
           user_id: string
         }
         Update: {
+          awarded_points?: number | null
           completed_at?: string
           devotional_id?: string
           id?: string
+          override_release_id?: string | null
           user_id?: string
         }
         Relationships: [
@@ -544,6 +550,13 @@ export type Database = {
             columns: ["devotional_id"]
             isOneToOne: false
             referencedRelation: "devotional_content"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "devotional_progress_override_release_id_fkey"
+            columns: ["override_release_id"]
+            isOneToOne: false
+            referencedRelation: "user_devotional_overrides"
             referencedColumns: ["id"]
           },
         ]
@@ -583,6 +596,70 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "devotional_progress"
             referencedColumns: ["user_id", "devotional_id"]
+          },
+        ]
+      }
+      user_devotional_overrides: {
+        Row: {
+          available_from: string | null
+          available_until: string | null
+          created_at: string
+          custom_points: number | null
+          devotional_id: string
+          granted_by: string | null
+          id: string
+          is_unlocked: boolean
+          notes: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          available_from?: string | null
+          available_until?: string | null
+          created_at?: string
+          custom_points?: number | null
+          devotional_id: string
+          granted_by?: string | null
+          id?: string
+          is_unlocked?: boolean
+          notes?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          available_from?: string | null
+          available_until?: string | null
+          created_at?: string
+          custom_points?: number | null
+          devotional_id?: string
+          granted_by?: string | null
+          id?: string
+          is_unlocked?: boolean
+          notes?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_devotional_overrides_devotional_id_fkey"
+            columns: ["devotional_id"]
+            isOneToOne: false
+            referencedRelation: "devotional_content"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_devotional_overrides_granted_by_fkey"
+            columns: ["granted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "user_devotional_overrides_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }

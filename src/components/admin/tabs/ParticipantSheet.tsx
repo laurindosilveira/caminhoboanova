@@ -104,6 +104,26 @@ type Lesson = { id: string; title: string; order_num: number; objective: string 
 type Course = { id: string; title: string; order_num: number };
 type LessonCompletion = { lesson_id: string; completed_at: string | null };
 type DevotionalCompletion = { devotional_id: string; lesson_id: string | null; completed_at: string };
+type DevotionalCatalogItem = {
+  id: string;
+  lesson_id: string | null;
+  title: string;
+  day_number: number;
+  lesson_title: string;
+  course_title: string;
+};
+type ManualDevotionalReleaseDraft = {
+  id: string;
+  user_id?: string;
+  devotional_id: string;
+  custom_points: number;
+  available_from: string;
+  available_until: string;
+  notes: string;
+  is_unlocked: boolean;
+  created_at: string;
+  granted_by?: string;
+};
 
 import { ALL_COMMUNITIES as COMMUNITIES_LIST, getAreaForCommunity as getArea } from "@/config/areas";
 
@@ -122,7 +142,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [noteForm, setNoteForm] = useState({ note_type: "acompanhamento", content: "" });
   const [savingNote, setSavingNote] = useState(false);
-  const [activeSection, setActiveSection] = useState<"overview"|"plan"|"notes"|"jornada"|"presenca"|"timeline"|"relatorio"|"parecer">("overview");
+  const [activeSection, setActiveSection] = useState<"overview"|"plan"|"notes"|"jornada"|"liberacoes"|"presenca"|"timeline"|"relatorio"|"parecer">("overview");
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("14:00");
@@ -141,9 +161,21 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   const [savingConfYear, setSavingConfYear] = useState(false);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [devotionalCatalog, setDevotionalCatalog] = useState<DevotionalCatalogItem[]>([]);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [lessonCompletions, setLessonCompletions] = useState<LessonCompletion[]>([]);
   const [devotionalCompletions, setDevotionalCompletions] = useState<DevotionalCompletion[]>([]);
+  const [manualReleaseDrafts, setManualReleaseDrafts] = useState<ManualDevotionalReleaseDraft[]>([]);
+  const [manualReleaseForm, setManualReleaseForm] = useState({
+    devotional_id: "",
+    custom_points: 5,
+    available_from: "",
+    available_until: "",
+    notes: "",
+    is_unlocked: true,
+  });
+  const [loadingManualReleases, setLoadingManualReleases] = useState(false);
+  const [savingManualRelease, setSavingManualRelease] = useState(false);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [timelineItems, setTimelineItems] = useState<TimelineItem[]>([]);
   const [meetingEvals, setMeetingEvals] = useState<MeetingEval[]>([]);
@@ -183,7 +215,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
         supabase.from("lessons").select("id, title, order_num, objective, topics, course_id").order("order_num"),
         supabase.from("lesson_responses").select("lesson_id, created_at").eq("user_id", p.user_id).order("created_at"),
         supabase.from("devotional_progress").select("devotional_id, completed_at").eq("user_id", p.user_id).order("completed_at"),
-        supabase.from("devotional_content").select("id, lesson_id"),
+        supabase.from("devotional_content").select("id, lesson_id, title, day_number"),
         supabase.from("attendance").select("id, event_id, status, created_at").eq("user_id", p.user_id),
         supabase.from("user_progress").select("activity_id, completed_at").eq("user_id", p.user_id),
         supabase.from("spiritual_assessments").select("month, year, prayer_score, presence_score, created_at").eq("user_id", p.user_id),
@@ -214,6 +246,8 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
         : (lessonsData ?? []);
       setLessons(visibleLessons);
       const visibleLessonIds = new Set(visibleLessons.map((lesson) => lesson.id));
+      const lessonMap = new Map(visibleLessons.map((lesson) => [lesson.id, lesson]));
+      const courseTitleMap = new Map((visibleCourses as Course[]).map((course) => [course.id, course.title]));
 
       const lessonCompletionMap = new Map<string, string | null>();
       (lessonResponsesData ?? []).forEach((response) => {
@@ -231,6 +265,26 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
       );
 
       const devotionalLessonMap = new Map((devotionalContentData ?? []).map((devotional: any) => [devotional.id, devotional.lesson_id]));
+      const catalog = (devotionalContentData ?? [])
+        .filter((devotional: any) => devotional.lesson_id && visibleLessonIds.has(devotional.lesson_id))
+        .map((devotional: any) => {
+          const lesson = lessonMap.get(devotional.lesson_id);
+          return {
+            id: devotional.id,
+            lesson_id: devotional.lesson_id,
+            title: devotional.title || `Devocional ${devotional.day_number}`,
+            day_number: devotional.day_number ?? 0,
+            lesson_title: lesson?.title ?? "Lição",
+            course_title: lesson ? courseTitleMap.get(lesson.course_id) ?? "Curso" : "Curso",
+          };
+        })
+        .sort((a, b) => {
+          if (a.course_title !== b.course_title) return a.course_title.localeCompare(b.course_title);
+          if (a.lesson_title !== b.lesson_title) return a.lesson_title.localeCompare(b.lesson_title);
+          return a.day_number - b.day_number;
+        });
+      setDevotionalCatalog(catalog);
+
       setDevotionalCompletions(
         (devotionalProgressData ?? [])
           .map((progress: any) => ({
@@ -433,6 +487,42 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
     load();
   }, [p.user_id]);
 
+  async function fetchManualReleaseDrafts() {
+    const storageKey = `manual-devotional-release-drafts:${p.user_id}`;
+    setLoadingManualReleases(true);
+
+    const { data, error } = await supabase
+      .from("user_devotional_overrides" as any)
+      .select("id, user_id, devotional_id, custom_points, available_from, available_until, notes, is_unlocked, created_at, granted_by")
+      .eq("user_id", p.user_id)
+      .order("created_at", { ascending: false });
+
+    if (!error) {
+      setManualReleaseDrafts((data ?? []) as ManualDevotionalReleaseDraft[]);
+      window.localStorage.removeItem(storageKey);
+      setLoadingManualReleases(false);
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) {
+        setManualReleaseDrafts([]);
+      } else {
+        const parsed = JSON.parse(raw) as ManualDevotionalReleaseDraft[];
+        setManualReleaseDrafts(Array.isArray(parsed) ? parsed : []);
+      }
+    } catch {
+      setManualReleaseDrafts([]);
+    }
+
+    setLoadingManualReleases(false);
+  }
+
+  useEffect(() => {
+    fetchManualReleaseDrafts();
+  }, [p.user_id]);
+
   async function handleSavePlan() {
     setSaving(true);
     await supabase.from("discipleship_plans").upsert({
@@ -470,6 +560,104 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
     setNotes(data ?? []);
   }
 
+  function resetManualReleaseForm() {
+    setManualReleaseForm({
+      devotional_id: "",
+      custom_points: 5,
+      available_from: "",
+      available_until: "",
+      notes: "",
+      is_unlocked: true,
+    });
+  }
+
+  async function handleAddManualReleaseDraft() {
+    if (!manualReleaseForm.devotional_id) return;
+
+    const customPoints = Number.isFinite(manualReleaseForm.custom_points)
+      ? Math.max(0, Number(manualReleaseForm.custom_points))
+      : 0;
+
+    const draft: ManualDevotionalReleaseDraft = {
+      id: crypto.randomUUID(),
+      devotional_id: manualReleaseForm.devotional_id,
+      custom_points: customPoints,
+      available_from: manualReleaseForm.available_from,
+      available_until: manualReleaseForm.available_until,
+      notes: manualReleaseForm.notes.trim(),
+      is_unlocked: manualReleaseForm.is_unlocked,
+      created_at: new Date().toISOString(),
+    };
+
+    setSavingManualRelease(true);
+    const { data: authData } = await supabase.auth.getUser();
+    const leaderId = authData.user?.id ?? null;
+    const payload = {
+      user_id: p.user_id,
+      devotional_id: manualReleaseForm.devotional_id,
+      custom_points: customPoints,
+      available_from: manualReleaseForm.available_from || null,
+      available_until: manualReleaseForm.available_until || null,
+      notes: manualReleaseForm.notes.trim() || null,
+      is_unlocked: manualReleaseForm.is_unlocked,
+      granted_by: leaderId,
+    };
+
+    const { error } = await supabase
+      .from("user_devotional_overrides" as any)
+      .upsert(payload, { onConflict: "user_id,devotional_id" })
+      .select("id, user_id, devotional_id, custom_points, available_from, available_until, notes, is_unlocked, created_at, granted_by");
+
+    if (error) {
+      const storageKey = `manual-devotional-release-drafts:${p.user_id}`;
+      setManualReleaseDrafts((prev) => [draft, ...prev.filter((item) => item.devotional_id !== draft.devotional_id)]);
+      window.localStorage.setItem(storageKey, JSON.stringify([draft, ...manualReleaseDrafts.filter((item) => item.devotional_id !== draft.devotional_id)]));
+      toast({
+        title: "Rascunho salvo localmente",
+        description: "A tabela ainda não existe no Supabase. Rode o SQL da parte 2 para persistir de verdade.",
+      });
+      resetManualReleaseForm();
+      setSavingManualRelease(false);
+      setActiveSection("liberacoes");
+      return;
+    }
+
+    await fetchManualReleaseDrafts();
+    toast({
+      title: "Liberação manual salva",
+      description: "O override deste devocional já está registrado no banco.",
+    });
+    resetManualReleaseForm();
+    setSavingManualRelease(false);
+    setActiveSection("liberacoes");
+  }
+
+  async function handleRemoveManualReleaseDraft(draftId: string) {
+    const draft = manualReleaseDrafts.find((item) => item.id === draftId);
+    if (!draft) return;
+
+    const { error } = await supabase
+      .from("user_devotional_overrides" as any)
+      .delete()
+      .eq("id", draftId);
+
+    if (!error) {
+      setManualReleaseDrafts((prev) => prev.filter((item) => item.id !== draftId));
+      toast({
+        title: "Liberação removida",
+        description: "O override foi apagado do banco.",
+      });
+      return;
+    }
+
+    const storageKey = `manual-devotional-release-drafts:${p.user_id}`;
+    setManualReleaseDrafts((prev) => {
+      const next = prev.filter((item) => item.id !== draftId);
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
+      return next;
+    });
+  }
+
   const completedIds = new Set(p.completed_activity_ids);
   const formacoes = activities.filter(a => a.type === "formacao");
   const devocionais = activities.filter(a => a.type === "devocional");
@@ -484,6 +672,8 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   const realCompletedCount = doneForm + doneDev + doneEnc + otherDone;
   const pct = activities.length > 0 ? Math.round((realCompletedCount / activities.length) * 100) : 0;
   const age = calcAge(p.birth_date);
+  const completedDevotionalIds = new Set(devotionalCompletions.map((completion) => completion.devotional_id));
+  const selectedManualDevotional = devotionalCatalog.find((devotional) => devotional.id === manualReleaseForm.devotional_id) ?? null;
 
   // Attendance stats
   const totalEvents = attendanceRecords.length;
@@ -563,6 +753,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
     { id: "presenca" as const, label: "Presença" },
     { id: "timeline" as const, label: "Timeline" },
     { id: "jornada" as const, label: "Jornada" },
+    { id: "liberacoes" as const, label: `Liberações (${manualReleaseDrafts.length})` },
     { id: "parecer" as const, label: "📄 Parecer" },
     { id: "relatorio" as const, label: "Relatório" },
   ];
@@ -795,6 +986,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
           { icon: MessageSquare, label: "Enviar mensagem", action: () => setActiveSection("notes") },
           { icon: FileText, label: "Registrar acomp.", action: () => { setActiveSection("notes"); setShowNoteForm(true); } },
           { icon: Calendar, label: "Agendar conversa", action: () => setShowScheduleForm(true) },
+          { icon: BookOpen, label: "Liberar devocional", action: () => setActiveSection("liberacoes") },
           { icon: AlertTriangle, label: plan.health_status === "critico" ? "⚠️ Crítico" : "Marcar crítico", action: () => setPlan(prev => ({ ...prev, health_status: prev.health_status === "critico" ? "atencao" : "critico" })) },
         ].map(({ icon: Icon, label, action }) => (
           <button key={label} onClick={action}
@@ -1405,6 +1597,223 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {activeSection === "liberacoes" && (
+        <div className="space-y-4">
+          <div className="bg-accent/10 border border-accent/20 rounded-2xl p-4 space-y-2">
+            <div className="flex items-start gap-2">
+              <BookOpen className="w-4 h-4 text-accent-foreground flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-montserrat font-bold text-foreground text-sm">Liberação manual de devocionais</p>
+                <p className="font-inter text-xs text-muted-foreground mt-1">
+                  O líder pode liberar um devocional específico para este usuário, definir a pontuação e o período de acesso.
+                  Se a migration ainda não tiver sido aplicada, o app cai em fallback local neste navegador.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-montserrat font-bold text-foreground text-sm">Novo rascunho para {p.full_name}</p>
+                <p className="font-inter text-[11px] text-muted-foreground">
+                  Escolha um devocional específico, defina os pontos e o período da liberação manual.
+                </p>
+              </div>
+              <span className="px-2 py-1 rounded-lg bg-muted text-muted-foreground text-[10px] font-inter font-semibold">
+                Etapa 1
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[11px] font-inter font-bold text-foreground">Devocional</label>
+              <select
+                value={manualReleaseForm.devotional_id}
+                onChange={(e) => setManualReleaseForm((prev) => ({ ...prev, devotional_id: e.target.value }))}
+                className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="">Selecione um devocional</option>
+                {devotionalCatalog.map((devotional) => (
+                  <option key={devotional.id} value={devotional.id}>
+                    {devotional.course_title} · {devotional.lesson_title} · Dia {devotional.day_number} · {devotional.title}
+                  </option>
+                ))}
+              </select>
+              {selectedManualDevotional && (
+                <div className="rounded-xl bg-muted/40 border border-border p-3">
+                  <p className="font-inter text-xs text-foreground font-medium">
+                    {selectedManualDevotional.lesson_title} · Dia {selectedManualDevotional.day_number}
+                  </p>
+                  <p className="font-inter text-[11px] text-muted-foreground mt-0.5">{selectedManualDevotional.title}</p>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <span className="px-2 py-1 rounded-lg bg-background border border-border text-[10px] font-inter text-muted-foreground">
+                      {selectedManualDevotional.course_title}
+                    </span>
+                    {completedDevotionalIds.has(selectedManualDevotional.id) && (
+                      <span className="px-2 py-1 rounded-lg bg-brand-green/10 text-brand-green text-[10px] font-inter font-semibold">
+                        Já concluído por este usuário
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] font-inter font-bold text-foreground mb-1">Pontuação</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={manualReleaseForm.custom_points}
+                  onChange={(e) => setManualReleaseForm((prev) => ({ ...prev, custom_points: Number(e.target.value) }))}
+                  className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-inter font-bold text-foreground mb-1">Liberar em</label>
+                <input
+                  type="datetime-local"
+                  value={manualReleaseForm.available_from}
+                  onChange={(e) => setManualReleaseForm((prev) => ({ ...prev, available_from: e.target.value }))}
+                  className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-inter font-bold text-foreground mb-1">Expira em</label>
+                <input
+                  type="datetime-local"
+                  value={manualReleaseForm.available_until}
+                  onChange={(e) => setManualReleaseForm((prev) => ({ ...prev, available_until: e.target.value }))}
+                  className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-[11px] font-inter font-bold text-foreground">Observação do líder</label>
+              <textarea
+                value={manualReleaseForm.notes}
+                onChange={(e) => setManualReleaseForm((prev) => ({ ...prev, notes: e.target.value }))}
+                rows={3}
+                placeholder="Ex.: recuperação autorizada por ausência justificada no encontro."
+                className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+              />
+            </div>
+
+            <label className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-3 py-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={manualReleaseForm.is_unlocked}
+                onChange={(e) => setManualReleaseForm((prev) => ({ ...prev, is_unlocked: e.target.checked }))}
+                className="w-4 h-4 accent-primary"
+              />
+              <div>
+                <p className="font-inter text-sm font-medium text-foreground">Marcar como liberado manualmente</p>
+                <p className="font-inter text-[11px] text-muted-foreground">
+                  Desative apenas se quiser deixar o override preparado, mas não ativo.
+                </p>
+              </div>
+            </label>
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleAddManualReleaseDraft}
+                disabled={!manualReleaseForm.devotional_id || savingManualRelease}
+                className="flex-1 h-11 rounded-xl font-inter text-sm font-bold text-primary-foreground disabled:opacity-60"
+                style={{ background: "var(--gradient-hero)" }}
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Plus className="w-4 h-4" />
+                  {savingManualRelease ? "Salvando..." : "Salvar liberação"}
+                </span>
+              </button>
+              <button
+                onClick={resetManualReleaseForm}
+                className="px-4 h-11 rounded-xl border border-border text-sm font-inter text-muted-foreground hover:text-foreground"
+              >
+                Limpar
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-montserrat font-bold text-foreground text-sm">Rascunhos preparados</p>
+                <p className="font-inter text-[11px] text-muted-foreground">
+                  Quando a migration já existe no Supabase, esta lista reflete os overrides reais salvos no banco.
+                </p>
+              </div>
+              <span className="px-2 py-1 rounded-lg bg-muted text-muted-foreground text-[10px] font-inter font-semibold">
+                {manualReleaseDrafts.length} item(ns)
+              </span>
+            </div>
+
+            {loadingManualReleases ? (
+              <div className="text-center py-8 text-muted-foreground font-inter text-sm">
+                <Clock className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                <p>Carregando liberações...</p>
+              </div>
+            ) : manualReleaseDrafts.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground font-inter text-sm">
+                <BookOpen className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                <p>Nenhum rascunho manual criado ainda.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {manualReleaseDrafts.map((draft) => {
+                  const devotional = devotionalCatalog.find((item) => item.id === draft.devotional_id);
+                  return (
+                    <div key={draft.id} className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-inter text-sm font-semibold text-foreground">
+                            {devotional?.title ?? "Devocional removido"}
+                          </p>
+                          <p className="font-inter text-[11px] text-muted-foreground">
+                            {devotional ? `${devotional.lesson_title} · Dia ${devotional.day_number}` : "Devocional não encontrado na lista atual"}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleRemoveManualReleaseDraft(draft.id)}
+                          className="text-destructive text-[11px] font-inter font-semibold hover:underline"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="px-2 py-1 rounded-lg bg-background border border-border text-[10px] font-inter text-foreground">
+                          {draft.custom_points} pts
+                        </span>
+                        <span className={`px-2 py-1 rounded-lg text-[10px] font-inter font-semibold ${draft.is_unlocked ? "bg-brand-green/10 text-brand-green" : "bg-muted text-muted-foreground"}`}>
+                          {draft.is_unlocked ? "Liberado" : "Preparado, mas inativo"}
+                        </span>
+                        {draft.available_from && (
+                          <span className="px-2 py-1 rounded-lg bg-background border border-border text-[10px] font-inter text-muted-foreground">
+                            Início: {new Date(draft.available_from).toLocaleString("pt-BR")}
+                          </span>
+                        )}
+                        {draft.available_until && (
+                          <span className="px-2 py-1 rounded-lg bg-background border border-border text-[10px] font-inter text-muted-foreground">
+                            Fim: {new Date(draft.available_until).toLocaleString("pt-BR")}
+                          </span>
+                        )}
+                      </div>
+                      {draft.notes && (
+                        <p className="font-inter text-[11px] text-muted-foreground bg-background rounded-lg border border-border px-2.5 py-2">
+                          {draft.notes}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

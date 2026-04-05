@@ -22,9 +22,11 @@ type Props = {
   hideCompleteButton?: boolean;
   /** True when this completion happens during the recovery window (lower points). */
   isRecovery?: boolean;
+  awardedPoints?: number;
+  overrideId?: string;
 };
 
-export default function DevotionalView({ activity, onBack, onComplete, isCompleted, devotionalData, hideCompleteButton, isRecovery = false }: Props) {
+export default function DevotionalView({ activity, onBack, onComplete, isCompleted, devotionalData, hideCompleteButton, isRecovery = false, awardedPoints, overrideId }: Props) {
   const [content, setContent] = useState<DevotionalContent | null>(devotionalData ?? null);
   const [loading, setLoading] = useState(!devotionalData);
   const [completing, setCompleting] = useState(false);
@@ -115,11 +117,22 @@ export default function DevotionalView({ activity, onBack, onComplete, isComplet
       response: answers[index] ?? "",
     }));
 
-    const { error: progressError } = await supabase.from("devotional_progress").insert({
+    let { error: progressError } = await supabase.from("devotional_progress").insert({
       user_id: user.id,
       devotional_id: activity.id,
       is_recovery: isRecovery,
-    });
+      awarded_points: awardedPoints ?? activity.points,
+      override_release_id: overrideId ?? null,
+    } as any);
+
+    if (progressError && /awarded_points|override_release_id/i.test(progressError.message)) {
+      const fallback = await supabase.from("devotional_progress").insert({
+        user_id: user.id,
+        devotional_id: activity.id,
+        is_recovery: isRecovery,
+      } as any);
+      progressError = fallback.error;
+    }
 
     if (progressError) {
       toast.error("Não foi possível concluir o devocional.", {

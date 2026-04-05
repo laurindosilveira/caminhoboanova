@@ -83,7 +83,7 @@ export function useUserStats(currentArea?: string): UserStats {
       ] = await Promise.all([
         supabase.from("activities").select("id, type, title, subtitle, order_num, points").order("order_num"),
         supabase.from("user_progress").select("activity_id, completed_at").eq("user_id", user.id),
-        supabase.from("devotional_progress").select("devotional_id, completed_at, is_recovery").eq("user_id", user.id),
+        supabase.from("devotional_progress").select("devotional_id, completed_at, is_recovery, awarded_points").eq("user_id", user.id),
         supabase.from("lesson_responses").select("lesson_id").eq("user_id", user.id),
         supabase.from("attendance").select("event_id, status").eq("user_id", user.id),
         supabase.from("worship_attendance").select("id, status").eq("user_id", user.id).eq("status", "aprovado"),
@@ -130,6 +130,7 @@ export function useUserStats(currentArea?: string): UserStats {
 
       // Pontos de devocionais: recovery = valor reduzido, fim de semana = weekendPts, normal = devotionalPoints
       const devotionalPoints = devProg.reduce((sum, dp: any) => {
+        if (typeof dp.awarded_points === "number") return sum + dp.awarded_points;
         if (dp.is_recovery) return sum + cfg.devotionalRecoveryPts;
         const dow = new Date(dp.completed_at).getDay();
         return sum + (dow === 0 || dow === 6 ? cfg.devotionalWeekendPts : cfg.devotionalPoints);
