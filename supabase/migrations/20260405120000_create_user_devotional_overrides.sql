@@ -124,7 +124,9 @@ BEGIN
   END IF;
 END $$;
 
-CREATE OR REPLACE FUNCTION public.get_community_ranking(_community text)
+DROP FUNCTION IF EXISTS public.get_community_ranking(text);
+
+CREATE OR REPLACE FUNCTION public.get_community_ranking(_community community_name)
 RETURNS TABLE(user_id uuid, full_name text, completed_count bigint, faith_points bigint)
 LANGUAGE plpgsql SECURITY DEFINER
 AS $$
