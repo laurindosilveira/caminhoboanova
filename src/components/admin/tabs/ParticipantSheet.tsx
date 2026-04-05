@@ -166,6 +166,11 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   const [lessonCompletions, setLessonCompletions] = useState<LessonCompletion[]>([]);
   const [devotionalCompletions, setDevotionalCompletions] = useState<DevotionalCompletion[]>([]);
   const [manualReleaseDrafts, setManualReleaseDrafts] = useState<ManualDevotionalReleaseDraft[]>([]);
+  const [manualReleaseSelection, setManualReleaseSelection] = useState({
+    course_id: "",
+    lesson_id: "",
+    content_kind: "devotional" as "lesson" | "devotional",
+  });
   const [manualReleaseForm, setManualReleaseForm] = useState({
     devotional_id: "",
     custom_points: 5,
@@ -561,6 +566,11 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   }
 
   function resetManualReleaseForm() {
+    setManualReleaseSelection({
+      course_id: "",
+      lesson_id: "",
+      content_kind: "devotional",
+    });
     setManualReleaseForm({
       devotional_id: "",
       custom_points: 5,
@@ -672,6 +682,14 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   const realCompletedCount = doneForm + doneDev + doneEnc + otherDone;
   const pct = activities.length > 0 ? Math.round((realCompletedCount / activities.length) * 100) : 0;
   const age = calcAge(p.birth_date);
+  const manualReleaseCourses = courses.filter((course) => lessons.some((lesson) => lesson.course_id === course.id));
+  const manualReleaseLessons = lessons.filter((lesson) => (
+    !manualReleaseSelection.course_id || lesson.course_id === manualReleaseSelection.course_id
+  ));
+  const manualReleaseLessonDevotionals = devotionalCatalog.filter((devotional) => (
+    manualReleaseSelection.lesson_id ? devotional.lesson_id === manualReleaseSelection.lesson_id : false
+  ));
+  const selectedManualLesson = lessons.find((lesson) => lesson.id === manualReleaseSelection.lesson_id) ?? null;
   const completedDevotionalIds = new Set(devotionalCompletions.map((completion) => completion.devotional_id));
   const selectedManualDevotional = devotionalCatalog.find((devotional) => devotional.id === manualReleaseForm.devotional_id) ?? null;
 
@@ -1622,13 +1640,12 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
               </div>
             </div>
           </div>
-
           <div className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="font-montserrat font-bold text-foreground text-sm">Novo rascunho para {p.full_name}</p>
                 <p className="font-inter text-[11px] text-muted-foreground">
-                  Escolha um devocional específico, defina os pontos e o período da liberação manual.
+                  Escolha primeiro o curso, depois a li??o e por fim o tipo de conte?do que deseja liberar.
                 </p>
               </div>
               <span className="px-2 py-1 rounded-lg bg-muted text-muted-foreground text-[10px] font-inter font-semibold">
@@ -1636,39 +1653,142 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
               </span>
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-[11px] font-inter font-bold text-foreground">Devocional</label>
-              <select
-                value={manualReleaseForm.devotional_id}
-                onChange={(e) => setManualReleaseForm((prev) => ({ ...prev, devotional_id: e.target.value }))}
-                className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="">Selecione um devocional</option>
-                {devotionalCatalog.map((devotional) => (
-                  <option key={devotional.id} value={devotional.id}>
-                    {devotional.course_title} · {devotional.lesson_title} · Dia {devotional.day_number} · {devotional.title}
-                  </option>
-                ))}
-              </select>
-              {selectedManualDevotional && (
-                <div className="rounded-xl bg-muted/40 border border-border p-3">
-                  <p className="font-inter text-xs text-foreground font-medium">
-                    {selectedManualDevotional.lesson_title} · Dia {selectedManualDevotional.day_number}
-                  </p>
-                  <p className="font-inter text-[11px] text-muted-foreground mt-0.5">{selectedManualDevotional.title}</p>
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    <span className="px-2 py-1 rounded-lg bg-background border border-border text-[10px] font-inter text-muted-foreground">
-                      {selectedManualDevotional.course_title}
-                    </span>
-                    {completedDevotionalIds.has(selectedManualDevotional.id) && (
-                      <span className="px-2 py-1 rounded-lg bg-brand-green/10 text-brand-green text-[10px] font-inter font-semibold">
-                        Já concluído por este usuário
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="block text-[11px] font-inter font-bold text-foreground">Curso</label>
+                <select
+                  value={manualReleaseSelection.course_id}
+                  onChange={(e) => {
+                    const nextCourseId = e.target.value;
+                    setManualReleaseSelection((prev) => ({
+                      ...prev,
+                      course_id: nextCourseId,
+                      lesson_id: "",
+                    }));
+                    setManualReleaseForm((prev) => ({ ...prev, devotional_id: "" }));
+                  }}
+                  className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">Selecione um curso</option>
+                  {manualReleaseCourses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      Curso {course.order_num} ? {course.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-[11px] font-inter font-bold text-foreground">Li??o</label>
+                <select
+                  value={manualReleaseSelection.lesson_id}
+                  onChange={(e) => {
+                    const nextLessonId = e.target.value;
+                    setManualReleaseSelection((prev) => ({
+                      ...prev,
+                      lesson_id: nextLessonId,
+                    }));
+                    setManualReleaseForm((prev) => ({ ...prev, devotional_id: "" }));
+                  }}
+                  disabled={!manualReleaseSelection.course_id}
+                  className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">{manualReleaseSelection.course_id ? "Selecione uma li??o" : "Escolha primeiro o curso"}</option>
+                  {manualReleaseLessons.map((lesson) => (
+                    <option key={lesson.id} value={lesson.id}>
+                      Li??o {lesson.order_num} ? {lesson.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+
+            <div className="space-y-2">
+              <label className="block text-[11px] font-inter font-bold text-foreground">Tipo de conte?do</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setManualReleaseSelection((prev) => ({ ...prev, content_kind: "lesson" }));
+                    setManualReleaseForm((prev) => ({ ...prev, devotional_id: "" }));
+                  }}
+                  disabled={!manualReleaseSelection.lesson_id}
+                  className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+                    manualReleaseSelection.content_kind === "lesson"
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-background"
+                  } disabled:opacity-60`}
+                >
+                  <p className="font-inter text-sm font-semibold text-foreground">Conte?do da li??o</p>
+                  <p className="font-inter text-[11px] text-muted-foreground mt-1">
+                    Preparado para este fluxo, mas ainda sem persist?ncia manual no banco.
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setManualReleaseSelection((prev) => ({ ...prev, content_kind: "devotional" }))}
+                  disabled={!manualReleaseSelection.lesson_id}
+                  className={`rounded-xl border px-3 py-3 text-left transition-colors ${
+                    manualReleaseSelection.content_kind === "devotional"
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-background"
+                  } disabled:opacity-60`}
+                >
+                  <p className="font-inter text-sm font-semibold text-foreground">Devocionais</p>
+                  <p className="font-inter text-[11px] text-muted-foreground mt-1">
+                    Libera um devocional espec?fico da li??o com pontua??o personalizada.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            {manualReleaseSelection.content_kind === "lesson" && selectedManualLesson && (
+              <div className="rounded-xl border border-accent/20 bg-accent/10 p-3">
+                <p className="font-inter text-sm font-semibold text-foreground">{selectedManualLesson.title}</p>
+                <p className="font-inter text-[11px] text-muted-foreground mt-1">
+                  A escolha de curso e li??o j? est? pronta. Para realmente liberar o conte?do da li??o para um usu?rio espec?fico, ainda falta criarmos a persist?ncia dessa regra no Supabase.
+                </p>
+              </div>
+            )}
+
+            {manualReleaseSelection.content_kind === "devotional" && (
+              <div className="space-y-2">
+                <label className="block text-[11px] font-inter font-bold text-foreground">Devocional</label>
+                <select
+                  value={manualReleaseForm.devotional_id}
+                  onChange={(e) => setManualReleaseForm((prev) => ({ ...prev, devotional_id: e.target.value }))}
+                  disabled={!manualReleaseSelection.lesson_id}
+                  className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">
+                    {manualReleaseSelection.lesson_id ? "Selecione um devocional da li??o" : "Escolha primeiro o curso e a li??o"}
+                  </option>
+                  {manualReleaseLessonDevotionals.map((devotional) => (
+                    <option key={devotional.id} value={devotional.id}>
+                      Dia {devotional.day_number} ? {devotional.title}
+                    </option>
+                  ))}
+                </select>
+                {selectedManualDevotional && (
+                  <div className="rounded-xl bg-muted/40 border border-border p-3">
+                    <p className="font-inter text-xs text-foreground font-medium">
+                      {selectedManualDevotional.lesson_title} ? Dia {selectedManualDevotional.day_number}
+                    </p>
+                    <p className="font-inter text-[11px] text-muted-foreground mt-0.5">{selectedManualDevotional.title}</p>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className="px-2 py-1 rounded-lg bg-background border border-border text-[10px] font-inter text-muted-foreground">
+                        {selectedManualDevotional.course_title}
+                      </span>
+                      {completedDevotionalIds.has(selectedManualDevotional.id) && (
+                        <span className="px-2 py-1 rounded-lg bg-brand-green/10 text-brand-green text-[10px] font-inter font-semibold">
+                          J? conclu?do por este usu?rio
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
@@ -1730,7 +1850,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
             <div className="flex gap-2">
               <button
                 onClick={handleAddManualReleaseDraft}
-                disabled={!manualReleaseForm.devotional_id || savingManualRelease}
+                disabled={manualReleaseSelection.content_kind !== "devotional" || !manualReleaseForm.devotional_id || savingManualRelease}
                 className="flex-1 h-11 rounded-xl font-inter text-sm font-bold text-primary-foreground disabled:opacity-60"
                 style={{ background: "var(--gradient-hero)" }}
               >
