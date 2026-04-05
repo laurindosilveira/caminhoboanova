@@ -132,47 +132,40 @@ function computeDevotionalStatuses(
 
   const today = normalizeDate(new Date());
   const now = new Date();
+  const released = releasedDayNumbers ? new Set(releasedDayNumbers) : null;
+  const scheduledDayLimit = devotionalMode === "5_days" ? 5 : Number.POSITIVE_INFINITY;
 
-  // Helper: check if a date equals today
-  function isToday(d: Date) {
-    return normalizeDate(d).getTime() === today.getTime();
+  function isToday(date: Date) {
+    return normalizeDate(date).getTime() === today.getTime();
   }
 
-  // Has ANY devotional from THIS lesson been completed today?
-  const devListIds = new Set(devList.map(d => d.id));
+  const devListIds = new Set(devList.map((dev) => dev.id));
   const completedToday = Array.from(completedMap.entries()).some(([devId, dateStr]) => {
     if (!devListIds.has(devId)) return false;
-    const d = new Date(dateStr); d.setHours(0, 0, 0, 0);
-    return d.getTime() === today.getTime();
+    const completedDate = new Date(dateStr);
+    completedDate.setHours(0, 0, 0, 0);
+    return completedDate.getTime() === today.getTime();
   });
 
-  // Which days are actually released (null = all)
-  const released = releasedDayNumbers
-    ? new Set(releasedDayNumbers)
-    : null; // null = all released
-  const recoveryDateMap = new Map<string, Date>();
+  for (const dev of devList) {
+    if (dev.day_number > scheduledDayLimit) {
+      statuses.set(dev.id, "future");
+      lockedSet.add(dev.id);
+    }
+  }
+
+  const activeDevs = devList
+    .filter((dev) => dev.day_number <= scheduledDayLimit)
+    .sort((a, b) => a.day_number - b.day_number);
 
   if (scheduledDates.length > 0) {
-    const scheduledDayLimit = devotionalMode === "5_days" ? 5 : Number.POSITIVE_INFINITY;
-    const activeDevs = devList
-      .filter((dev) => dev.day_number <= scheduledDayLimit)
-      .sort((a, b) => a.day_number - b.day_number);
-
-    for (const dev of devList) {
-      if (dev.day_number > scheduledDayLimit) {
-        statuses.set(dev.id, "future");
-        lockedSet.add(dev.id);
-      }
-    }
-
     for (const dev of activeDevs) {
       const activeOverride = overrideMap.get(dev.id);
-      if (released && !released.has(dev.day_number)) {
-        if (!isOverrideActive(activeOverride, now)) {
-          statuses.set(dev.id, "future");
-          lockedSet.add(dev.id);
-          continue;
-        }
+
+      if (released && !released.has(dev.day_number) && !isOverrideActive(activeOverride, now)) {
+        statuses.set(dev.id, "future");
+        lockedSet.add(dev.id);
+        continue;
       }
 
       if (completedMap.has(dev.id)) {
@@ -185,9 +178,8 @@ function computeDevotionalStatuses(
         continue;
       }
 
-      const scheduledDate = scheduledDates[dev.day_number - 1]
-        ? normalizeDate(new Date(scheduledDates[dev.day_number - 1]))
-        : null;
+      const rawScheduledDate = scheduledDates[dev.day_number - 1];
+      const scheduledDate = rawScheduledDate ? normalizeDate(new Date(rawScheduledDate)) : null;
 
       if (!scheduledDate) {
         statuses.set(dev.id, "future");
@@ -224,166 +216,78 @@ function computeDevotionalStatuses(
     return { statuses, lockedSet, recoverySet };
   }
 
-  if (devotionalMode === "5_days" && scheduledDates.length >= 5) {
-    // Primary dates: scheduledDates[0..4] → day_number 1..5
-    // Recovery dates: scheduledDates[5..9] — assigned sequentially to missed primary devs
-    const primaryDevs = devList.filter(d => d.day_number >= 1 && d.day_number <= 5)
-      .sort((a, b) => a.day_number - b.day_number);
-
-    // Day numbers > 5 are not used in 5_days mode — mark hidden as future
-    for (const dev of devList) {
-      if (dev.day_number > 5) {
-        statuses.set(dev.id, "future");
-        lockedSet.add(dev.id);
-      }
-    }
-
-    for (const dev of primaryDevs) {
-      // Not in released list → treat as future (hidden by leader)
-      if (released && !released.has(dev.day_number)) {
-        statuses.set(dev.id, "future");
-        lockedSet.add(dev.id);
-        continue;
-      }
-      if (completedMap.has(dev.id)) {
-        statuses.set(dev.id, "completed");
-        continue;
-      }
-
-      const primaryDate = normalizeDate(new Date(scheduledDates[dev.day_number - 1]));
-
-      if (primaryDate > today) {
-        statuses.set(dev.id, "future");
-        lockedSet.add(dev.id);
-      } else if (isToday(primaryDate)) {
-          // Today is primary day
-          if (completedToday) {
-            statuses.set(dev.id, "future");
-            lockedSet.add(dev.id);
-          } else {
-            statuses.set(dev.id, "available");
-          }
-        } else {
-          // Primary window missed — check recovery
-          const recoveryDate = recoveryDateMap.get(dev.id);
-          if (!recoveryDate) {
-            // No recovery slot available (auto-limited) → permanently locked
-            statuses.set(dev.id, "locked");
-            lockedSet.add(dev.id);
-          } else if (completedRecoveryIds.has(dev.id)) {
-            statuses.set(dev.id, "completed");
-          } else if (recoveryDate > today) {
-            // Recovery scheduled in the future
-            statuses.set(dev.id, "recovery");
-            recoverySet.add(dev.id);
-          } else if (isToday(recoveryDate)) {
-            if (completedToday) {
-              statuses.set(dev.id, "future");
-              lockedSet.add(dev.id);
-            } else {
-              statuses.set(dev.id, "recovery");
-              recoverySet.add(dev.id);
-            }
-          } else {
-            // Recovery date also missed → permanently locked
-            statuses.set(dev.id, "locked");
-            lockedSet.add(dev.id);
-          }
-        }
-      }
-    }
-
-    return { statuses, lockedSet, recoverySet };
-  }
-
-  // === 10_days mode (default) ===
-  if (scheduledDates.length > 0) {
-    for (const dev of devList) {
-      if (released && !released.has(dev.day_number)) {
-        statuses.set(dev.id, "future");
-        lockedSet.add(dev.id);
-        continue;
-      }
-      if (completedMap.has(dev.id)) {
-        statuses.set(dev.id, "completed");
-        continue;
-      }
-
-      const idx = dev.day_number - 1;
-      const scheduledDate = idx < scheduledDates.length ? new Date(scheduledDates[idx]) : null;
-      if (!scheduledDate) {
-        statuses.set(dev.id, "future");
-        lockedSet.add(dev.id);
-        continue;
-      }
-      scheduledDate.setHours(0, 0, 0, 0);
-
-      if (scheduledDate > today) {
-        statuses.set(dev.id, "future");
-        lockedSet.add(dev.id);
-      } else if (isToday(scheduledDate)) {
-        if (completedToday) {
-          statuses.set(dev.id, "future");
-          lockedSet.add(dev.id);
-        } else {
-          statuses.set(dev.id, "available");
-        }
-      } else {
-        // Past — locked (no weekend recovery in 10_days mode)
-        statuses.set(dev.id, "locked");
-        lockedSet.add(dev.id);
-      }
-    }
-    return { statuses, lockedSet, recoverySet };
-  }
-
-  // === FALLBACK: anchor from day1 completion ===
-  const day1Dev = devList.find(d => d.day_number === 1);
+  const day1Dev = activeDevs.find((dev) => dev.day_number === 1);
   const day1CompletedAt = day1Dev ? completedMap.get(day1Dev.id) : null;
 
   if (!day1CompletedAt) {
-    devList.forEach((dev, i) => {
-      if (isOverrideActive(overrideMap.get(dev.id), new Date())) {
-        statuses.set(dev.id, "available");
-      } else if (i === 0) {
+    activeDevs.forEach((dev, index) => {
+      const activeOverride = overrideMap.get(dev.id);
+
+      if (released && !released.has(dev.day_number) && !isOverrideActive(activeOverride, now)) {
+        statuses.set(dev.id, "future");
+        lockedSet.add(dev.id);
+      } else if (isOverrideActive(activeOverride, now) || index === 0) {
         statuses.set(dev.id, "available");
       } else {
         statuses.set(dev.id, "future");
         lockedSet.add(dev.id);
       }
     });
+
     return { statuses, lockedSet, recoverySet };
   }
 
   const startDate = new Date(day1CompletedAt);
   startDate.setHours(0, 0, 0, 0);
 
-  function getScheduledDate(dayNumber: number): Date {
+  function getScheduledDate(dayNumber: number) {
     const date = new Date(startDate);
     let assigned = 1;
+
     while (assigned < dayNumber) {
       date.setDate(date.getDate() + 1);
-      const dow = date.getDay();
-      if (dow !== 0 && dow !== 6) assigned++;
+      const dayOfWeek = date.getDay();
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) assigned++;
     }
+
     return date;
   }
 
-  for (const dev of devList) {
-    if (completedMap.has(dev.id)) { statuses.set(dev.id, "completed"); continue; }
-    if (isOverrideActive(overrideMap.get(dev.id), new Date())) {
+  for (const dev of activeDevs) {
+    const activeOverride = overrideMap.get(dev.id);
+
+    if (released && !released.has(dev.day_number) && !isOverrideActive(activeOverride, now)) {
+      statuses.set(dev.id, "future");
+      lockedSet.add(dev.id);
+      continue;
+    }
+
+    if (completedMap.has(dev.id)) {
+      statuses.set(dev.id, "completed");
+      continue;
+    }
+
+    if (isOverrideActive(activeOverride, now)) {
       statuses.set(dev.id, "available");
       continue;
     }
+
     const scheduledDate = getScheduledDate(dev.day_number);
     scheduledDate.setHours(0, 0, 0, 0);
+
     if (scheduledDate > today) {
-      statuses.set(dev.id, "future"); lockedSet.add(dev.id);
+      statuses.set(dev.id, "future");
+      lockedSet.add(dev.id);
     } else if (isToday(scheduledDate)) {
-      if (completedToday) { statuses.set(dev.id, "future"); lockedSet.add(dev.id); }
-      else statuses.set(dev.id, "available");
+      if (completedToday) {
+        statuses.set(dev.id, "future");
+        lockedSet.add(dev.id);
+      } else {
+        statuses.set(dev.id, "available");
+      }
     } else {
-      statuses.set(dev.id, "locked"); lockedSet.add(dev.id);
+      statuses.set(dev.id, "locked");
+      lockedSet.add(dev.id);
     }
   }
 
@@ -881,3 +785,4 @@ export default function LessonChoiceView({
     </div>
   );
 }
+
