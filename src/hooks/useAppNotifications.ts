@@ -23,10 +23,39 @@ function markSentToday(key: string) {
   localStorage.setItem(NOTIF_SENT_PREFIX + key, new Date().toDateString());
 }
 
+type UserProfileLite = {
+  area: string | null;
+  community: string | null;
+};
+
+async function getCurrentUserProfile(userId: string): Promise<UserProfileLite | null> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("area, community")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  return data ?? null;
+}
+
+function isEventRelevantToUser(
+  event: {
+    area?: string | null;
+    community?: string | null;
+    target_user_id?: string | null;
+  },
+  userId: string,
+  profile: UserProfileLite | null,
+) {
+  if (event.target_user_id && event.target_user_id !== userId) return false;
+  if (event.area && profile?.area && event.area !== profile.area) return false;
+  if (event.community && profile?.community && event.community !== profile.community) return false;
+  return true;
+}
+
 /**
- * Hook that checks user activity and sends relevant push notifications
- * every time the app is opened (once per day max).
- * No more setTimeout-based scheduler — that doesn't work when the PWA is closed.
+ * Checks user activity and sends relevant push notifications
+ * once per calendar day when the app is opened.
  */
 export function useAppNotifications() {
   const { user } = useAuth();
@@ -34,59 +63,34 @@ export function useAppNotifications() {
   useEffect(() => {
     if (!user) return;
     if (!isNotificationEnabled()) return;
-    // Only run once per calendar day, but always run on fresh day
     if (wasRunToday()) return;
 
     async function checkAndNotify() {
-      // 1. Load notification preferences
       const { data: prefs } = await supabase
         .from("notification_preferences")
         .select("*")
-        .eq("user_id", user!.id)
+        .eq("user_id", user.id)
         .maybeSingle();
 
-      // If no prefs saved or master disabled, skip
       if (prefs && !prefs.master_enabled) return;
 
-      // Default all on if no record exists
       const devocionalOn = prefs ? prefs.devocional : true;
       const eventosOn = prefs ? prefs.eventos : true;
       const streakOn = prefs ? prefs.streak : true;
       const mensagensOn = prefs ? prefs.mensagens : true;
 
-      // Run checks in parallel
       const checks: Promise<void>[] = [];
 
-      // --- DEVOCIONAL check ---
-      if (devocionalOn && !wasSentToday("devocional")) {
-        checks.push(checkDevocional());
-      }
-
-      // --- STREAK check ---
-      if (streakOn && !wasSentToday("streak")) {
-        checks.push(checkStreak());
-      }
-
-      // --- EVENTOS check ---
-      if (eventosOn && !wasSentToday("eventos")) {
-        checks.push(checkUpcomingEvents());
-      }
-
-      // --- MENSAGENS check ---
-      if (mensagensOn && !wasSentToday("mensagens")) {
-        checks.push(checkNewMessages());
-      }
-
-      // --- LESSON COMPLETION celebration ---
-      if (!wasSentToday("lesson_complete")) {
-        checks.push(checkLessonCompletion());
-      }
+      if (devocionalOn && !wasSentToday("devocional")) checks.push(checkDevocional());
+      if (streakOn && !wasSentToday("streak")) checks.push(checkStreak());
+      if (eventosOn && !wasSentToday("eventos")) checks.push(checkUpcomingEvents());
+      if (mensagensOn && !wasSentToday("mensagens")) checks.push(checkNewMessages());
+      if (!wasSentToday("lesson_complete")) checks.push(checkLessonCompletion());
 
       await Promise.allSettled(checks);
       markRunToday();
     }
 
-    // Small delay so the app has time to render
     const timer = setTimeout(checkAndNotify, 2000);
     return () => clearTimeout(timer);
   }, [user]);
@@ -97,37 +101,35 @@ async function checkDevocional() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data: profileData } = await supabase.from("profiles").select("area").eq("user_id", user.id).maybeSingle();
-    const userArea = profileData?.area;
+    const profile = await getCurrentUserProfile(user.id);
+    const userArea = profile?.area ?? "";
 
     const [{ data: lessons }, { data: devs }, { data: prog }, { data: unlocks }] = await Promise.all([
       supabase.from("lessons").select("id, title, order_num, course_id").order("order_num"),
       supabase.from("devotional_content").select("id, lesson_id"),
       supabase.from("devotional_progress").select("devotional_id").eq("user_id", user.id),
-      supabase.from("course_unlocks").select("course_id").eq("area", userArea ?? ""),
+      supabase.from("course_unlocks").select("course_id").eq("area", userArea),
     ]);
 
-    const unlockedCourseIds = new Set((unlocks ?? []).map(u => u.course_id));
-    const completedSet = new Set((prog ?? []).map((p) => p.devotional_id));
+    const unlockedCourseIds = new Set((unlocks ?? []).map((unlock) => unlock.course_id));
+    const completedSet = new Set((prog ?? []).map((item) => item.devotional_id));
 
-    // Group devotionals by lesson
     const lessonDevMap: Record<string, { total: number; completed: number }> = {};
-    (devs ?? []).forEach((d) => {
-      if (!d.lesson_id) return;
-      if (!lessonDevMap[d.lesson_id]) lessonDevMap[d.lesson_id] = { total: 0, completed: 0 };
-      lessonDevMap[d.lesson_id].total++;
-      if (completedSet.has(d.id)) lessonDevMap[d.lesson_id].completed++;
+    (devs ?? []).forEach((devotional) => {
+      if (!devotional.lesson_id) return;
+      if (!lessonDevMap[devotional.lesson_id]) lessonDevMap[devotional.lesson_id] = { total: 0, completed: 0 };
+      lessonDevMap[devotional.lesson_id].total++;
+      if (completedSet.has(devotional.id)) lessonDevMap[devotional.lesson_id].completed++;
     });
 
-    // Find first accessible lesson with pending devotionals
-    const accessibleLessons = (lessons ?? []).filter((l) => unlockedCourseIds.has(l.course_id));
-    for (const l of accessibleLessons) {
-      const info = lessonDevMap[l.id];
+    const accessibleLessons = (lessons ?? []).filter((lesson) => unlockedCourseIds.has(lesson.course_id));
+    for (const lesson of accessibleLessons) {
+      const info = lessonDevMap[lesson.id];
       if (info && info.completed < info.total) {
         const pending = info.total - info.completed;
         await sendNotification(
-          "📖 Devocional pendente!",
-          `Você tem ${pending} devocional${pending > 1 ? "is" : ""} da Lição ${l.order_num} esperando. Não perca sua caminhada!`
+          "Devocional pendente!",
+          `Voce tem ${pending} devocional${pending > 1 ? "is" : ""} da Licao ${lesson.order_num} esperando. Nao perca sua caminhada!`,
         );
         markSentToday("devocional");
         return;
@@ -143,26 +145,25 @@ async function checkStreak() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const [{ data: prog }, { data: devProg }] = await Promise.all([
+    const [{ data: progress }, { data: devProgress }] = await Promise.all([
       supabase.from("user_progress").select("completed_at").eq("user_id", user.id).order("completed_at", { ascending: false }).limit(1),
       supabase.from("devotional_progress").select("completed_at").eq("user_id", user.id).order("completed_at", { ascending: false }).limit(1),
     ]);
 
     const dates: Date[] = [];
-    if (prog?.[0]?.completed_at) dates.push(new Date(prog[0].completed_at));
-    if (devProg?.[0]?.completed_at) dates.push(new Date(devProg[0].completed_at));
+    if (progress?.[0]?.completed_at) dates.push(new Date(progress[0].completed_at));
+    if (devProgress?.[0]?.completed_at) dates.push(new Date(devProgress[0].completed_at));
+    if (dates.length === 0) return;
 
-    if (dates.length === 0) return; // Never active, don't nag
-
-    const lastActivity = new Date(Math.max(...dates.map((d) => d.getTime())));
+    const lastActivity = new Date(Math.max(...dates.map((date) => date.getTime())));
     const diffDays = Math.floor((Date.now() - lastActivity.getTime()) / 86400000);
 
     if (diffDays >= 2) {
-      const msg = diffDays >= 5
-        ? `Sua chama está se apagando! Já são ${diffDays} dias sem atividade. Volte e reacenda seu coração! 🔥`
-        : `Não perca sua sequência! Já são ${diffDays} dias sem atividade. Um devocional por dia faz toda a diferença! 💪`;
+      const message = diffDays >= 5
+        ? `Sua chama esta se apagando. Ja sao ${diffDays} dias sem atividade. Volte e reacenda seu coracao.`
+        : `Nao perca sua sequencia. Ja sao ${diffDays} dias sem atividade. Um devocional por dia faz toda a diferenca.`;
 
-      await sendNotification("🔥 Sequência em risco!", msg);
+      await sendNotification("Sequencia em risco!", message);
       markSentToday("streak");
     }
   } catch (err) {
@@ -172,31 +173,35 @@ async function checkStreak() {
 
 async function checkUpcomingEvents() {
   try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const profile = await getCurrentUserProfile(user.id);
     const now = new Date();
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 2);
+    const twoDaysAhead = new Date(now);
+    twoDaysAhead.setDate(twoDaysAhead.getDate() + 2);
 
     const { data } = await supabase
       .from("events")
-      .select("title, event_date, location")
+      .select("title, event_date, location, area, community, target_user_id")
       .gte("event_date", now.toISOString())
-      .lte("event_date", tomorrow.toISOString())
+      .lte("event_date", twoDaysAhead.toISOString())
       .order("event_date")
-      .limit(1);
+      .limit(20);
 
-    if (data && data.length > 0) {
-      const ev = data[0];
-      const evDate = new Date(ev.event_date);
-      const isToday = evDate.toDateString() === now.toDateString();
-      const timeStr = evDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-      const dayLabel = isToday ? "hoje" : "em breve";
+    const nextRelevantEvent = (data ?? []).find((event) => isEventRelevantToUser(event as any, user.id, profile));
+    if (!nextRelevantEvent) return;
 
-      await sendNotification(
-        `📅 Evento ${dayLabel}!`,
-        `${ev.title} às ${timeStr}${ev.location ? ` • 📍 ${ev.location}` : ""}`
-      );
-      markSentToday("eventos");
-    }
+    const eventDate = new Date(nextRelevantEvent.event_date);
+    const isToday = eventDate.toDateString() === now.toDateString();
+    const timeStr = eventDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const dayLabel = isToday ? "hoje" : "em breve";
+
+    await sendNotification(
+      `Evento ${dayLabel}!`,
+      `${nextRelevantEvent.title} as ${timeStr}${nextRelevantEvent.location ? ` - ${nextRelevantEvent.location}` : ""}`,
+    );
+    markSentToday("eventos");
   } catch (err) {
     console.warn("Events notification check failed", err);
   }
@@ -207,9 +212,8 @@ async function checkNewMessages() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Check for messages from the last 24h
     const since = new Date(Date.now() - 86400000).toISOString();
-    const { data, count } = await supabase
+    const { count } = await supabase
       .from("messages")
       .select("title", { count: "exact" })
       .gte("created_at", since)
@@ -217,8 +221,8 @@ async function checkNewMessages() {
 
     if (count && count > 0) {
       await sendNotification(
-        "📢 Novo aviso no app!",
-        "Você tem um novo comunicado. Abra o app para conferir!"
+        "Novo aviso no app!",
+        "Voce tem um novo comunicado. Abra o app para conferir!",
       );
       markSentToday("mensagens");
     }
@@ -232,7 +236,6 @@ async function checkLessonCompletion() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Check if user completed all responses for any lesson in the last 24h
     const since = new Date(Date.now() - 86400000).toISOString();
     const { data: recentResponses } = await supabase
       .from("lesson_responses")
@@ -242,10 +245,7 @@ async function checkLessonCompletion() {
 
     if (!recentResponses || recentResponses.length === 0) return;
 
-    // Get unique lesson IDs from recent responses
-    const recentLessonIds = [...new Set(recentResponses.map(r => r.lesson_id))];
-
-    // Get lesson info
+    const recentLessonIds = [...new Set(recentResponses.map((response) => response.lesson_id))];
     const { data: lessons } = await supabase
       .from("lessons")
       .select("id, title, order_num")
@@ -253,28 +253,26 @@ async function checkLessonCompletion() {
 
     if (!lessons || lessons.length === 0) return;
 
-    // Check devotionals completion for these lessons
     const { data: devs } = await supabase
       .from("devotional_content")
       .select("id, lesson_id")
       .in("lesson_id", recentLessonIds);
 
-    const { data: devProg } = await supabase
+    const { data: devProgress } = await supabase
       .from("devotional_progress")
       .select("devotional_id")
       .eq("user_id", user.id);
 
-    const completedDevIds = new Set((devProg ?? []).map(p => p.devotional_id));
+    const completedDevIds = new Set((devProgress ?? []).map((progress) => progress.devotional_id));
 
-    // Check each recent lesson for full completion
     for (const lesson of lessons) {
-      const lessonDevs = (devs ?? []).filter(d => d.lesson_id === lesson.id);
-      const allDevsCompleted = lessonDevs.length === 0 || lessonDevs.every(d => completedDevIds.has(d.id));
+      const lessonDevs = (devs ?? []).filter((devotional) => devotional.lesson_id === lesson.id);
+      const allDevsCompleted = lessonDevs.length === 0 || lessonDevs.every((devotional) => completedDevIds.has(devotional.id));
 
       if (allDevsCompleted) {
         await sendNotification(
-          "🎉 Lição concluída!",
-          `Parabéns! Você completou a Lição ${lesson.order_num}: ${lesson.title}. Continue firme na caminhada! 🙌`
+          "Licao concluida!",
+          `Parabens! Voce completou a Licao ${lesson.order_num}: ${lesson.title}. Continue firme na caminhada!`,
         );
         markSentToday("lesson_complete");
         return;
