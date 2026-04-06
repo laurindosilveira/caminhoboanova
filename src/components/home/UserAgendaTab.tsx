@@ -332,7 +332,7 @@ export default function UserAgendaTab() {
       error = result.error;
     }
     if (error) {
-      toast.error("Nao foi possivel enviar sua solicitacao");
+      toast.error("Não foi possível enviar sua solicitação.");
       console.error(error);
       return;
     }
@@ -376,7 +376,7 @@ export default function UserAgendaTab() {
     setSaving(true);
     const normalizedEventDate = form.event_date ? new Date(form.event_date) : null;
     if (!normalizedEventDate || Number.isNaN(normalizedEventDate.getTime())) {
-      toast.error("Data do evento invalida");
+      toast.error("Data do evento inválida.");
       setSaving(false);
       return;
     }
@@ -534,7 +534,7 @@ export default function UserAgendaTab() {
       .in("status", ["pendente_presente", "pendente_falta"])
       .order("created_at", { ascending: false });
     if (error) {
-      toast.error("Nao foi possivel carregar as solicitacoes pendentes");
+      toast.error("Não foi possível carregar as solicitações pendentes.");
       console.error(error);
       return;
     }
@@ -567,7 +567,7 @@ export default function UserAgendaTab() {
       error = result.error;
     }
     if (error) {
-      toast.error("Nao foi possivel atualizar a solicitacao");
+      toast.error("Não foi possível atualizar a solicitação.");
       console.error(error);
       setSavingApproval(null);
       return;
