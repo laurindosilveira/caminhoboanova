@@ -51,6 +51,10 @@ function escapeCsvCell(value: string | number) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
+function isFinalAttendanceStatus(status: string) {
+  return status === "presente" || status === "falta" || status === "justificado";
+}
+
 export default function ReportsTab() {
   const { profile, role } = useAuth();
   const { effectiveArea } = useAreaSwitch();
@@ -96,7 +100,7 @@ export default function ReportsTab() {
     const turmaUserIds = new Set(turmaProfiles.map((participant) => participant.user_id));
 
     setParticipants(turmaProfiles);
-    setAttendanceData((attendanceResult.data ?? []).filter((item) => turmaUserIds.has(item.user_id)));
+    setAttendanceData((attendanceResult.data ?? []).filter((item) => turmaUserIds.has(item.user_id) && isFinalAttendanceStatus(item.status)));
     setDevProgressData((devProgressResult.data ?? []).filter((item) => turmaUserIds.has(item.user_id)));
     setLessonData({
       lessons: lessonsResult.data ?? [],
@@ -132,7 +136,7 @@ export default function ReportsTab() {
       if (!byEvent[item.event_id]) byEvent[item.event_id] = { presente: 0, ausente: 0, justificado: 0, title };
       if (item.status === "presente") byEvent[item.event_id].presente++;
       else if (item.status === "justificado") byEvent[item.event_id].justificado++;
-      else byEvent[item.event_id].ausente++;
+      else if (item.status === "falta") byEvent[item.event_id].ausente++;
     });
 
     return Object.values(byEvent).slice(0, 10);
@@ -346,7 +350,7 @@ export default function ReportsTab() {
             <h5 className="font-inter font-semibold text-foreground text-xs">Resumo por aluno</h5>
             {participants.map((participant) => {
               const present = attendanceData.filter((item) => item.user_id === participant.user_id && item.status === "presente").length;
-              const total = attendanceData.filter((item) => item.user_id === participant.user_id).length;
+              const total = attendanceData.filter((item) => item.user_id === participant.user_id && isFinalAttendanceStatus(item.status)).length;
               const percent = total > 0 ? Math.round((present / total) * 100) : 0;
 
               return (

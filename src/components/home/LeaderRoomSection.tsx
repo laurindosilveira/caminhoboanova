@@ -254,12 +254,17 @@ export default function LeaderRoomSection({ asTab = false }: { asTab?: boolean }
       : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, [] as any];
 
     const rankingMap = new Map<string, number>();
-    (rankingResponses ?? []).forEach((response: any) => {
+    const rankingFailedCommunities = new Set<string>();
+    (rankingResponses ?? []).forEach((response: any, index: number) => {
+      const community = communitiesInScope[index];
+      if (response?.error) {
+        if (community) rankingFailedCommunities.add(community);
+        return;
+      }
       (response.data ?? []).forEach((item: any) => {
         rankingMap.set(item.user_id, Number(item.faith_points ?? 0));
       });
     });
-    const activityMap = new Map((activitiesData ?? []).map((activity) => [activity.id, activity]));
 
     const participantList: Participant[] = profilesList.map((p) => {
       const userProgress = (progressData ?? []).filter((pr) => pr.user_id === p.user_id);
@@ -272,12 +277,6 @@ export default function LeaderRoomSection({ asTab = false }: { asTab?: boolean }
       const devotionalCount = devotionals.length;
       const completedActivityIds = userProgress.map((pr) => pr.activity_id);
       const completedEventCount = (attendanceData ?? []).filter(a => a.user_id === p.user_id).length;
-      const activityPoints = completedActivityIds.reduce((sum, activityId) => sum + (activityMap.get(activityId)?.points ?? 0), 0);
-      const devotionalPoints = devotionals.reduce((sum, progress) => {
-        const completedAt = new Date(progress.completed_at);
-        const day = completedAt.getDay();
-        return sum + (day === 0 || day === 6 ? 2 : 5);
-      }, 0);
 
       return {
         ...p,
@@ -286,7 +285,9 @@ export default function LeaderRoomSection({ asTab = false }: { asTab?: boolean }
         completed_lesson_count: lessonCount,
         completed_devotional_count: devotionalCount,
         completed_event_count: completedEventCount,
-        faith_points: rankingMap.get(p.user_id) ?? (activityPoints + (lessonCount * 20) + devotionalPoints),
+        faith_points: rankingFailedCommunities.has(p.community)
+          ? undefined
+          : rankingMap.get(p.user_id),
         turma_id: p.turma_id,
       } as any;
     });
