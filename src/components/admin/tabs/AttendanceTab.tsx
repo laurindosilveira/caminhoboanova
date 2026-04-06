@@ -1422,7 +1422,14 @@ export default function AttendanceTab({ participants, activities, communities, i
 
     if (action === "aprovado") {
       // Update the user's confirmation_year to 2
-      await supabase.from("profiles").update({ confirmation_year: 2 } as any).eq("user_id", userId);
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ confirmation_year: 2 } as any)
+        .eq("user_id", userId);
+      if (profileError) {
+        toast({ title: "Erro", description: profileError.message, variant: "destructive" });
+        return;
+      }
       toast({ title: "✅ Promoção aprovada", description: "Aluno promovido para o 2º ano." });
     } else {
       toast({ title: "Promoção rejeitada" });
@@ -1444,7 +1451,7 @@ export default function AttendanceTab({ participants, activities, communities, i
       return;
     }
 
-    await Promise.all([
+    const resetOperations = await Promise.all([
       supabase.from("user_progress").delete().in("user_id", userIds),
       supabase.from("lesson_responses").delete().in("user_id", userIds),
       supabase.from("devotional_progress").delete().in("user_id", userIds),
@@ -1452,6 +1459,17 @@ export default function AttendanceTab({ participants, activities, communities, i
       supabase.from("attendance").delete().in("user_id", userIds),
       supabase.from("worship_attendance").delete().in("user_id", userIds),
     ]);
+
+    const resetError = resetOperations.find(result => result.error)?.error;
+    if (resetError) {
+      toast({
+        title: "Erro ao reiniciar jornada",
+        description: resetError.message,
+        variant: "destructive",
+      });
+      setResettingJourney(false);
+      return;
+    }
 
     toast({ 
       title: "🔄 Jornada reiniciada!", 
