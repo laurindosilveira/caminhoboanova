@@ -136,8 +136,6 @@ export default function JourneyLessonView({ lesson, onBack, isAdmin = false, tar
       lesson_id: lesson.id,
       question_key: key,
       response: value,
-      awarded_points: isLateAccess ? 0 : awardedPoints,
-      override_release_id: overrideId,
     }, { onConflict: "user_id,lesson_id,question_key" });
     if (error && /awarded_points|override_release_id/i.test(error.message)) {
       const fallback = await supabase.from("lesson_responses").upsert({
@@ -172,8 +170,6 @@ export default function JourneyLessonView({ lesson, onBack, isAdmin = false, tar
         lesson_id: lesson.id,
         question_key: key,
         response,
-        awarded_points: isLateAccess ? 0 : awardedPoints,
-        override_release_id: overrideId,
       }));
 
       let { error } = await supabase

@@ -119,6 +119,15 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
 
       let nextFutureDev: typeof lessonDevs[number] | null = null;
       let nextFutureDate: Date | null = null;
+      const missedCurrentWeekDevs = lessonDevs.filter((dev) => {
+        if (completedDevIds.has(dev.id)) return false;
+        const devDate = devReleaseDateMap.get(dev.id);
+        if (!devDate) return false;
+        const normalizedDevDate = new Date(devDate);
+        normalizedDevDate.setHours(0, 0, 0, 0);
+        const dow = normalizedDevDate.getDay();
+        return normalizedDevDate < today && dow >= 1 && dow <= 5;
+      });
 
       for (const dev of lessonDevs) {
         if (completedDevIds.has(dev.id)) continue;
@@ -156,17 +165,34 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
         break;
       }
 
-      // No devotional available today — show lesson study if not done
+      if (!studiedLessons.has(lessonId)) {
+        setNextItem({
+          type: "lesson",
+          title: `Licao ${entry.lessonOrder}: ${entry.lessonTitle}`,
+          subtitle: "Estude esta licao para avancar na jornada",
+          lessonId,
+          courseTitle: entry.courseTitle,
+          courseOrder: entry.courseOrder,
+          lessonOrder: entry.lessonOrder,
+          eventDate: entry.eventDate,
+        });
+        setLoading(false);
+        return;
+      }
+
+      // No devotional available today - show when the next devotional or recovery opens
       if (nextFutureDev && nextFutureDate) {
         const completedCount = lessonDevs.filter(d => completedDevIds.has(d.id)).length;
-        const isSaturday = today.getDay() === 6;
+        const isWeekend = today.getDay() === 0 || today.getDay() === 6;
         setNextItem({
           type: "waiting_devotional",
           lessonId,
           title: nextFutureDev.title || `Devocional ${nextFutureDev.day_number}`,
-          subtitle: isSaturday
-            ? "Hoje o sábado é reservado para recuperar devocionais atrasados desta semana."
-            : `O próximo devocional desta lição será liberado em ${format(nextFutureDate, "d 'de' MMMM", { locale: ptBR })}.`,
+          subtitle: isWeekend
+            ? missedCurrentWeekDevs.length > 0
+              ? "Neste fim de semana, os devocionais atrasados da semana ficam liberados para recuperacao."
+              : "Voce concluiu os devocionais da semana. O proximo sera liberado na proxima data da agenda."
+            : `O proximo devocional desta licao sera liberado em ${format(nextFutureDate, "d 'de' MMMM", { locale: ptBR })}.`,
           courseTitle: entry.courseTitle,
           courseOrder: entry.courseOrder,
           lessonOrder: entry.lessonOrder,
@@ -175,21 +201,6 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
           completedDevotionals: completedCount,
           eventDate: entry.eventDate,
           nextReleaseDate: nextFutureDate,
-        });
-        setLoading(false);
-        return;
-      }
-
-      if (!studiedLessons.has(lessonId)) {
-        setNextItem({
-          type: "lesson",
-          title: `Lição ${entry.lessonOrder}: ${entry.lessonTitle}`,
-          subtitle: "Estude esta lição para avançar na jornada",
-          lessonId,
-          courseTitle: entry.courseTitle,
-          courseOrder: entry.courseOrder,
-          lessonOrder: entry.lessonOrder,
-          eventDate: entry.eventDate,
         });
         setLoading(false);
         return;

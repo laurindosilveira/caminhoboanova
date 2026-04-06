@@ -372,7 +372,12 @@ export default function LessonChoiceView({
       } else if (isLateAccess) {
         const lateStatuses = new Map<string, DevotionalStatus>();
         devList.forEach(d => {
-          lateStatuses.set(d.id, completedMap.has(d.id) ? "completed" : "locked");
+          if (completedMap.has(d.id)) {
+            lateStatuses.set(d.id, "completed");
+            return;
+          }
+          const activeOverride = overrideMap.get(d.id);
+          lateStatuses.set(d.id, isOverrideActive(activeOverride, new Date()) ? "available" : "locked");
         });
         setDevStatuses(lateStatuses);
         setDevRecoverySet(new Set());
@@ -433,7 +438,12 @@ export default function LessonChoiceView({
     } else if (isLateAccess) {
       const lateStatuses = new Map<string, DevotionalStatus>();
       devotionals.forEach(d => {
-        lateStatuses.set(d.id, newCompletedMap.has(d.id) ? "completed" : "locked");
+        if (newCompletedMap.has(d.id)) {
+          lateStatuses.set(d.id, "completed");
+          return;
+        }
+        const activeOverride = devOverrideMap.get(d.id);
+        lateStatuses.set(d.id, isOverrideActive(activeOverride, now) ? "available" : "locked");
       });
       setDevStatuses(lateStatuses);
       setDevRecoverySet(new Set());

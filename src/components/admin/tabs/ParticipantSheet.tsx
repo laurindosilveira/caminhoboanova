@@ -510,19 +510,20 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
       .eq("user_id", p.user_id)
       .order("created_at", { ascending: false });
 
-    if (!devotionalError && !lessonError) {
-      const merged = [
-        ...((devotionalData ?? []).map((item: any) => ({
-          ...item,
-          content_kind: "devotional" as const,
-          lesson_id: null,
-        }))),
-        ...((lessonData ?? []).map((item: any) => ({
-          ...item,
-          content_kind: "lesson" as const,
-          devotional_id: null,
-        }))),
-      ].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const merged = [
+      ...(!devotionalError ? (devotionalData ?? []).map((item: any) => ({
+        ...item,
+        content_kind: "devotional" as const,
+        lesson_id: null,
+      })) : []),
+      ...(!lessonError ? (lessonData ?? []).map((item: any) => ({
+        ...item,
+        content_kind: "lesson" as const,
+        devotional_id: null,
+      })) : []),
+    ].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    if (merged.length > 0 || (!devotionalError && !lessonError)) {
       setManualReleaseDrafts(merged as ManualReleaseDraft[]);
       window.localStorage.removeItem(storageKey);
       setLoadingManualReleases(false);
@@ -600,6 +601,21 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
       is_unlocked: true,
     });
   }
+
+  function isMissingManualReleaseStorage(error: { message?: string; code?: string } | null) {
+    if (!error) return false;
+    const message = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase();
+    return (
+      message.includes("does not exist") ||
+      message.includes("not found") ||
+      message.includes("schema cache") ||
+      message.includes("user_devotional_overrides") ||
+      message.includes("user_lesson_overrides") ||
+      message.includes("awarded_points") ||
+      message.includes("override_release_id")
+    );
+  }
+
   async function handleAddManualReleaseDraft() {
     if (manualReleaseSelection.content_kind === "devotional" && !manualReleaseForm.devotional_id) return;
     if (manualReleaseSelection.content_kind === "lesson" && !manualReleaseSelection.lesson_id) return;
@@ -654,21 +670,21 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
         ? "id, user_id, lesson_id, custom_points, available_from, available_until, notes, is_unlocked, created_at, granted_by"
         : "id, user_id, devotional_id, custom_points, available_from, available_until, notes, is_unlocked, created_at, granted_by");
 
-    if (error) {
+    if (error && isMissingManualReleaseStorage(error)) {
       const storageKey = `manual-content-release-drafts:${p.user_id}`;
       const next = [
         draft,
         ...manualReleaseDrafts.filter((item) => (
           draft.content_kind === "lesson"
-            ? !(item.content_kind == "lesson" && item.lesson_id == draft.lesson_id)
-            : !(item.content_kind == "devotional" && item.devotional_id == draft.devotional_id)
+            ? !(item.content_kind === "lesson" && item.lesson_id === draft.lesson_id)
+            : !(item.content_kind === "devotional" && item.devotional_id === draft.devotional_id)
         )),
       ];
       setManualReleaseDrafts(next);
       window.localStorage.setItem(storageKey, JSON.stringify(next));
       toast({
         title: "Rascunho salvo localmente",
-        description: "A tabela ainda n?o existe no Supabase. Rode o SQL da parte 2 para persistir de verdade.",
+        description: "A tabela ainda nao existe no Supabase. Rode o SQL da parte 2 para persistir de verdade.",
       });
       resetManualReleaseForm();
       setSavingManualRelease(false);
@@ -676,12 +692,21 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
       return;
     }
 
+    if (error) {
+      toast({
+        title: "Falha ao salvar liberacao",
+        description: error.message,
+      });
+      setSavingManualRelease(false);
+      return;
+    }
+
     await fetchManualReleaseDrafts();
     toast({
-      title: "Libera??o manual salva",
+      title: "Liberacao manual salva",
       description: isLessonRelease
-        ? "O override desta li??o j? est? registrado no banco."
-        : "O override deste devocional j? est? registrado no banco.",
+        ? "O override desta licao ja esta registrado no banco."
+        : "O override deste devocional ja esta registrado no banco.",
     });
     resetManualReleaseForm();
     setSavingManualRelease(false);
@@ -701,10 +726,18 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
     if (!error) {
       setManualReleaseDrafts((prev) => prev.filter((item) => item.id !== draftId));
       toast({
-        title: "Libera??o removida",
+        title: "Liberacao removida",
         description: draft.content_kind === "lesson"
-          ? "O override da li??o foi apagado do banco."
+          ? "O override da licao foi apagado do banco."
           : "O override do devocional foi apagado do banco.",
+      });
+      return;
+    }
+
+    if (!isMissingManualReleaseStorage(error)) {
+      toast({
+        title: "Falha ao remover liberacao",
+        description: error.message,
       });
       return;
     }
@@ -1680,10 +1713,10 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
             <div className="flex items-start gap-2">
               <BookOpen className="w-4 h-4 text-accent-foreground flex-shrink-0 mt-0.5" />
               <div>
-                <p className="font-montserrat font-bold text-foreground text-sm">Liberação manual de devocionais</p>
+                <p className="font-montserrat font-bold text-foreground text-sm">Liberacao manual de conteudo</p>
                 <p className="font-inter text-xs text-muted-foreground mt-1">
-                  O líder pode liberar um devocional específico para este usuário, definir a pontuação e o período de acesso.
-                  Se a migration ainda não tiver sido aplicada, o app cai em fallback local neste navegador.
+                  O lider pode liberar uma licao inteira ou um devocional especifico para este usuario, definir a pontuacao e o periodo de acesso.
+                  Se a migration ainda nao tiver sido aplicada, o app cai em fallback local neste navegador.
                 </p>
               </div>
             </div>
@@ -1693,7 +1726,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
               <div>
                 <p className="font-montserrat font-bold text-foreground text-sm">Novo rascunho para {p.full_name}</p>
                 <p className="font-inter text-[11px] text-muted-foreground">
-                  Escolha primeiro o curso, depois a li??o e por fim o tipo de conte?do que deseja liberar.
+                  Escolha primeiro o curso, depois a licao e por fim o tipo de conteudo que deseja liberar.
                 </p>
               </div>
               <span className="px-2 py-1 rounded-lg bg-muted text-muted-foreground text-[10px] font-inter font-semibold">
@@ -1720,14 +1753,14 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                   <option value="">Selecione um curso</option>
                   {manualReleaseCourses.map((course) => (
                     <option key={course.id} value={course.id}>
-                      Curso {course.order_num} ? {course.title}
+                      Curso {course.order_num} - {course.title}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div className="space-y-2">
-                <label className="block text-[11px] font-inter font-bold text-foreground">Li??o</label>
+                <label className="block text-[11px] font-inter font-bold text-foreground">Licao</label>
                 <select
                   value={manualReleaseSelection.lesson_id}
                   onChange={(e) => {
@@ -1741,10 +1774,10 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                   disabled={!manualReleaseSelection.course_id}
                   className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <option value="">{manualReleaseSelection.course_id ? "Selecione uma li??o" : "Escolha primeiro o curso"}</option>
+                  <option value="">{manualReleaseSelection.course_id ? "Selecione uma licao" : "Escolha primeiro o curso"}</option>
                   {manualReleaseLessons.map((lesson) => (
                     <option key={lesson.id} value={lesson.id}>
-                      Li??o {lesson.order_num} ? {lesson.title}
+                      Licao {lesson.order_num} - {lesson.title}
                     </option>
                   ))}
                 </select>
@@ -1752,7 +1785,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
             </div>
 
             <div className="space-y-2">
-              <label className="block text-[11px] font-inter font-bold text-foreground">Tipo de conte?do</label>
+              <label className="block text-[11px] font-inter font-bold text-foreground">Tipo de conteudo</label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -1767,9 +1800,9 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                       : "border-border bg-background"
                   } disabled:opacity-60`}
                 >
-                  <p className="font-inter text-sm font-semibold text-foreground">Conte?do da li??o</p>
+                  <p className="font-inter text-sm font-semibold text-foreground">Conteudo da licao</p>
                   <p className="font-inter text-[11px] text-muted-foreground mt-1">
-                    Preparado para este fluxo, mas ainda sem persist?ncia manual no banco.
+                    Libera o estudo principal desta licao para este usuario especifico.
                   </p>
                 </button>
                 <button
@@ -1784,7 +1817,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                 >
                   <p className="font-inter text-sm font-semibold text-foreground">Devocionais</p>
                   <p className="font-inter text-[11px] text-muted-foreground mt-1">
-                    Libera um devocional espec?fico da li??o com pontua??o personalizada.
+                    Libera um devocional especifico da licao com pontuacao personalizada.
                   </p>
                 </button>
               </div>
@@ -1794,7 +1827,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
               <div className="rounded-xl border border-accent/20 bg-accent/10 p-3">
                 <p className="font-inter text-sm font-semibold text-foreground">{selectedManualLesson.title}</p>
                 <p className="font-inter text-[11px] text-muted-foreground mt-1">
-                  A escolha de curso e li??o j? est? pronta. Para realmente liberar o conte?do da li??o para um usu?rio espec?fico, ainda falta criarmos a persist?ncia dessa regra no Supabase.
+                  Este override vai liberar o conteudo principal da licao para este usuario, mesmo fora da agenda normal.
                 </p>
               </div>
             )}
@@ -1809,18 +1842,18 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                   className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <option value="">
-                    {manualReleaseSelection.lesson_id ? "Selecione um devocional da li??o" : "Escolha primeiro o curso e a li??o"}
+                    {manualReleaseSelection.lesson_id ? "Selecione um devocional da licao" : "Escolha primeiro o curso e a licao"}
                   </option>
                   {manualReleaseLessonDevotionals.map((devotional) => (
                     <option key={devotional.id} value={devotional.id}>
-                      Dia {devotional.day_number} ? {devotional.title}
+                      Dia {devotional.day_number} - {devotional.title}
                     </option>
                   ))}
                 </select>
                 {selectedManualDevotional && (
                   <div className="rounded-xl bg-muted/40 border border-border p-3">
                     <p className="font-inter text-xs text-foreground font-medium">
-                      {selectedManualDevotional.lesson_title} ? Dia {selectedManualDevotional.day_number}
+                      {selectedManualDevotional.lesson_title} - Dia {selectedManualDevotional.day_number}
                     </p>
                     <p className="font-inter text-[11px] text-muted-foreground mt-0.5">{selectedManualDevotional.title}</p>
                     <div className="flex items-center gap-2 mt-2 flex-wrap">
@@ -1829,7 +1862,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                       </span>
                       {completedDevotionalIds.has(selectedManualDevotional.id) && (
                         <span className="px-2 py-1 rounded-lg bg-brand-green/10 text-brand-green text-[10px] font-inter font-semibold">
-                          J? conclu?do por este usu?rio
+                          Ja concluido por este usuario
                         </span>
                       )}
                     </div>
@@ -1870,12 +1903,12 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
             </div>
 
             <div className="space-y-2">
-              <label className="block text-[11px] font-inter font-bold text-foreground">Observação do líder</label>
+              <label className="block text-[11px] font-inter font-bold text-foreground">Observacao do lider</label>
               <textarea
                 value={manualReleaseForm.notes}
                 onChange={(e) => setManualReleaseForm((prev) => ({ ...prev, notes: e.target.value }))}
                 rows={3}
-                placeholder="Ex.: recuperação autorizada por ausência justificada no encontro."
+                placeholder="Ex.: recuperacao autorizada por ausencia justificada no encontro."
                 className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
               />
             </div>
@@ -1890,7 +1923,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
               <div>
                 <p className="font-inter text-sm font-medium text-foreground">Marcar como liberado manualmente</p>
                 <p className="font-inter text-[11px] text-muted-foreground">
-                  Desative apenas se quiser deixar o override preparado, mas não ativo.
+                  Desative apenas se quiser deixar o override preparado, mas nao ativo.
                 </p>
               </div>
             </label>
@@ -1904,7 +1937,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
               >
                 <span className="inline-flex items-center gap-2">
                   <Plus className="w-4 h-4" />
-                  {savingManualRelease ? "Salvando..." : "Salvar liberação"}
+                  {savingManualRelease ? "Salvando..." : "Salvar liberacao"}
                 </span>
               </button>
               <button
@@ -1921,7 +1954,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
               <div>
                 <p className="font-montserrat font-bold text-foreground text-sm">Rascunhos preparados</p>
                 <p className="font-inter text-[11px] text-muted-foreground">
-                  Quando a migration já existe no Supabase, esta lista reflete os overrides reais salvos no banco.
+                  Quando a migration ja existe no Supabase, esta lista reflete os overrides reais salvos no banco.
                 </p>
               </div>
               <span className="px-2 py-1 rounded-lg bg-muted text-muted-foreground text-[10px] font-inter font-semibold">
@@ -1932,7 +1965,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
             {loadingManualReleases ? (
               <div className="text-center py-8 text-muted-foreground font-inter text-sm">
                 <Clock className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                <p>Carregando liberações...</p>
+                <p>Carregando liberacoes...</p>
               </div>
             ) : manualReleaseDrafts.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground font-inter text-sm">
@@ -1950,17 +1983,17 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                         <div>
                           <p className="font-inter text-sm font-semibold text-foreground">
                             {draft.content_kind === "lesson"
-                              ? lessonDraft?.title ?? "Li??o removida"
+                              ? lessonDraft?.title ?? "Licao removida"
                               : devotional?.title ?? "Devocional removido"}
                           </p>
                           <p className="font-inter text-[11px] text-muted-foreground">
                             {draft.content_kind === "lesson"
                               ? lessonDraft
-                                ? `Li??o ${lessonDraft.order_num} ? Conte?do da li??o`
-                                : "Li??o n?o encontrada na lista atual"
+                                ? `Licao ${lessonDraft.order_num} - Conteudo da licao`
+                                : "Licao nao encontrada na lista atual"
                               : devotional
-                                ? `${devotional.lesson_title} ? Dia ${devotional.day_number}`
-                                : "Devocional n?o encontrado na lista atual"}
+                                ? `${devotional.lesson_title} - Dia ${devotional.day_number}`
+                                : "Devocional nao encontrado na lista atual"}
                           </p>
                         </div>
                         <button
@@ -1972,7 +2005,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <span className="px-2 py-1 rounded-lg bg-background border border-border text-[10px] font-inter text-muted-foreground">
-                          {draft.content_kind === "lesson" ? "Conte?do da li??o" : "Devocional"}
+                          {draft.content_kind === "lesson" ? "Conteudo da licao" : "Devocional"}
                         </span>
                         <span className="px-2 py-1 rounded-lg bg-background border border-border text-[10px] font-inter text-foreground">
                           {draft.custom_points} pts
@@ -1982,7 +2015,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                         </span>
                         {draft.available_from && (
                           <span className="px-2 py-1 rounded-lg bg-background border border-border text-[10px] font-inter text-muted-foreground">
-                            In?cio: {new Date(draft.available_from).toLocaleString("pt-BR")}
+                            Inicio: {new Date(draft.available_from).toLocaleString("pt-BR")}
                           </span>
                         )}
                         {draft.available_until && (

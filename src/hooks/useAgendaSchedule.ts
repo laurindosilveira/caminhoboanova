@@ -67,19 +67,52 @@ export function useAgendaSchedule() {
   async function fetchSchedule() {
     setLoading(true);
 
-    const [{ data: events, error: eventsError }, { data: lessons }, { data: courses }] = await Promise.all([
-      supabase
+    let eventsResult = await supabase
+      .from("events")
+      .select("id, event_date, linked_lesson_id, title, type, area, released_devotional_days")
+      .eq("type", "confirmatorio")
+      .not("linked_lesson_id", "is", null)
+      .order("event_date");
+
+    if (eventsResult.error && /released_devotional_days/i.test(eventsResult.error.message)) {
+      eventsResult = await supabase
         .from("events")
-        .select("id, event_date, linked_lesson_id, title, type, area, released_devotional_days")
+        .select("id, event_date, linked_lesson_id, title, type, area")
         .eq("type", "confirmatorio")
         .not("linked_lesson_id", "is", null)
-        .order("event_date"),
-      supabase.from("lessons").select("id, title, order_num, course_id, devotional_mode").order("order_num"),
-      supabase.from("courses").select("id, title, order_num").order("order_num"),
-    ]);
+        .order("event_date");
+    }
+
+    let lessonsResult = await supabase
+      .from("lessons")
+      .select("id, title, order_num, course_id, devotional_mode")
+      .order("order_num");
+
+    if (lessonsResult.error && /devotional_mode/i.test(lessonsResult.error.message)) {
+      lessonsResult = await supabase
+        .from("lessons")
+        .select("id, title, order_num, course_id")
+        .order("order_num");
+    }
+
+    const { data: courses } = await supabase
+      .from("courses")
+      .select("id, title, order_num")
+      .order("order_num");
+
+    const events = eventsResult.data;
+    const eventsError = eventsResult.error;
+    const lessons = lessonsResult.data;
 
     if (eventsError) {
       console.error("useAgendaSchedule: failed to load events", eventsError.message);
+      setSchedule([]);
+      setLoading(false);
+      return;
+    }
+
+    if (lessonsResult.error) {
+      console.error("useAgendaSchedule: failed to load lessons", lessonsResult.error.message);
       setSchedule([]);
       setLoading(false);
       return;
