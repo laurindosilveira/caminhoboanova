@@ -263,10 +263,16 @@ export default function AttendanceTab({ participants, activities, communities, i
   async function handleSaveEvent() {
     if (!eventForm.title || !eventForm.event_date) return;
     setSavingEvent(true);
+    const normalizedEventDate = eventForm.event_date ? new Date(eventForm.event_date) : null;
+    if (!normalizedEventDate || Number.isNaN(normalizedEventDate.getTime())) {
+      toast({ title: "Data invalida", description: "Nao foi possivel interpretar a data do evento.", variant: "destructive" });
+      setSavingEvent(false);
+      return;
+    }
     const payload = {
       title: eventForm.title,
       description: eventForm.description || null,
-      event_date: eventForm.event_date,
+      event_date: normalizedEventDate.toISOString(),
       location: eventForm.location || null,
       type: eventForm.type,
       area: adminArea || eventForm.area || null,
@@ -291,7 +297,10 @@ export default function AttendanceTab({ participants, activities, communities, i
 
         const allEvents = freshEvents ?? events;
         const subsequentWithLessons = allEvents.filter(
-          e => e.id !== editingEventId && e.event_date > oldEvent.event_date && e.linked_lesson_id
+          e =>
+            e.id !== editingEventId &&
+            new Date(e.event_date).getTime() > new Date(oldEvent.event_date).getTime() &&
+            e.linked_lesson_id
         );
         console.log("[CASCADE CHECK] subsequent events with lessons:", subsequentWithLessons.length);
 
@@ -329,8 +338,8 @@ export default function AttendanceTab({ participants, activities, communities, i
 
     if (doCascade) {
       const subsequent = events
-        .filter(e => e.id !== eventId && e.event_date > event.event_date && e.linked_lesson_id)
-        .sort((a, b) => a.event_date.localeCompare(b.event_date));
+        .filter(e => e.id !== eventId && new Date(e.event_date).getTime() > new Date(event.event_date).getTime() && e.linked_lesson_id)
+        .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
 
       if (subsequent.length > 0) {
         const allLessonsOrdered = [...lessonOptions].sort((a, b) => {

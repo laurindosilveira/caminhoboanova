@@ -115,13 +115,17 @@ export default function AgendaTab() {
   async function handleSave() {
     if (!form.title || !form.event_date) return;
     setSaving(true);
-
-    const eventDateWithTz = form.event_date ? form.event_date + ":00-03:00" : form.event_date;
+    const normalizedEventDate = form.event_date ? new Date(form.event_date) : null;
+    if (!normalizedEventDate || Number.isNaN(normalizedEventDate.getTime())) {
+      toast.error("Data do evento invalida.");
+      setSaving(false);
+      return;
+    }
 
     const payload = {
       title: form.title,
       description: form.description || null,
-      event_date: eventDateWithTz,
+      event_date: normalizedEventDate.toISOString(),
       location: form.location || null,
       type: form.type,
       area: form.area || null,
@@ -136,7 +140,10 @@ export default function AgendaTab() {
 
       if (oldLessonId !== newLessonId && newLessonId && oldEvent) {
         const subsequentWithLessons = events.filter(
-          e => e.id !== editingFullEventId && e.event_date > oldEvent.event_date && e.linked_lesson_id
+          e =>
+            e.id !== editingFullEventId &&
+            new Date(e.event_date).getTime() > new Date(oldEvent.event_date).getTime() &&
+            e.linked_lesson_id
         );
         if (subsequentWithLessons.length > 0) {
           await supabase.from("events").update({ ...payload, linked_lesson_id: oldLessonId }).eq("id", editingFullEventId);
@@ -183,7 +190,10 @@ export default function AgendaTab() {
 
     if (oldLessonId !== newLessonId && newLessonId) {
       const subsequentWithLessons = events.filter(
-        e => e.id !== eventId && e.event_date > event.event_date && e.linked_lesson_id
+        e =>
+          e.id !== eventId &&
+          new Date(e.event_date).getTime() > new Date(event.event_date).getTime() &&
+          e.linked_lesson_id
       );
       if (subsequentWithLessons.length > 0) {
         setCascadePending({ eventId, oldLessonId, newLessonId });
@@ -208,8 +218,8 @@ export default function AgendaTab() {
 
     if (doCascade) {
       const subsequent = events
-        .filter(e => e.id !== eventId && e.event_date > event.event_date && e.linked_lesson_id)
-        .sort((a, b) => a.event_date.localeCompare(b.event_date));
+        .filter(e => e.id !== eventId && new Date(e.event_date).getTime() > new Date(event.event_date).getTime() && e.linked_lesson_id)
+        .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
 
       if (subsequent.length > 0) {
         const newLesson = lessons.find(l => l.id === newLessonId);
