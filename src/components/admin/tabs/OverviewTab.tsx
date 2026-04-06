@@ -197,7 +197,7 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
         } else {
           const devDays = Math.floor((now.getTime() - lastDevDate.getTime()) / (1000 * 60 * 60 * 24));
           if (devDays >= 10) {
-            reasons.push({ icon: "📖", label: `Sem devocional há ${devDays} dias`, severity: devDays >= 14 ? "high" : "medium" });
+            reasons.push({ icon: "📖", label: `Sem devocional ha ${devDays} dias`, severity: devDays >= 14 ? "high" : "medium" });
           }
         }
 
@@ -205,8 +205,12 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
         const statuses = attByUser[p.user_id] ?? [];
         let consecutiveMisses = 0;
         for (const s of statuses) {
-          if (s !== "presente") consecutiveMisses++;
-          else break;
+          if (s === "presente") break;
+          if (s === "falta") {
+            consecutiveMisses++;
+            continue;
+          }
+          continue;
         }
         if (consecutiveMisses >= 2) {
           reasons.push({
@@ -224,7 +228,7 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
           if (drop >= 1) {
             reasons.push({
               icon: "📉",
-              label: `Avaliação caiu ${drop >= 2 ? "muito" : ""} (${prevAvg.toFixed(1)} → ${curAvg.toFixed(1)})`,
+              label: `Avaliacao caiu ${drop >= 2 ? "muito" : ""} (${prevAvg.toFixed(1)} -> ${curAvg.toFixed(1)})`,
               severity: drop >= 2 ? "high" : "medium",
             });
           }
@@ -272,7 +276,11 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
       if (comms.length === 0) return;
       const results: CommunityRanking[] = [];
       for (const comm of comms) {
-        const { data } = await supabase.rpc("get_community_ranking", { _community: comm as any });
+        const { data, error } = await supabase.rpc("get_community_ranking", { _community: comm as any });
+        if (error) {
+          toast.error(`Erro ao carregar ranking de ${comm}: ${error.message}`);
+          continue;
+        }
         if (data && data.length > 0) {
           results.push({ community: comm, ranking: data as RankingEntry[] });
         }
@@ -288,16 +296,21 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
 
     // Check if already closed
     if (seasons.some(s => s.course_id === courseId && s.community === community)) {
-      toast.info("Esta temporada já foi encerrada para sua comunidade.");
+      toast.info("Esta temporada ja foi encerrada para sua comunidade.");
       return;
     }
 
     setClosingSeason(true);
 
     // Fetch ranking for this community
-    const { data: rankingData } = await supabase.rpc("get_community_ranking", {
+    const { data: rankingData, error: rankingError } = await supabase.rpc("get_community_ranking", {
       _community: profile.community as any,
     });
+    if (rankingError) {
+      toast.error("Erro ao carregar ranking da comunidade: " + rankingError.message);
+      setClosingSeason(false);
+      return;
+    }
 
     const ranking = (rankingData ?? []) as { user_id: string; full_name: string; faith_points: number }[];
 

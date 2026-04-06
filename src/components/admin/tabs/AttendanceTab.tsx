@@ -1404,11 +1404,16 @@ export default function AttendanceTab({ participants, activities, communities, i
   );
 
   async function fetchPromotionRequests() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("year_promotion_requests")
       .select("*")
       .order("requested_at", { ascending: false })
       .limit(50);
+    if (error) {
+      toast({ title: "Erro ao carregar promocoes", description: error.message, variant: "destructive" });
+      setPromotionRequests([]);
+      return;
+    }
     const enriched = (data ?? []).map((r: any) => {
       const p = participants.find(p => p.user_id === r.user_id);
       return { ...r, full_name: p?.full_name, community: p?.community };
@@ -1425,13 +1430,13 @@ export default function AttendanceTab({ participants, activities, communities, i
     const firstYearParticipants = participants.filter(p => (p as any).confirmation_year === 1);
     
     if (firstYearParticipants.length === 0) {
-      toast({ title: "Nenhum aluno elegível", description: "Não há alunos do 1º ano nesta turma." });
+      toast({ title: "Nenhum aluno elegivel", description: "Nao ha alunos do 1º ano nesta turma." });
       setGeneratingPromotions(false);
       return;
     }
 
     if (!isEndOfYear) {
-      toast({ title: "Fora do período", description: "As promoções são geradas no final do ano (novembro/dezembro). Deseja continuar mesmo assim?" });
+      toast({ title: "Fora do periodo", description: "As promocoes sao geradas no final do ano (novembro/dezembro)." });
     }
 
     // Check for existing pending requests
@@ -1439,25 +1444,31 @@ export default function AttendanceTab({ participants, activities, communities, i
     const newParticipants = firstYearParticipants.filter(p => !existingUserIds.includes(p.user_id));
 
     if (newParticipants.length === 0) {
-      toast({ title: "Já existem promoções pendentes", description: "Todos os alunos do 1º ano já têm solicitações pendentes." });
+      toast({ title: "Ja existem promocoes pendentes", description: "Todos os alunos do 1º ano ja tem solicitacoes pendentes." });
       setGeneratingPromotions(false);
       return;
     }
 
-    const { data: user } = await supabase.auth.getUser();
+    const { data: userResult, error: authError } = await supabase.auth.getUser();
+    if (authError || !userResult.user) {
+      toast({ title: "Erro de autenticacao", description: authError?.message ?? "Usuario nao encontrado.", variant: "destructive" });
+      setGeneratingPromotions(false);
+      return;
+    }
     const inserts = newParticipants.map(p => ({
       user_id: p.user_id,
       from_year: 1,
       to_year: 2,
       turma_id: (p as any).turma_id ?? null,
       status: "pendente",
+      requested_by: userResult.user.id,
     }));
 
     const { error } = await supabase.from("year_promotion_requests").insert(inserts as any);
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: `📋 ${newParticipants.length} promoção(ões) gerada(s)`, description: "Revise e aprove cada uma." });
+      toast({ title: `${newParticipants.length} promocao(oes) gerada(s)`, description: "Revise e aprove cada uma." });
       await fetchPromotionRequests();
     }
     setGeneratingPromotions(false);
