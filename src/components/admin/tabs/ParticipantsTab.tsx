@@ -41,6 +41,7 @@ type RealLessonCompletion = {
   course_title: string;
   responses: { question: string; response: string }[];
   completed_at: string | null;
+  awarded_points: number;
 };
 
 type RealDevotionalCompletion = {
@@ -52,6 +53,7 @@ type RealDevotionalCompletion = {
   questions: string[];
   completed_at: string;
   is_weekend: boolean;
+  awarded_points: number;
 };
 
 type RealAttendanceRecord = {
@@ -209,18 +211,18 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
     setLoading(true);
 
     const [
-      { data: lessonResps },
-      { data: devProgress },
-      { data: attData },
-      { data: worshipData },
-      { data: lessonsData },
-      { data: coursesData },
-      { data: lessonContentData },
-      { data: devContentData },
-      { data: eventsData },
+      { data: lessonResps, error: lessonRespsError },
+      { data: devProgress, error: devProgressError },
+      { data: attData, error: attDataError },
+      { data: worshipData, error: worshipDataError },
+      { data: lessonsData, error: lessonsDataError },
+      { data: coursesData, error: coursesDataError },
+      { data: lessonContentData, error: lessonContentError },
+      { data: devContentData, error: devContentError },
+      { data: eventsData, error: eventsDataError },
     ] = await Promise.all([
-      supabase.from("lesson_responses").select("lesson_id, question_key, response, created_at").eq("user_id", p.user_id).order("created_at"),
-      supabase.from("devotional_progress").select("devotional_id, completed_at").eq("user_id", p.user_id).order("completed_at"),
+      supabase.from("lesson_responses").select("lesson_id, question_key, response, created_at, awarded_points").eq("user_id", p.user_id).order("created_at"),
+      supabase.from("devotional_progress").select("devotional_id, completed_at, awarded_points").eq("user_id", p.user_id).order("completed_at"),
       supabase.from("attendance").select("event_id, status, created_at").eq("user_id", p.user_id).order("created_at", { ascending: false }),
       supabase.from("worship_attendance").select("id, event_type, worship_date, status").eq("user_id", p.user_id).eq("status", "aprovado").order("worship_date"),
       supabase.from("lessons").select("id, title, order_num, course_id").order("order_num"),
@@ -230,13 +232,41 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
       supabase.from("events").select("id, title, event_date, type").order("event_date", { ascending: false }),
     ]);
 
+    const loadError = lessonRespsError
+      ?? devProgressError
+      ?? attDataError
+      ?? worshipDataError
+      ?? lessonsDataError
+      ?? coursesDataError
+      ?? lessonContentError
+      ?? devContentError
+      ?? eventsDataError;
+
+    if (loadError) {
+      setLessonCompletions([]);
+      setDevotionalCompletions([]);
+      setAttendanceRecords([]);
+      setWorshipRecords([]);
+      setLoading(false);
+      toast({
+        title: "Erro ao carregar participante",
+        description: loadError.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Build lesson completions
     const courseMap = new Map((coursesData ?? []).map(c => [c.id, c.title]));
     const lessonContentMap = new Map((lessonContentData ?? []).map(lc => [lc.lesson_id, lc.questions as string[]]));
-    const respsByLesson = new Map<string, Map<string, { response: string; created_at: string }>>();
+    const respsByLesson = new Map<string, Map<string, { response: string; created_at: string; awarded_points: number | null }>>();
     (lessonResps ?? []).forEach(r => {
       if (!respsByLesson.has(r.lesson_id)) respsByLesson.set(r.lesson_id, new Map());
-      respsByLesson.get(r.lesson_id)!.set(r.question_key, { response: r.response, created_at: r.created_at });
+      respsByLesson.get(r.lesson_id)!.set(r.question_key, {
+        response: r.response,
+        created_at: r.created_at,
+        awarded_points: typeof r.awarded_points === "number" ? r.awarded_points : null,
+      });
     });
 
     const lCompletions: RealLessonCompletion[] = [];
@@ -255,12 +285,14 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
         }
       });
       const firstResp = Array.from(respMap.values())[0];
+      const awardedPoints = Array.from(respMap.values()).find((value) => typeof value.awarded_points === "number")?.awarded_points ?? 20;
       lCompletions.push({
         lesson_id: lesson.id,
         lesson_title: lesson.title,
         course_title: courseMap.get(lesson.course_id) ?? "",
         responses: responses.filter(r => r.response),
         completed_at: firstResp?.created_at ?? null,
+        awarded_points: awardedPoints,
       });
     });
     setLessonCompletions(lCompletions);
@@ -283,6 +315,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
         questions: content.questions ?? [],
         completed_at: dp.completed_at,
         is_weekend: dow === 0 || dow === 6,
+        awarded_points: typeof dp.awarded_points === "number" ? dp.awarded_points : (dow === 0 || dow === 6 ? 2 : 5),
       });
     });
     setDevotionalCompletions(dCompletions);
@@ -366,7 +399,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
   // ── Delete handlers ──
   async function logRemoval(activityType: string, activityId: string, activityTitle: string, pointsRemoved: number) {
     if (!user) return;
-    await supabase.from("activity_removal_log" as any).insert({
+    const { error } = await supabase.from("activity_removal_log" as any).insert({
       removed_by: user.id,
       target_user_id: p.user_id,
       activity_type: activityType,
@@ -374,14 +407,26 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
       activity_title: activityTitle,
       points_removed: pointsRemoved,
     } as any);
+    if (error) throw error;
   }
 
   async function handleDeleteLesson(lessonId: string) {
     setDeletingType("estudo");
     setDeletingId(lessonId);
     const lesson = lessonCompletions.find(l => l.lesson_id === lessonId);
-    await supabase.from("lesson_responses").delete().eq("user_id", p.user_id).eq("lesson_id", lessonId);
-    await logRemoval("estudo", lessonId, lesson?.lesson_title ?? "", 20);
+    const pointsRemoved = lesson?.awarded_points ?? 20;
+    const { error } = await supabase.from("lesson_responses").delete().eq("user_id", p.user_id).eq("lesson_id", lessonId);
+    if (error) {
+      toast({ title: "Erro ao remover estudo", description: error.message, variant: "destructive" });
+      setDeletingType(null);
+      setDeletingId(null);
+      return;
+    }
+    try {
+      await logRemoval("estudo", lessonId, lesson?.lesson_title ?? "", pointsRemoved);
+    } catch (logError: any) {
+      toast({ title: "Estudo removido com alerta", description: `As respostas foram removidas, mas o log falhou: ${logError.message}`, variant: "destructive" });
+    }
     setLessonCompletions(prev => prev.filter(l => l.lesson_id !== lessonId));
     toast({ title: "Estudo removido", description: "Respostas e pontuação foram removidas. Registro salvo no log." });
     setDeletingType(null);
@@ -394,9 +439,19 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
     setDeletingType("devocional");
     setDeletingId(devotionalId);
     const dev = devotionalCompletions.find(d => d.devotional_id === devotionalId);
-    const pts = dev?.is_weekend ? 2 : 5;
-    await supabase.from("devotional_progress").delete().eq("user_id", p.user_id).eq("devotional_id", devotionalId);
-    await logRemoval("devocional", devotionalId, dev?.title ?? "", pts);
+    const pts = dev?.awarded_points ?? (dev?.is_weekend ? 2 : 5);
+    const { error } = await supabase.from("devotional_progress").delete().eq("user_id", p.user_id).eq("devotional_id", devotionalId);
+    if (error) {
+      toast({ title: "Erro ao remover devocional", description: error.message, variant: "destructive" });
+      setDeletingType(null);
+      setDeletingId(null);
+      return;
+    }
+    try {
+      await logRemoval("devocional", devotionalId, dev?.title ?? "", pts);
+    } catch (logError: any) {
+      toast({ title: "Devocional removido com alerta", description: `A conclusao foi removida, mas o log falhou: ${logError.message}`, variant: "destructive" });
+    }
     setDevotionalCompletions(prev => prev.filter(d => d.devotional_id !== devotionalId));
     toast({ title: "Devocional removido", description: "Conclusão e pontuação foram removidas. Registro salvo no log." });
     setDeletingType(null);
@@ -409,8 +464,18 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
     setDeletingType("presenca");
     setDeletingId(eventId);
     const att = attendanceRecords.find(a => a.event_id === eventId);
-    await supabase.from("attendance").delete().eq("user_id", p.user_id).eq("event_id", eventId);
-    await logRemoval("presenca", eventId, att?.event_title ?? "", 10);
+    const { error } = await supabase.from("attendance").delete().eq("user_id", p.user_id).eq("event_id", eventId);
+    if (error) {
+      toast({ title: "Erro ao remover presenca", description: error.message, variant: "destructive" });
+      setDeletingType(null);
+      setDeletingId(null);
+      return;
+    }
+    try {
+      await logRemoval("presenca", eventId, att?.event_title ?? "", 10);
+    } catch (logError: any) {
+      toast({ title: "Presenca removida com alerta", description: `O registro foi removido, mas o log falhou: ${logError.message}`, variant: "destructive" });
+    }
     setAttendanceRecords(prev => prev.filter(a => a.event_id !== eventId));
     toast({ title: "Presença removida", description: "Registro de presença foi removido. Registro salvo no log." });
     setDeletingType(null);
@@ -419,8 +484,8 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
   }
 
   // ── Points calculation (real data) ──
-  const lessonPts = lessonCompletions.length * 20;
-  const devPts = devotionalCompletions.reduce((s, d) => s + (d.is_weekend ? 2 : 5), 0);
+  const lessonPts = lessonCompletions.reduce((sum, lesson) => sum + lesson.awarded_points, 0);
+  const devPts = devotionalCompletions.reduce((sum, devotional) => sum + devotional.awarded_points, 0);
   const attendancePts = attendanceRecords.filter(a => a.status === "presente").length * 10;
   const worshipPts = worshipRecords.length * 5;
   const totalPts = lessonPts + devPts + attendancePts + worshipPts;
@@ -1057,11 +1122,19 @@ export default function ParticipantsTab({ participants, activities, communities 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setUnlockLoading(null); return; }
     if (unlockedCourseIds.has(courseId)) {
-      await supabase.from("course_unlocks").delete().eq("course_id", courseId).eq("area", myArea);
-      setUnlockedCourseIds(prev => { const n = new Set(prev); n.delete(courseId); return n; });
+      const { error } = await supabase.from("course_unlocks").delete().eq("course_id", courseId).eq("area", myArea);
+      if (error) {
+        toast({ title: "Erro ao bloquear curso", description: error.message, variant: "destructive" });
+      } else {
+        setUnlockedCourseIds(prev => { const n = new Set(prev); n.delete(courseId); return n; });
+      }
     } else {
-      await supabase.from("course_unlocks").insert({ course_id: courseId, area: myArea, unlocked_by: user.id } as any);
-      setUnlockedCourseIds(prev => new Set(prev).add(courseId));
+      const { error } = await supabase.from("course_unlocks").insert({ course_id: courseId, area: myArea, unlocked_by: user.id } as any);
+      if (error) {
+        toast({ title: "Erro ao liberar curso", description: error.message, variant: "destructive" });
+      } else {
+        setUnlockedCourseIds(prev => new Set(prev).add(courseId));
+      }
     }
     setUnlockLoading(null);
   }

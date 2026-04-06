@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Clock, UserPlus, Search, GraduationCap } from "lucide-react";
+import { Clock, GraduationCap, Search, UserPlus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 
@@ -34,42 +34,84 @@ export default function LeaderWaitingRoom({ areaFilter, onAssigned }: Props) {
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
 
-  useEffect(() => { fetchData(); }, [areaFilter]);
+  useEffect(() => {
+    void fetchData();
+  }, [areaFilter]);
 
   async function fetchData() {
     setLoading(true);
-    const [{ data: profiles }, { data: turmasData }, userResult] = await Promise.all([
-      supabase.from("profiles").select("user_id, full_name, community, area, phone, birth_date, turma_id"),
-      supabase.from("turmas").select("id, name, year, area").eq("is_active", true).order("year", { ascending: false }),
+
+    const [
+      { data: profiles, error: profilesError },
+      { data: turmasData, error: turmasError },
+      userResult,
+    ] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("user_id, full_name, community, area, phone, birth_date, turma_id")
+        .is("turma_id", null)
+        .eq("area", areaFilter),
+      supabase
+        .from("turmas")
+        .select("id, name, year, area")
+        .eq("is_active", true)
+        .eq("area", areaFilter)
+        .order("year", { ascending: false }),
       supabase.auth.getUser(),
     ]);
 
+    if (profilesError || turmasError) {
+      toast({
+        title: "Erro ao carregar sala de espera",
+        description: profilesError?.message ?? turmasError?.message ?? "Nao foi possivel carregar os dados.",
+        variant: "destructive",
+      });
+      setUsers([]);
+      setTurmas([]);
+      setLoading(false);
+      return;
+    }
+
     const myId = userResult.data.user?.id;
-    // Filter by area
-    const waiting = (profiles ?? []).filter(p => !p.turma_id && p.user_id !== myId && p.area === areaFilter);
-    setUsers(waiting);
-    // Only show turmas from the same area
-    setTurmas((turmasData ?? []).filter(t => t.area === areaFilter));
+    setUsers((profiles ?? []).filter((profile) => profile.user_id !== myId));
+    setTurmas(turmasData ?? []);
     setLoading(false);
   }
 
   async function assignTurma(userId: string, turmaId: string, userName: string) {
+    const turma = turmas.find((item) => item.id === turmaId);
+    if (!turma) {
+      toast({
+        title: "Turma invalida",
+        description: "Selecione uma turma ativa da mesma area.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSaving(userId);
-    const { error } = await supabase.from("profiles").update({ turma_id: turmaId }).eq("user_id", userId);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ turma_id: turmaId })
+      .eq("user_id", userId);
+
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
-      const turma = turmas.find(t => t.id === turmaId);
-      toast({ title: "✅ Atribuído", description: `${userName} foi adicionado à turma "${turma?.name}".` });
-      setUsers(prev => prev.filter(u => u.user_id !== userId));
+      toast({
+        title: "Atribuido",
+        description: `${userName} foi adicionado a turma "${turma.name}".`,
+      });
+      setUsers((prev) => prev.filter((user) => user.user_id !== userId));
       onAssigned?.();
     }
+
     setSaving(null);
   }
 
-  const filtered = users.filter(u =>
-    u.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    u.community.toLowerCase().includes(search.toLowerCase())
+  const filtered = users.filter((user) =>
+    user.full_name.toLowerCase().includes(search.toLowerCase()) ||
+    user.community.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -80,24 +122,35 @@ export default function LeaderWaitingRoom({ areaFilter, onAssigned }: Props) {
         </div>
         <div>
           <h2 className="font-montserrat font-black text-foreground text-lg">Sala de Espera</h2>
-          <p className="text-muted-foreground text-xs font-inter">Usuários da {areaFilter} aguardando turma</p>
+          <p className="text-muted-foreground text-xs font-inter">
+            Usuarios da {areaFilter} aguardando turma
+          </p>
         </div>
       </div>
 
       <div className="relative">
         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input placeholder="Buscar por nome..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 rounded-2xl border-border" />
+        <Input
+          placeholder="Buscar por nome..."
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          className="pl-9 rounded-2xl border-border"
+        />
       </div>
 
       {turmas.length === 0 && (
         <div className="bg-secondary/10 border border-secondary/30 rounded-2xl px-4 py-3">
-          <p className="text-secondary font-inter text-xs font-medium">⚠️ Nenhuma turma ativa nesta área.</p>
+          <p className="text-secondary font-inter text-xs font-medium">
+            Nenhuma turma ativa nesta area.
+          </p>
         </div>
       )}
 
       {loading ? (
         <div className="space-y-2">
-          {[1, 2, 3].map(i => <div key={i} className="bg-muted rounded-2xl h-20 animate-pulse" />)}
+          {[1, 2, 3].map((item) => (
+            <div key={item} className="bg-muted rounded-2xl h-20 animate-pulse" />
+          ))}
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-12">
@@ -105,31 +158,53 @@ export default function LeaderWaitingRoom({ areaFilter, onAssigned }: Props) {
             <UserPlus className="w-7 h-7 text-muted-foreground" />
           </div>
           <p className="text-muted-foreground font-inter text-sm">
-            {users.length === 0 ? "Nenhum usuário da sua área aguardando turma!" : "Nenhum resultado para a busca."}
+            {users.length === 0
+              ? "Nenhum usuario da sua area aguardando turma."
+              : "Nenhum resultado para a busca."}
           </p>
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(u => {
-            const initials = u.full_name.split(" ").map(n => n[0]).slice(0, 2).join("").toUpperCase();
+          {filtered.map((user) => {
+            const initials = user.full_name
+              .split(" ")
+              .map((name) => name[0])
+              .slice(0, 2)
+              .join("")
+              .toUpperCase();
+
             return (
-              <div key={u.user_id} className={`bg-card border border-border rounded-2xl p-4 space-y-3 ${saving === u.user_id ? "opacity-60" : ""}`}>
+              <div
+                key={user.user_id}
+                className={`bg-card border border-border rounded-2xl p-4 space-y-3 ${
+                  saving === user.user_id ? "opacity-60" : ""
+                }`}
+              >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center flex-shrink-0 font-montserrat font-black text-sm text-muted-foreground">
                     {initials}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-montserrat font-bold text-foreground text-sm truncate">{u.full_name}</p>
-                    <p className="text-muted-foreground text-xs font-inter">{u.community} · {u.area}</p>
+                    <p className="font-montserrat font-bold text-foreground text-sm truncate">
+                      {user.full_name}
+                    </p>
+                    <p className="text-muted-foreground text-xs font-inter">
+                      {user.community} · {user.area}
+                    </p>
                   </div>
                 </div>
+
                 {turmas.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
-                    {turmas.map(t => (
-                      <button key={t.id} onClick={() => assignTurma(u.user_id, t.id, u.full_name)} disabled={saving === u.user_id}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all disabled:opacity-50">
+                    {turmas.map((turma) => (
+                      <button
+                        key={turma.id}
+                        onClick={() => assignTurma(user.user_id, turma.id, user.full_name)}
+                        disabled={saving === user.user_id}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all disabled:opacity-50"
+                      >
                         <GraduationCap className="w-3 h-3" />
-                        {t.name}
+                        {turma.name}
                       </button>
                     ))}
                   </div>
