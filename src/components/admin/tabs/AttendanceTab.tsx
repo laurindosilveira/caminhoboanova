@@ -209,13 +209,20 @@ export default function AttendanceTab({ participants, activities, communities, i
 
   async function handleAttendanceApproval(id: string, action: "presente" | "justificou" | "rejeitado") {
     setSavingAttendanceApproval(id);
+    let error = null;
     if (action === "rejeitado") {
-      await supabase.from("attendance").delete().eq("id", id);
-      setPendingAttendance(prev => prev.filter(a => a.id !== id));
+      const result = await supabase.from("attendance").delete().eq("id", id);
+      error = result.error;
     } else {
-      await supabase.from("attendance").update({ status: action }).eq("id", id);
-      setPendingAttendance(prev => prev.filter(a => a.id !== id));
+      const result = await supabase.from("attendance").update({ status: action }).eq("id", id);
+      error = result.error;
     }
+    if (error) {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      setSavingAttendanceApproval(null);
+      return;
+    }
+    setPendingAttendance(prev => prev.filter(a => a.id !== id));
     toast({ title: action === "presente" ? "Presença aprovada ✅" : action === "justificou" ? "Falta justificada ✓" : "Solicitação rejeitada" });
     setSavingAttendanceApproval(null);
   }

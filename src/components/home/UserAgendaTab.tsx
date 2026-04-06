@@ -317,10 +317,24 @@ export default function UserAgendaTab() {
     const payload: any = { status };
     if (justification) payload.justification = justification;
     const existing = attendanceRecords.find(a => a.event_id === eventId);
+    let error = null;
     if (existing) {
-      await supabase.from("attendance").update(payload).eq("event_id", eventId).eq("user_id", user.id);
+      const result = await supabase
+        .from("attendance")
+        .update(payload)
+        .eq("event_id", eventId)
+        .eq("user_id", user.id);
+      error = result.error;
     } else {
-      await supabase.from("attendance").insert({ event_id: eventId, user_id: user.id, ...payload });
+      const result = await supabase
+        .from("attendance")
+        .insert({ event_id: eventId, user_id: user.id, ...payload });
+      error = result.error;
+    }
+    if (error) {
+      toast.error("Nao foi possivel enviar sua solicitacao");
+      console.error(error);
+      return;
     }
     setAttendanceRecords(prev => {
       const filtered = prev.filter(a => a.event_id !== eventId);
@@ -497,10 +511,10 @@ export default function UserAgendaTab() {
     const userIds = [...new Set(data.map(a => a.user_id))];
     const eventIds = [...new Set(data.map(a => a.event_id))];
     const [{ data: profilesData }, { data: eventsData }] = await Promise.all([
-      supabase.from("profiles").select("id, full_name, community").in("id", userIds),
+      supabase.from("profiles").select("user_id, full_name, community").in("user_id", userIds),
       supabase.from("events").select("id, title, event_date").in("id", eventIds),
     ]);
-    const profileMap = new Map((profilesData ?? []).map((p: any) => [p.id, p]));
+    const profileMap = new Map((profilesData ?? []).map((p: any) => [p.user_id, p]));
     const evMap = new Map((eventsData ?? []).map((e: any) => [e.id, e]));
     setPendingAttendance(data.map(a => ({
       ...a,
@@ -513,10 +527,19 @@ export default function UserAgendaTab() {
 
   async function handleAttendanceApproval(id: string, action: "presente" | "justificou" | "rejeitado") {
     setSavingApproval(id);
+    let error = null;
     if (action === "rejeitado") {
-      await supabase.from("attendance").delete().eq("id", id);
+      const result = await supabase.from("attendance").delete().eq("id", id);
+      error = result.error;
     } else {
-      await supabase.from("attendance").update({ status: action }).eq("id", id);
+      const result = await supabase.from("attendance").update({ status: action }).eq("id", id);
+      error = result.error;
+    }
+    if (error) {
+      toast.error("Nao foi possivel atualizar a solicitacao");
+      console.error(error);
+      setSavingApproval(null);
+      return;
     }
     setPendingAttendance(prev => prev.filter(a => a.id !== id));
     toast.success(action === "presente" ? "Presença aprovada ✅" : action === "justificou" ? "Falta justificada ✓" : "Solicitação rejeitada");
