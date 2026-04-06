@@ -232,7 +232,14 @@ export default function AttendanceTab({ participants, activities, communities, i
     const userIds = eventParticipants.map(p => p.user_id);
 
     // Always load attendance
-    const { data: attData } = await supabase.from("attendance").select("user_id, status").eq("event_id", eventId);
+    const { data: attData, error: attendanceError } = await supabase
+      .from("attendance")
+      .select("user_id, status")
+      .eq("event_id", eventId);
+    if (attendanceError) {
+      toast({ title: "Erro ao carregar presenças", description: attendanceError.message, variant: "destructive" });
+      return;
+    }
 
     const attMap: Record<string, AttendanceStatus> = {};
     (attData ?? []).forEach((r: any) => { attMap[r.user_id] = r.status as AttendanceStatus; });
@@ -240,10 +247,18 @@ export default function AttendanceTab({ participants, activities, communities, i
 
     // For encontros, also load evaluations + progress
     if (isEncontro && userIds.length > 0) {
-      const [{ data: evalData }, { data: progressData }] = await Promise.all([
+      const [{ data: evalData, error: evaluationError }, { data: progressData, error: progressError }] = await Promise.all([
         supabase.from("meeting_evaluations").select("*").eq("event_id", eventId),
         supabase.from("user_progress").select("user_id, activity_id, completed_at").in("user_id", userIds),
       ]);
+      if (evaluationError || progressError) {
+        toast({
+          title: "Erro ao carregar dados do encontro",
+          description: evaluationError?.message ?? progressError?.message ?? "Falha desconhecida.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       const evalMap: Record<string, Evaluation> = {};
       (evalData ?? []).forEach((e: any) => {
@@ -441,16 +456,30 @@ export default function AttendanceTab({ participants, activities, communities, i
     setSavingAtt(`${eventId}-${userId}`);
     const current = attendance[eventId]?.[userId];
     if (current === status) {
-      await supabase.from("attendance").delete().eq("event_id", eventId).eq("user_id", userId);
+      const { error } = await supabase
+        .from("attendance")
+        .delete()
+        .eq("event_id", eventId)
+        .eq("user_id", userId);
+      if (error) {
+        toast({ title: "Erro ao remover presença", description: error.message, variant: "destructive" });
+        setSavingAtt(null);
+        return;
+      }
       setAttendance(prev => {
         const updated = { ...prev[eventId] };
         delete updated[userId];
         return { ...prev, [eventId]: updated };
       });
     } else {
-      await supabase.from("attendance").upsert({
+      const { error } = await supabase.from("attendance").upsert({
         event_id: eventId, user_id: userId, status,
       }, { onConflict: "event_id,user_id" });
+      if (error) {
+        toast({ title: "Erro ao salvar presença", description: error.message, variant: "destructive" });
+        setSavingAtt(null);
+        return;
+      }
       setAttendance(prev => ({
         ...prev,
         [eventId]: { ...(prev[eventId] ?? {}), [userId]: status },
