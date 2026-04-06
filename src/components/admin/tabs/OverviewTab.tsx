@@ -79,10 +79,17 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       const since = sevenDaysAgo.toISOString();
 
-      const { data: progress } = await supabase
+      const { data: progress, error } = await supabase
         .from("devotional_progress")
         .select("user_id, completed_at")
         .gte("completed_at", since);
+
+      if (error) {
+        toast.error("Erro ao carregar devocionais da semana: " + error.message);
+        setWeeklyDevStats([]);
+        setWeeklyTotal(0);
+        return;
+      }
 
       if (!progress || progress.length === 0) {
         setWeeklyDevStats([]);
@@ -259,10 +266,16 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
   // Fetch courses and existing seasons
   useEffect(() => {
     async function fetchSeasons() {
-      const [{ data: coursesData }, { data: seasonsData }] = await Promise.all([
+      const [{ data: coursesData, error: coursesError }, { data: seasonsData, error: seasonsError }] = await Promise.all([
         supabase.from("courses").select("id, title, order_num").order("order_num"),
         supabase.from("ranking_seasons").select("*"),
       ]);
+      if (coursesError) {
+        toast.error("Erro ao carregar cursos: " + coursesError.message);
+      }
+      if (seasonsError) {
+        toast.error("Erro ao carregar temporadas: " + seasonsError.message);
+      }
       setCourses((coursesData ?? []) as CourseInfo[]);
       setSeasons((seasonsData ?? []) as unknown as RankingSeason[]);
     }
@@ -322,12 +335,17 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
       medal: i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉",
     }));
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      toast.error("Nao foi possivel identificar o lider para encerrar a temporada.");
+      setClosingSeason(false);
+      return;
+    }
 
     const { error } = await supabase.from("ranking_seasons").insert({
       course_id: courseId,
       community,
-      closed_by: user!.id,
+      closed_by: user.id,
       winners,
       total_participants: ranking.length,
     });
@@ -335,9 +353,12 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
     if (error) {
       toast.error("Erro ao encerrar temporada: " + error.message);
     } else {
-      toast.success("🏆 Temporada encerrada! Vencedores registrados.", { duration: 4000 });
+      toast.success("Temporada encerrada. Vencedores registrados.", { duration: 4000 });
       // Refresh seasons
-      const { data: seasonsData } = await supabase.from("ranking_seasons").select("*");
+      const { data: seasonsData, error: refreshError } = await supabase.from("ranking_seasons").select("*");
+      if (refreshError) {
+        toast.error("Temporada encerrada, mas falhou ao recarregar a lista: " + refreshError.message);
+      }
       setSeasons((seasonsData ?? []) as unknown as RankingSeason[]);
     }
     setClosingSeason(false);

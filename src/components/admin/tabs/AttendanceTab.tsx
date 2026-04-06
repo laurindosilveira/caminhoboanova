@@ -1475,20 +1475,13 @@ export default function AttendanceTab({ participants, activities, communities, i
   }
 
   async function handlePromotionAction(requestId: string, userId: string, action: "aprovado" | "rejeitado") {
-    const { data: user } = await supabase.auth.getUser();
-    const { error } = await supabase.from("year_promotion_requests").update({
-      status: action,
-      reviewed_by: user.user?.id,
-      reviewed_at: new Date().toISOString(),
-    } as any).eq("id", requestId);
-
-    if (error) {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) {
+      toast({ title: "Erro", description: "Nao foi possivel identificar o lider responsavel.", variant: "destructive" });
       return;
     }
 
     if (action === "aprovado") {
-      // Update the user's confirmation_year to 2
       const { error: profileError } = await supabase
         .from("profiles")
         .update({ confirmation_year: 2 } as any)
@@ -1497,9 +1490,29 @@ export default function AttendanceTab({ participants, activities, communities, i
         toast({ title: "Erro", description: profileError.message, variant: "destructive" });
         return;
       }
-      toast({ title: "✅ Promoção aprovada", description: "Aluno promovido para o 2º ano." });
+    }
+
+    const { error } = await supabase.from("year_promotion_requests").update({
+      status: action,
+      reviewed_by: authData.user.id,
+      reviewed_at: new Date().toISOString(),
+    } as any).eq("id", requestId);
+
+    if (error) {
+      if (action === "aprovado") {
+        await supabase
+          .from("profiles")
+          .update({ confirmation_year: 1 } as any)
+          .eq("user_id", userId);
+      }
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    if (action === "aprovado") {
+      toast({ title: "Promocao aprovada", description: "Aluno promovido para o 2o ano." });
     } else {
-      toast({ title: "Promoção rejeitada" });
+      toast({ title: "Promocao rejeitada" });
     }
 
     setPromotionRequests(prev =>
