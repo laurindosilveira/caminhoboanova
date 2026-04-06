@@ -75,6 +75,13 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
 
   useEffect(() => {
     async function fetchWeeklyDevotionals() {
+      const ids = participants.map(p => p.user_id);
+      if (ids.length === 0) {
+        setWeeklyDevStats([]);
+        setWeeklyTotal(0);
+        return;
+      }
+
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       const since = sevenDaysAgo.toISOString();
@@ -82,6 +89,7 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
       const { data: progress, error } = await supabase
         .from("devotional_progress")
         .select("user_id, completed_at")
+        .in("user_id", ids)
         .gte("completed_at", since);
 
       if (error) {
@@ -134,13 +142,26 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
       const prevMonth = curMonth === 1 ? 12 : curMonth - 1;
       const prevYear = curMonth === 1 ? curYear - 1 : curYear;
 
-      const [{ data: devData }, { data: recentAtt }, { data: curAssess }, { data: prevAssess }, { data: progressData }] = await Promise.all([
+      const [
+        { data: devData, error: devError },
+        { data: recentAtt, error: attendanceError },
+        { data: curAssess, error: currentAssessmentError },
+        { data: prevAssess, error: previousAssessmentError },
+        { data: progressData, error: progressError },
+      ] = await Promise.all([
         supabase.from("devotional_progress").select("user_id, completed_at").in("user_id", ids),
         supabase.from("attendance").select("user_id, status, created_at").in("user_id", ids).order("created_at", { ascending: false }),
         supabase.from("spiritual_assessments").select("user_id, prayer_score, presence_score, doubt_score, struggle_score, needs_pastor").in("user_id", ids).eq("month", curMonth).eq("year", curYear),
         supabase.from("spiritual_assessments").select("user_id, prayer_score, presence_score, doubt_score, struggle_score").in("user_id", ids).eq("month", prevMonth).eq("year", prevYear),
         supabase.from("user_progress").select("user_id, completed_at").in("user_id", ids),
       ]);
+
+      const firstError = devError ?? attendanceError ?? currentAssessmentError ?? previousAssessmentError ?? progressError;
+      if (firstError) {
+        toast.error("Erro ao carregar alertas automaticos: " + firstError.message);
+        setSmartAlerts([]);
+        return;
+      }
 
       // Last devotional per user
       const lastDev: Record<string, Date> = {};
@@ -288,10 +309,11 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
       const comms = [...new Set(participants.map(p => p.community))];
       if (comms.length === 0) return;
       const results: CommunityRanking[] = [];
+      const failedCommunities: string[] = [];
       for (const comm of comms) {
         const { data, error } = await supabase.rpc("get_community_ranking", { _community: comm as any });
         if (error) {
-          toast.error(`Erro ao carregar ranking de ${comm}: ${error.message}`);
+          failedCommunities.push(comm);
           continue;
         }
         if (data && data.length > 0) {
@@ -299,6 +321,9 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
         }
       }
       setAreaRankings(results);
+      if (failedCommunities.length > 0) {
+        toast.error(`Erro ao carregar ranking de ${failedCommunities.length} comunidade(s).`);
+      }
     }
     if (participants.length > 0) fetchAreaRankings();
   }, [participants]);
