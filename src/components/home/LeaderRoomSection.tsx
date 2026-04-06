@@ -221,27 +221,44 @@ export default function LeaderRoomSection({ asTab = false }: { asTab?: boolean }
       { data: profilesData },
       userResult,
       { data: turmasData },
-      { data: progressData },
-      { data: lessonResponsesData },
-      { data: devotionalProgressData },
     ] = await Promise.all([
       supabase.from("activities").select("*").order("order_num"),
       profilesQuery,
       supabase.auth.getUser(),
       supabase.from("turmas").select("id, name, area").eq("is_active", true),
-      supabase.from("user_progress").select("user_id, activity_id"),
-      supabase.from("lesson_responses").select("user_id, lesson_id"),
-      supabase.from("devotional_progress").select("user_id, devotional_id, completed_at"),
     ]);
 
     const myId = userResult.data.user?.id ?? "";
     const profilesList = (profilesData ?? []).filter(p => p.user_id !== myId);
 
-    // Fetch attendance filtered by the exact user_ids we loaded (avoids RLS issues)
     const userIds = profilesList.map(p => p.user_id);
-    const { data: attendanceData } = userIds.length > 0
-      ? await supabase.from("attendance").select("user_id, status").in("user_id", userIds).eq("status", "presente")
-      : { data: [] };
+    const communitiesInScope = [...new Set(profilesList.map(p => p.community).filter(Boolean))];
+    const [
+      { data: progressData },
+      { data: lessonResponsesData },
+      { data: devotionalProgressData },
+      { data: attendanceData },
+      rankingResponses,
+    ] = userIds.length > 0
+      ? await Promise.all([
+          supabase.from("user_progress").select("user_id, activity_id").in("user_id", userIds),
+          supabase.from("lesson_responses").select("user_id, lesson_id").in("user_id", userIds),
+          supabase.from("devotional_progress").select("user_id, devotional_id, completed_at").in("user_id", userIds),
+          supabase.from("attendance").select("user_id, status").in("user_id", userIds).eq("status", "presente"),
+          Promise.all(
+            communitiesInScope.map((community) =>
+              supabase.rpc("get_community_ranking" as any, { _community: community as any })
+            )
+          ),
+        ])
+      : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, [] as any];
+
+    const rankingMap = new Map<string, number>();
+    (rankingResponses ?? []).forEach((response: any) => {
+      (response.data ?? []).forEach((item: any) => {
+        rankingMap.set(item.user_id, Number(item.faith_points ?? 0));
+      });
+    });
     const activityMap = new Map((activitiesData ?? []).map((activity) => [activity.id, activity]));
 
     const participantList: Participant[] = profilesList.map((p) => {
@@ -269,7 +286,7 @@ export default function LeaderRoomSection({ asTab = false }: { asTab?: boolean }
         completed_lesson_count: lessonCount,
         completed_devotional_count: devotionalCount,
         completed_event_count: completedEventCount,
-        faith_points: activityPoints + (lessonCount * 20) + devotionalPoints,
+        faith_points: rankingMap.get(p.user_id) ?? (activityPoints + (lessonCount * 20) + devotionalPoints),
         turma_id: p.turma_id,
       } as any;
     });

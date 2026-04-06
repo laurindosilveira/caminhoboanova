@@ -244,13 +244,9 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
       if (planData) setPlan(prev => ({ ...prev, ...planData }));
       setNotes(notesData ?? []);
       const unlockedCourseIds = new Set((unlocksData ?? []).map((unlock: any) => unlock.course_id));
-      const visibleCourses = unlockedCourseIds.size > 0
-        ? (coursesData ?? []).filter((course) => unlockedCourseIds.has(course.id))
-        : (coursesData ?? []);
+      const visibleCourses = (coursesData ?? []).filter((course) => unlockedCourseIds.has(course.id));
       setCourses(visibleCourses as Course[]);
-      const visibleLessons = unlockedCourseIds.size > 0
-        ? (lessonsData ?? []).filter((lesson) => unlockedCourseIds.has(lesson.course_id))
-        : (lessonsData ?? []);
+      const visibleLessons = (lessonsData ?? []).filter((lesson) => unlockedCourseIds.has(lesson.course_id));
       setLessons(visibleLessons);
       const visibleLessonIds = new Set(visibleLessons.map((lesson) => lesson.id));
       const lessonMap = new Map(visibleLessons.map((lesson) => [lesson.id, lesson]));
@@ -619,6 +615,17 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   async function handleAddManualReleaseDraft() {
     if (manualReleaseSelection.content_kind === "devotional" && !manualReleaseForm.devotional_id) return;
     if (manualReleaseSelection.content_kind === "lesson" && !manualReleaseSelection.lesson_id) return;
+    if (
+      manualReleaseForm.available_from &&
+      manualReleaseForm.available_until &&
+      new Date(manualReleaseForm.available_until).getTime() < new Date(manualReleaseForm.available_from).getTime()
+    ) {
+      toast({
+        title: "Janela invalida",
+        description: "A data de expiração precisa ser igual ou posterior ao inicio da liberação.",
+      });
+      return;
+    }
 
     const customPoints = Number.isFinite(manualReleaseForm.custom_points)
       ? Math.max(0, Number(manualReleaseForm.custom_points))

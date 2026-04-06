@@ -6,6 +6,7 @@ import {
 import ParticipantSheet, { HealthBadge } from "./ParticipantSheet";
 import type { Participant, Activity } from "./ParticipantSheet";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 const HEALTH_CFG = {
   saudavel: { label: "🟢 Saudável", bg: "bg-brand-green/10", text: "text-brand-green" },
@@ -57,10 +58,26 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
     if (!user) { setUnlockLoading(null); return; }
 
     if (unlockedCourseIds.has(courseId)) {
-      await supabase.from("course_unlocks").delete().eq("course_id", courseId).eq("area", myArea);
+      const { error } = await supabase
+        .from("course_unlocks")
+        .delete()
+        .eq("course_id", courseId)
+        .eq("area", myArea);
+      if (error) {
+        toast.error("Nao foi possivel bloquear o curso");
+        setUnlockLoading(null);
+        return;
+      }
       setUnlockedCourseIds(prev => { const n = new Set(prev); n.delete(courseId); return n; });
     } else {
-      await supabase.from("course_unlocks").insert({ course_id: courseId, area: myArea, unlocked_by: user.id } as any);
+      const { error } = await supabase
+        .from("course_unlocks")
+        .insert({ course_id: courseId, area: myArea, unlocked_by: user.id } as any);
+      if (error) {
+        toast.error("Nao foi possivel liberar o curso");
+        setUnlockLoading(null);
+        return;
+      }
       setUnlockedCourseIds(prev => new Set(prev).add(courseId));
     }
     setUnlockLoading(null);
@@ -91,6 +108,7 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
       // Build attendance map
       const attMap: Record<string, { present: number; total: number }> = {};
       (attendanceData ?? []).forEach(a => {
+        if (!["presente", "faltou", "justificou"].includes(a.status)) return;
         if (!attMap[a.user_id]) attMap[a.user_id] = { present: 0, total: 0 };
         attMap[a.user_id].total++;
         if (a.status === "presente") attMap[a.user_id].present++;
