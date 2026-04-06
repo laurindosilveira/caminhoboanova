@@ -30,9 +30,9 @@ const COMMUNITY_COLORS: Record<string, string> = Object.fromEntries(
 );
 
 const HEALTH_CFG = {
-  saudavel: { label: "🟢 Saudável", color: "text-brand-green", bg: "bg-brand-green/10", dot: "bg-brand-green" },
-  atencao:  { label: "🟡 Atenção", color: "text-accent-foreground", bg: "bg-accent/20", dot: "bg-accent" },
-  critico:  { label: "🔴 Cuidado", color: "text-destructive", bg: "bg-destructive/10", dot: "bg-destructive" },
+  saudavel: { label: "Saudavel", color: "text-brand-green", bg: "bg-brand-green/10", dot: "bg-brand-green" },
+  atencao: { label: "Atencao", color: "text-accent-foreground", bg: "bg-accent/20", dot: "bg-accent" },
+  critico: { label: "Cuidado", color: "text-destructive", bg: "bg-destructive/10", dot: "bg-destructive" },
 };
 
 type Props = {
@@ -207,25 +207,25 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
           : lastDevDate || lastActDate;
 
         if (!latestAction) {
-          reasons.push({ icon: "😴", label: "Nunca realizou nenhuma atividade", severity: "high" });
+          reasons.push({ icon: "Inativo", label: "Nunca realizou nenhuma atividade", severity: "high" });
         } else {
           const daysSince = Math.floor((now.getTime() - latestAction.getTime()) / (1000 * 60 * 60 * 24));
           if (daysSince >= 21) {
-            reasons.push({ icon: "🚨", label: `${daysSince} dias sem atividade`, severity: "high" });
+            reasons.push({ icon: "Urgente", label: `${daysSince} dias sem atividade`, severity: "high" });
           } else if (daysSince >= 14) {
-            reasons.push({ icon: "⏰", label: `${daysSince} dias sem atividade`, severity: "high" });
+            reasons.push({ icon: "Atraso", label: `${daysSince} dias sem atividade`, severity: "high" });
           } else if (daysSince >= 7) {
-            reasons.push({ icon: "⏰", label: `${daysSince} dias sem atividade`, severity: "medium" });
+            reasons.push({ icon: "Atraso", label: `${daysSince} dias sem atividade`, severity: "medium" });
           }
         }
 
         // 2. Devotional specific inactivity
         if (!lastDevDate) {
-          reasons.push({ icon: "📖", label: "Nunca fez devocional", severity: "high" });
+          reasons.push({ icon: "Devocional", label: "Nunca fez devocional", severity: "high" });
         } else {
           const devDays = Math.floor((now.getTime() - lastDevDate.getTime()) / (1000 * 60 * 60 * 24));
           if (devDays >= 10) {
-            reasons.push({ icon: "📖", label: `Sem devocional ha ${devDays} dias`, severity: devDays >= 14 ? "high" : "medium" });
+            reasons.push({ icon: "Devocional", label: `Sem devocional ha ${devDays} dias`, severity: devDays >= 14 ? "high" : "medium" });
           }
         }
 
@@ -242,7 +242,7 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
         }
         if (consecutiveMisses >= 2) {
           reasons.push({
-            icon: "📅",
+            icon: "Presenca",
             label: `${consecutiveMisses} falta${consecutiveMisses > 1 ? "s" : ""} consecutiva${consecutiveMisses > 1 ? "s" : ""}`,
             severity: consecutiveMisses >= 3 ? "high" : "medium",
           });
@@ -255,7 +255,7 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
           const drop = prevAvg - curAvg;
           if (drop >= 1) {
             reasons.push({
-              icon: "📉",
+              icon: "Queda",
               label: `Avaliacao caiu ${drop >= 2 ? "muito" : ""} (${prevAvg.toFixed(1)} -> ${curAvg.toFixed(1)})`,
               severity: drop >= 2 ? "high" : "medium",
             });
@@ -264,7 +264,7 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
 
         // 5. Needs pastor
         if (curMap[p.user_id]?.needs_pastor) {
-          reasons.push({ icon: "🙏", label: "Pediu ajuda pastoral", severity: "high" });
+          reasons.push({ icon: "Ajuda", label: "Pediu ajuda pastoral", severity: "high" });
         }
 
         if (reasons.length > 0) {
@@ -442,13 +442,13 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
       {/* ── HERO ESPIRITUAL ─── */}
       <div className="rounded-2xl p-4 relative overflow-hidden" style={{ background: "var(--gradient-hero)" }}>
         <div className="absolute inset-0 opacity-10" style={{ backgroundImage: "radial-gradient(circle at 80% 20%, white 1px, transparent 1px)", backgroundSize: "20px 20px" }} />
-        <p className="text-primary-foreground/60 font-inter text-xs mb-1">✝️ Situação Espiritual da Turma</p>
+        <p className="text-primary-foreground/60 font-inter text-xs mb-1">Situacao espiritual da turma</p>
         <h2 className="font-montserrat font-black text-primary-foreground text-xl mb-3">Painel do Pastor</h2>
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: "Jovens ativos", value: ativos, icon: "🔥" },
-            { label: "Saudáveis", value: saudaveis, icon: "🟢" },
-            { label: "Precisam cuidado", value: criticos, icon: "🔴" },
+            { label: "Jovens ativos", value: ativos, icon: "Ativos" },
+            { label: "Saudaveis", value: saudaveis, icon: "Saude" },
+            { label: "Precisam de cuidado", value: criticos, icon: "Alerta" },
           ].map(s => (
             <div key={s.label} className="bg-white/10 backdrop-blur rounded-xl p-2.5 text-center">
               <span className="text-lg">{s.icon}</span>
@@ -479,10 +479,10 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
                   <div className="flex-1 min-w-0">
                     <p className="font-inter text-sm font-medium text-foreground truncate">{p.full_name}</p>
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      {info?.is_priority && <span className="text-[10px] font-inter text-secondary font-bold">⭐ Prioridade</span>}
-                      {info?.needs_pastor && <span className="text-[10px] font-inter text-primary font-bold">🙏 Pediu conversa</span>}
-                      {info?.health_status === "critico" && <span className="text-[10px] font-inter text-destructive font-bold">🔴 Crítico</span>}
-                      <span className="text-[10px] font-inter text-muted-foreground">· {pct}%</span>
+                      {info?.is_priority && <span className="text-[10px] font-inter text-secondary font-bold">Prioridade</span>}
+                      {info?.needs_pastor && <span className="text-[10px] font-inter text-primary font-bold">Pediu conversa</span>}
+                      {info?.health_status === "critico" && <span className="text-[10px] font-inter text-destructive font-bold">Critico</span>}
+                      <span className="text-[10px] font-inter text-muted-foreground">- {pct}%</span>
                     </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
@@ -501,24 +501,24 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
           <div className="bg-accent/5 border border-accent/20 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
-                <span className="text-base">🧭</span>
-                <p className="font-montserrat font-bold text-foreground text-sm">Alertas Automáticos</p>
+                <span className="text-base">Auto</span>
+                <p className="font-montserrat font-bold text-foreground text-sm">Alertas automaticos</p>
               </div>
               <div className="flex items-center gap-1.5">
                 {highCount > 0 && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-inter font-bold bg-destructive/10 text-destructive">
-                    🔴 {highCount} urgente{highCount > 1 ? "s" : ""}
+                    {highCount} urgente{highCount > 1 ? "s" : ""}
                   </span>
                 )}
                 {mediumOnly > 0 && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-inter font-bold bg-accent/20 text-accent-foreground">
-                    🟡 {mediumOnly} atenção
+                    {mediumOnly} atencao
                   </span>
                 )}
               </div>
             </div>
             <p className="text-muted-foreground font-inter text-[10px] mb-3">
-              Detectados automaticamente com base em dados reais de atividade, presença e avaliação
+              Detectados automaticamente com base em dados reais de atividade, presenca e avaliacao
             </p>
             <div className="space-y-2 max-h-72 overflow-y-auto">
               {smartAlerts.map(alert => {
@@ -570,7 +570,7 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
       <div className="grid grid-cols-2 gap-2">
         {[
           { label: "Total confirmandos", value: total, Icon: Users, color: "text-primary", bg: "bg-primary/10" },
-          { label: "Progresso médio", value: `${mediaProgresso}%`, Icon: Star, color: "text-accent-foreground", bg: "bg-accent/20" },
+          { label: "Progresso medio", value: `${mediaProgresso}%`, Icon: Star, color: "text-accent-foreground", bg: "bg-accent/20" },
           { label: "Prioridade pastoral", value: priorities, Icon: Heart, color: "text-secondary", bg: "bg-secondary/10" },
           { label: "Sem nenhuma atividade", value: total - ativos, Icon: AlertTriangle, color: "text-destructive", bg: "bg-destructive/10" },
         ].map(({ label, value, Icon, color, bg }) => (
@@ -588,13 +588,13 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
 
       {/* ── PROGRESSO POR TIPO ─── */}
       <div className="bg-card rounded-2xl border border-border p-4">
-        <p className="font-montserrat font-bold text-foreground text-sm mb-3">📊 Atividades — visão pastoral</p>
+        <p className="font-montserrat font-bold text-foreground text-sm mb-3">Atividades - visao pastoral</p>
         <div className="space-y-3">
           {[
-            { type: "devocional", label: "📖 Devocionais", color: "var(--gradient-green)" },
-            { type: "formacao", label: "🎓 Formações", color: "hsl(var(--secondary))" },
-            { type: "encontro", label: "📅 Encontros", color: "hsl(var(--primary))" },
-            { type: "desafio", label: "✨ Desafios", color: "hsl(var(--accent))" },
+            { type: "devocional", label: "Devocionais", color: "var(--gradient-green)" },
+            { type: "formacao", label: "Formacoes", color: "hsl(var(--secondary))" },
+            { type: "encontro", label: "Encontros", color: "hsl(var(--primary))" },
+            { type: "desafio", label: "Desafios", color: "hsl(var(--accent))" },
           ].map(({ type, label, color }) => {
             const t = byType(type);
             const done = completedByType(type);
@@ -612,10 +612,10 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
         </div>
       </div>
 
-      {/* ── VISÃO COMPARATIVA POR COMUNIDADE ─── */}
+      {/* Visao comparativa por comunidade */}
       <div className="bg-card rounded-2xl border border-border p-4">
-        <p className="font-montserrat font-bold text-foreground text-sm mb-1">🏡 Visão por Comunidade</p>
-        <p className="text-muted-foreground font-inter text-[10px] mb-3">Comparação pastoral entre comunidades da área</p>
+        <p className="font-montserrat font-bold text-foreground text-sm mb-1">Visao por comunidade</p>
+        <p className="text-muted-foreground font-inter text-[10px] mb-3">Comparacao pastoral entre comunidades da area</p>
         <div className="space-y-4">
           {byComm.map(c => {
             const group = participants.filter(p => p.community === c.name);
@@ -650,10 +650,10 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
                   {/* Stats grid */}
                   <div className="grid grid-cols-4 gap-1.5">
                     {[
-                      { label: "Jovens", value: c.count, emoji: "👥" },
-                      { label: "Ativos", value: ativos, emoji: "🔥" },
-                      { label: "Inativos", value: inativos, emoji: "😴" },
-                      { label: "Alertas", value: alertCount, emoji: "⚠️" },
+                      { label: "Jovens", value: c.count, emoji: "J" },
+                      { label: "Ativos", value: ativos, emoji: "A" },
+                      { label: "Inativos", value: inativos, emoji: "I" },
+                      { label: "Alertas", value: alertCount, emoji: "!" },
                     ].map(st => (
                       <div key={st.label} className="text-center p-1.5 rounded-lg bg-muted/30">
                         <span className="text-xs">{st.emoji}</span>
@@ -665,8 +665,8 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
                   {/* Category breakdown */}
                   <div className="space-y-1.5">
                     {[
-                      { label: "📖 Devocionais", pct: devPct, color: "var(--gradient-green)" },
-                      { label: "🎓 Formação", pct: formPct, color: "hsl(var(--secondary))" },
+                      { label: "Devocionais", pct: devPct, color: "var(--gradient-green)" },
+                      { label: "Formacao", pct: formPct, color: "hsl(var(--secondary))" },
                     ].map(cat => (
                       <div key={cat.label} className="flex items-center gap-2">
                         <span className="font-inter text-[10px] text-muted-foreground w-20 flex-shrink-0">{cat.label}</span>
@@ -677,9 +677,9 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
                   </div>
                   {/* Health summary */}
                   <div className="flex gap-2 pt-1 border-t border-border">
-                    <span className="text-[10px] font-inter font-medium text-brand-green">🟢 {c.saudaveis}</span>
-                    <span className="text-[10px] font-inter font-medium text-accent-foreground">🟡 {c.count - c.saudaveis - c.criticos}</span>
-                    <span className="text-[10px] font-inter font-medium text-destructive">🔴 {c.criticos}</span>
+                    <span className="text-[10px] font-inter font-medium text-brand-green">Saudavel {c.saudaveis}</span>
+                    <span className="text-[10px] font-inter font-medium text-accent-foreground">Atencao {c.count - c.saudaveis - c.criticos}</span>
+                    <span className="text-[10px] font-inter font-medium text-destructive">Critico {c.criticos}</span>
                   </div>
                 </div>
               </div>
@@ -692,11 +692,11 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
       <div className="bg-card rounded-2xl border border-border p-4">
         <div className="flex items-center gap-2 mb-3">
           <BookOpen className="w-4 h-4 text-brand-green" />
-          <p className="font-montserrat font-bold text-foreground text-sm">📖 Devocionais — últimos 7 dias</p>
+          <p className="font-montserrat font-bold text-foreground text-sm">Devocionais - ultimos 7 dias</p>
         </div>
         {weeklyTotal === 0 ? (
           <p className="text-muted-foreground font-inter text-xs text-center py-4">
-            Nenhum devocional concluído nos últimos 7 dias.
+            Nenhum devocional concluido nos ultimos 7 dias.
           </p>
         ) : (
           <>
@@ -706,7 +706,7 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
               </div>
               <div>
                 <p className="font-inter text-sm font-medium text-foreground">
-                  devocional{weeklyTotal > 1 ? "is" : ""} concluído{weeklyTotal > 1 ? "s" : ""}
+                  devocional{weeklyTotal > 1 ? "is" : ""} concluido{weeklyTotal > 1 ? "s" : ""}
                 </p>
                 <p className="text-muted-foreground font-inter text-[10px]">
                   por {weeklyDevStats.length} jovem{weeklyDevStats.length > 1 ? "ns" : ""}
@@ -741,7 +741,7 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
             {/* Participants with zero */}
             {participants.length - weeklyDevStats.length > 0 && (
               <p className="text-center text-muted-foreground font-inter text-[10px] mt-2 pt-2 border-t border-border">
-                ⚠️ {participants.length - weeklyDevStats.length} jovem{participants.length - weeklyDevStats.length > 1 ? "ns" : ""} sem nenhum devocional nesta semana
+                {participants.length - weeklyDevStats.length} jovem{participants.length - weeklyDevStats.length > 1 ? "ns" : ""} sem nenhum devocional nesta semana
               </p>
             )}
           </>
@@ -751,7 +751,7 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
       {/* ── LISTA RÁPIDA ─── */}
       <div className="bg-card rounded-2xl border border-border overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <p className="font-montserrat font-bold text-foreground text-sm">👥 Lista dos confirmandos</p>
+          <p className="font-montserrat font-bold text-foreground text-sm">Lista dos confirmandos</p>
           <select value={communityFilter} onChange={e => setCommunityFilter(e.target.value)}
             className="text-[10px] font-inter border border-border rounded-lg px-2 py-1 bg-background text-foreground focus:outline-none appearance-none">
             <option value="todas">Todas as comunidades</option>
@@ -792,7 +792,7 @@ export default function OverviewTab({ participants, activities, plans, onSelectP
           })}
           {filteredParticipants.length > 20 && (
             <p className="text-center text-muted-foreground font-inter text-xs py-3">
-              +{filteredParticipants.length - 20} mais — use a aba Participantes para ver todos
+              +{filteredParticipants.length - 20} mais - use a aba Participantes para ver todos
             </p>
           )}
           {filteredParticipants.length === 0 && (
