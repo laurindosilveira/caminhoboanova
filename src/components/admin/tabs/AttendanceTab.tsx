@@ -322,10 +322,20 @@ export default function AttendanceTab({ participants, activities, communities, i
         }
       }
 
-      await supabase.from("events").update(payload).eq("id", editingEventId);
+      const { error } = await supabase.from("events").update(payload).eq("id", editingEventId);
+      if (error) {
+        toast({ title: "Erro ao atualizar evento", description: error.message, variant: "destructive" });
+        setSavingEvent(false);
+        return;
+      }
     } else {
       const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from("events").insert({ ...payload, created_by: user?.id });
+      const { error } = await supabase.from("events").insert({ ...payload, created_by: user?.id });
+      if (error) {
+        toast({ title: "Erro ao criar evento", description: error.message, variant: "destructive" });
+        setSavingEvent(false);
+        return;
+      }
     }
     setEventForm({ title: "", description: "", event_date: "", location: "", type: "encontro", area: adminArea ?? "", community: "", linked_lesson_id: "" });
     setShowEventForm(false);
@@ -341,7 +351,13 @@ export default function AttendanceTab({ participants, activities, communities, i
     if (!event) return;
 
     // Update the edited event with all fields
-    await supabase.from("events").update(payload).eq("id", eventId);
+    const { error: eventUpdateError } = await supabase.from("events").update(payload).eq("id", eventId);
+    if (eventUpdateError) {
+      toast({ title: "Erro ao atualizar evento", description: eventUpdateError.message, variant: "destructive" });
+      setShowCascadeDialog(false);
+      setCascadePending(null);
+      return;
+    }
 
     if (doCascade) {
       const subsequent = events
@@ -359,9 +375,15 @@ export default function AttendanceTab({ participants, activities, communities, i
           for (let i = 0; i < subsequent.length; i++) {
             const nextLessonIdx = newIdx + 1 + i;
             if (nextLessonIdx < allLessonsOrdered.length) {
-              await supabase.from("events")
+              const { error: cascadeError } = await supabase.from("events")
                 .update({ linked_lesson_id: allLessonsOrdered[nextLessonIdx].id })
                 .eq("id", subsequent[i].id);
+              if (cascadeError) {
+                toast({ title: "Erro ao aplicar cascata", description: cascadeError.message, variant: "destructive" });
+                setShowCascadeDialog(false);
+                setCascadePending(null);
+                return;
+              }
             }
           }
           toast({ title: `Lições atualizadas em ${subsequent.length + 1} eventos!` });
@@ -394,7 +416,12 @@ export default function AttendanceTab({ participants, activities, communities, i
   }
 
   async function handleDeleteEvent(id: string) {
-    await supabase.from("events").delete().eq("id", id);
+    const { error } = await supabase.from("events").delete().eq("id", id);
+    if (error) {
+      toast({ title: "Erro ao excluir evento", description: error.message, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Evento excluído!" });
     fetchEvents();
   }
 
