@@ -111,8 +111,13 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
 
   async function loadScheduled() {
     setLoadingScheduled(true);
-    const { data } = await supabase.rpc("get_push_scheduled_pending" as any);
-    setScheduledList((data as any as ScheduledPush[]) ?? []);
+    const { data, error } = await supabase.rpc("get_push_scheduled_pending" as any);
+    if (error) {
+      setError(error.message);
+      setScheduledList([]);
+    } else {
+      setScheduledList((data as any as ScheduledPush[]) ?? []);
+    }
     setLoadingScheduled(false);
   }
 
@@ -125,7 +130,7 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
     }
     if (mode === "agendar") {
       if (!scheduledAt) { setError("Escolha a data e hora do envio."); return; }
-      if (new Date(scheduledAt) <= new Date()) { setError("O horário deve ser no futuro."); return; }
+      if (new Date(scheduledAt) <= new Date()) { setError("O horario deve ser no futuro."); return; }
     }
 
     setSending(true); setError(""); setResult(null);
@@ -154,7 +159,7 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
       if (insertError) {
         setError(insertError.message);
       } else {
-        toast.success("Notificação agendada!");
+        toast.success("Notificacao agendada.");
         setTitle(""); setBody(""); setScheduledAt("");
         loadScheduled();
       }
@@ -164,7 +169,11 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
   }
 
   async function cancelScheduled(id: string) {
-    await supabase.rpc("delete_push_scheduled" as any, { _id: id });
+    const { error } = await supabase.rpc("delete_push_scheduled" as any, { _id: id });
+    if (error) {
+      toast.error("Erro ao cancelar: " + error.message);
+      return;
+    }
     setScheduledList(prev => prev.filter(s => s.id !== id));
     toast.success("Agendamento cancelado.");
   }
@@ -187,15 +196,15 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
         </div>
         <div>
           <h2 className="font-montserrat font-bold text-foreground text-base">Enviar Push</h2>
-          <p className="text-muted-foreground font-inter text-xs">Avisos instantâneos ou agendados para os participantes</p>
+          <p className="text-muted-foreground font-inter text-xs">Avisos instantaneos ou agendados para os participantes</p>
         </div>
       </div>
 
       {/* Mode toggle */}
       <div className="flex gap-2">
         {([
-          { id: "agora",   label: "⚡ Enviar Agora" },
-          { id: "agendar", label: "🕐 Agendar"       },
+          { id: "agora",   label: "Enviar Agora" },
+          { id: "agendar", label: "Agendar" },
         ] as { id: SendMode; label: string }[]).map(m => (
           <button
             key={m.id}
@@ -435,8 +444,13 @@ function AutomationsSection() {
 
   async function loadConfigs() {
     setLoading(true);
-    const { data } = await supabase.rpc("get_push_automation_config" as any);
-    setConfigs((data as any as AutomationConfig[]) ?? []);
+    const { data, error } = await supabase.rpc("get_push_automation_config" as any);
+    if (error) {
+      toast.error("Erro ao carregar automacoes: " + error.message);
+      setConfigs([]);
+    } else {
+      setConfigs((data as any as AutomationConfig[]) ?? []);
+    }
     setLoading(false);
   }
 
@@ -451,7 +465,7 @@ function AutomationsSection() {
     });
     if (error) { toast.error("Erro ao atualizar."); return; }
     setConfigs(prev => prev.map(c => c.key === key ? { ...c, enabled: !current } : c));
-    toast.success(!current ? "Automação ativada." : "Automação desativada.");
+    toast.success(!current ? "Automacao ativada." : "Automacao desativada.");
   }
 
   function startEdit(cfg: AutomationConfig) {
@@ -477,7 +491,7 @@ function AutomationsSection() {
         c.key === key ? { ...c, title: editTitle.trim(), body: editBody.trim() } : c
       ));
       setEditingKey(null);
-      toast.success("Automação atualizada!");
+      toast.success("Automacao atualizada.");
     }
     setSaving(false);
   }
@@ -489,8 +503,8 @@ function AutomationsSection() {
           <Bell className="w-5 h-5 text-secondary" />
         </div>
         <div>
-          <h2 className="font-montserrat font-bold text-foreground text-base">Automações de Push</h2>
-          <p className="text-muted-foreground font-inter text-xs">Ative, desative ou edite as notificações automáticas</p>
+          <h2 className="font-montserrat font-bold text-foreground text-base">Automacoes de Push</h2>
+          <p className="text-muted-foreground font-inter text-xs">Ative, desative ou edite as notificacoes automaticas</p>
         </div>
       </div>
 
@@ -714,20 +728,25 @@ function PushLogHistory() {
 
   async function loadLogs() {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("push_notification_log")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(20);
-    setLogs((data as any as LogEntry[]) ?? []);
+    if (error) {
+      toast.error("Erro ao carregar historico: " + error.message);
+      setLogs([]);
+    } else {
+      setLogs((data as any as LogEntry[]) ?? []);
+    }
     setLoading(false);
   }
 
   const typeLabels: Record<string, { label: string; emoji: string }> = {
     manual:               { label: "Push Manual",        emoji: "📢" },
     event_reminder:       { label: "Lembrete de Evento", emoji: "🔔" },
-    attendance_reminder:  { label: "Presença",           emoji: "📋" },
-    prayer_pairs:         { label: "Dupla de Oração",    emoji: "🙏" },
+    attendance_reminder:  { label: "Presenca",           emoji: "📋" },
+    prayer_pairs:         { label: "Dupla de Oracao",    emoji: "🙏" },
   };
 
   function formatDate(iso: string) {
@@ -738,7 +757,7 @@ function PushLogHistory() {
 
   function targetLabel(log: LogEntry) {
     if (log.target === "all")  return "Todos";
-    if (log.target === "auto") return "Automático";
+    if (log.target === "auto") return "Automatico";
     if (log.target_value)      return log.target_value;
     return log.target;
   }
