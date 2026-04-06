@@ -360,11 +360,16 @@ export default function UserAgendaTab() {
       return;
     }
     setSaving(true);
-    const eventDateWithTz = form.event_date ? form.event_date + ":00-03:00" : form.event_date;
+    const normalizedEventDate = form.event_date ? new Date(form.event_date) : null;
+    if (!normalizedEventDate || Number.isNaN(normalizedEventDate.getTime())) {
+      toast.error("Data do evento invalida");
+      setSaving(false);
+      return;
+    }
     const payload = {
       title: form.title.trim(),
       description: form.description.trim() || null,
-      event_date: eventDateWithTz,
+      event_date: normalizedEventDate.toISOString(),
       location: form.location.trim() || null,
       area: form.area || null,
       community: form.community || null,
@@ -379,7 +384,7 @@ export default function UserAgendaTab() {
       // Check cascade for lesson change
       if (oldLessonId !== newLessonId && newLessonId) {
         const subsequentWithLessons = events.filter(
-          e => e.id !== editingEvent.id && e.event_date > editingEvent.event_date && e.linked_lesson_id
+          e => e.id !== editingEvent.id && new Date(e.event_date).getTime() > new Date(editingEvent.event_date).getTime() && e.linked_lesson_id
         );
         if (subsequentWithLessons.length > 0) {
           // Save other fields first (without lesson change), then handle cascade
@@ -424,8 +429,8 @@ export default function UserAgendaTab() {
 
     if (doCascade) {
       const subsequent = events
-        .filter(e => e.id !== eventId && e.event_date > event.event_date && e.linked_lesson_id)
-        .sort((a, b) => a.event_date.localeCompare(b.event_date));
+        .filter(e => e.id !== eventId && new Date(e.event_date).getTime() > new Date(event.event_date).getTime() && e.linked_lesson_id)
+        .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
 
       if (subsequent.length > 0) {
         const newLesson = lessonOptions.find(l => l.id === newLessonId);
