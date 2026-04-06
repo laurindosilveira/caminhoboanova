@@ -287,7 +287,7 @@ export default function AttendanceTab({ participants, activities, communities, i
     setSavingEvent(true);
     const normalizedEventDate = eventForm.event_date ? new Date(eventForm.event_date) : null;
     if (!normalizedEventDate || Number.isNaN(normalizedEventDate.getTime())) {
-      toast({ title: "Data invalida", description: "Nao foi possivel interpretar a data do evento.", variant: "destructive" });
+      toast({ title: "Data inválida", description: "Não foi possível interpretar a data do evento.", variant: "destructive" });
       setSavingEvent(false);
       return;
     }

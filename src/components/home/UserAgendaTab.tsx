@@ -402,7 +402,16 @@ export default function UserAgendaTab() {
         );
         if (subsequentWithLessons.length > 0) {
           // Save other fields first (without lesson change), then handle cascade
-          await supabase.from("events").update({ ...payload, linked_lesson_id: oldLessonId }).eq("id", editingEvent.id);
+          const { error: prepareCascadeError } = await supabase
+            .from("events")
+            .update({ ...payload, linked_lesson_id: oldLessonId })
+            .eq("id", editingEvent.id);
+          if (prepareCascadeError) {
+            toast.error("Erro ao preparar atualizacao em cascata");
+            console.error(prepareCascadeError);
+            setSaving(false);
+            return;
+          }
           setCascadePending({ eventId: editingEvent.id, oldLessonId, newLessonId });
           setShowCascadeDialog(true);
           setShowForm(false);
@@ -439,7 +448,17 @@ export default function UserAgendaTab() {
     const event = events.find(e => e.id === eventId);
     if (!event) return;
 
-    await supabase.from("events").update({ linked_lesson_id: newLessonId }).eq("id", eventId);
+    const { error: updateError } = await supabase
+      .from("events")
+      .update({ linked_lesson_id: newLessonId })
+      .eq("id", eventId);
+    if (updateError) {
+      toast.error("Erro ao atualizar a licao do evento");
+      console.error(updateError);
+      setShowCascadeDialog(false);
+      setCascadePending(null);
+      return;
+    }
 
     if (doCascade) {
       const subsequent = events
@@ -461,9 +480,16 @@ export default function UserAgendaTab() {
             for (let i = 0; i < subsequent.length; i++) {
               const nextLessonIdx = newIdx + 1 + i;
               if (nextLessonIdx < allLessonsOrdered.length) {
-                await supabase.from("events")
+                const { error: cascadeError } = await supabase.from("events")
                   .update({ linked_lesson_id: allLessonsOrdered[nextLessonIdx].id })
                   .eq("id", subsequent[i].id);
+                if (cascadeError) {
+                  toast.error("Erro ao aplicar cascata de licoes");
+                  console.error(cascadeError);
+                  setShowCascadeDialog(false);
+                  setCascadePending(null);
+                  return;
+                }
                 updated++;
               } else {
                 overflow++;
@@ -501,12 +527,17 @@ export default function UserAgendaTab() {
     // Filter by events in this area
     const areaEventIds = events.filter(e => !e.area || e.area === currentArea).map(e => e.id);
     if (areaEventIds.length === 0) { setPendingAttendance([]); return; }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("attendance")
       .select("id, event_id, user_id, status, justification, created_at")
       .in("event_id", areaEventIds)
       .in("status", ["pendente_presente", "pendente_falta"])
       .order("created_at", { ascending: false });
+    if (error) {
+      toast.error("Nao foi possivel carregar as solicitacoes pendentes");
+      console.error(error);
+      return;
+    }
     if (!data || data.length === 0) { setPendingAttendance([]); return; }
     const userIds = [...new Set(data.map(a => a.user_id))];
     const eventIds = [...new Set(data.map(a => a.event_id))];
