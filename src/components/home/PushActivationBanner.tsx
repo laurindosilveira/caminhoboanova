@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Bell, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,7 +8,7 @@ import { subscribeToWebPush, isWebPushSubscribed } from "@/lib/webPush";
 /**
  * Banner shown on the Jornada tab when an admin/leader
  * has sent a push activation reminder to this user.
- * Includes a one-tap "Ativar notificações" button.
+ * Includes a one-tap "Ativar notificacoes" button.
  */
 export default function PushActivationBanner() {
   const { user } = useAuth();
@@ -22,11 +22,12 @@ export default function PushActivationBanner() {
   }, [user]);
 
   async function checkReminder() {
-    // If already subscribed to push, no need to show
     const alreadySubscribed = await isWebPushSubscribed();
-    if (alreadySubscribed) return;
+    if (alreadySubscribed) {
+      setVisible(false);
+      return;
+    }
 
-    // Check for undismissed reminders
     const { data } = await supabase
       .from("push_activation_reminders" as any)
       .select("id")
@@ -37,26 +38,25 @@ export default function PushActivationBanner() {
     if (data && data.length > 0) {
       setReminderId((data[0] as any).id);
       setVisible(true);
+    } else {
+      setVisible(false);
     }
   }
 
   async function handleActivate() {
     setActivating(true);
     try {
-      // Request notification permission
       const granted = await requestNotificationPermission();
       if (!granted) {
         setActivating(false);
         return;
       }
 
-      // Get VAPID key and subscribe
       const { data: vapidData } = await supabase.functions.invoke("get-vapid-key");
       if (vapidData?.publicKey) {
         await subscribeToWebPush(vapidData.publicKey);
       }
 
-      // Enable master notifications in preferences
       await supabase.from("notification_preferences").upsert({
         user_id: user!.id,
         master_enabled: true,
@@ -67,7 +67,6 @@ export default function PushActivationBanner() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo",
       }, { onConflict: "user_id" });
 
-      // Dismiss the reminder
       if (reminderId) {
         await supabase
           .from("push_activation_reminders" as any)
@@ -103,10 +102,10 @@ export default function PushActivationBanner() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-montserrat font-bold text-foreground text-sm">
-            Ative suas notificações! 🔔
+            Ative suas notificacoes!
           </p>
           <p className="text-muted-foreground font-inter text-xs mt-1 leading-relaxed">
-            Seu líder pediu para você ativar as notificações. Assim você ficará por dentro de tudo que acontece na sua caminhada!
+            Seu lider pediu para voce ativar as notificacoes. Assim voce ficara por dentro de tudo que acontece na sua caminhada.
           </p>
           <div className="flex gap-2 mt-3">
             <button
@@ -116,7 +115,7 @@ export default function PushActivationBanner() {
               style={{ background: "var(--gradient-hero)" }}
             >
               <Bell className="w-3.5 h-3.5" />
-              {activating ? "Ativando..." : "Ativar Notificações"}
+              {activating ? "Ativando..." : "Ativar notificacoes"}
             </button>
             <button
               onClick={handleDismiss}

@@ -1,7 +1,21 @@
-import { useState, useEffect } from "react";
-import { Bell, BellOff, BookOpen, CalendarDays, Flame, ChevronDown, ChevronUp, MessageSquare, AlertCircle, Send, Wifi, Clock, Smartphone, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  AlertCircle,
+  Bell,
+  BellOff,
+  BookOpen,
+  CalendarDays,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Flame,
+  MessageSquare,
+  Send,
+  Smartphone,
+  X,
+} from "lucide-react";
 import { requestNotificationPermission, isNotificationEnabled, sendNotification } from "@/lib/notifications";
-import { subscribeToWebPush, unsubscribeFromWebPush, isWebPushSubscribed } from "@/lib/webPush";
+import { subscribeToWebPush, isWebPushSubscribed } from "@/lib/webPush";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -19,13 +33,13 @@ const defaultPrefs: NotifPrefs = {
   mensagens: true,
 };
 
-const HOUR_OPTIONS = Array.from({ length: 18 }, (_, i) => i + 5); // 5h to 22h
+const HOUR_OPTIONS = Array.from({ length: 18 }, (_, i) => i + 5);
 
 const NOTIF_PREVIEWS: Record<string, { title: string; body: string; icon: string }> = {
-  devocional: { title: "📖 Devocional do Dia", body: "Seu devocional de hoje está disponível!", icon: "📖" },
-  eventos: { title: "📅 Encontro Amanhã", body: "Não esqueça do encontro amanhã às 19h!", icon: "📅" },
-  streak: { title: "🔥 Sequência em Risco!", body: "Complete o devocional para manter sua sequência de 7 dias!", icon: "🔥" },
-  mensagens: { title: "💬 Nova Mensagem", body: "Seu pastor enviou um comunicado para a turma.", icon: "💬" },
+  devocional: { title: "Devocional do dia", body: "Seu devocional de hoje esta disponivel!", icon: "📖" },
+  eventos: { title: "Encontro amanha", body: "Nao esqueca do encontro amanha as 19h!", icon: "📅" },
+  streak: { title: "Sequencia em risco!", body: "Complete o devocional para manter sua sequencia de 7 dias!", icon: "🔥" },
+  mensagens: { title: "Nova mensagem", body: "Seu pastor enviou um comunicado para a turma.", icon: "💬" },
 };
 
 function NotificationPreview({ type, visible, onClose }: { type: string; visible: boolean; onClose: () => void }) {
@@ -40,9 +54,8 @@ function NotificationPreview({ type, visible, onClose }: { type: string; visible
         </button>
         <div className="flex items-center gap-1 mb-2">
           <Smartphone className="w-3 h-3 text-muted-foreground" />
-          <span className="text-[9px] font-inter font-bold text-muted-foreground uppercase tracking-wider">Preview da notificação</span>
+          <span className="text-[9px] font-inter font-bold text-muted-foreground uppercase tracking-wider">Preview da notificacao</span>
         </div>
-        {/* Mock phone notification */}
         <div className="bg-muted rounded-xl p-3 border border-border/50">
           <div className="flex items-start gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-primary/15 flex items-center justify-center flex-shrink-0">
@@ -70,25 +83,25 @@ export default function NotificationSettings() {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [permissionError, setPermissionError] = useState(false);
-  const [pushSubscribed, setPushSubscribed] = useState(false);
   const [previewType, setPreviewType] = useState<string | null>(null);
 
-  const NOTIF_OPTIONS = [
-    { key: "devocional" as const, label: "Devocional diário", desc: `Lembrete às ${preferredHour}h para o devocional`, icon: BookOpen, color: "text-brand-green" },
-    { key: "eventos" as const, label: "Eventos e encontros", desc: "Avisos de eventos próximos", icon: CalendarDays, color: "text-primary" },
-    { key: "streak" as const, label: "Risco de perder sequência", desc: "Alerta quando sua sequência está em risco", icon: Flame, color: "text-secondary" },
+  const notificationOptions = [
+    { key: "devocional" as const, label: "Devocional diario", desc: `Lembrete as ${preferredHour}h para o devocional`, icon: BookOpen, color: "text-brand-green" },
+    { key: "eventos" as const, label: "Eventos e encontros", desc: "Avisos de eventos proximos", icon: CalendarDays, color: "text-primary" },
+    { key: "streak" as const, label: "Risco de perder sequencia", desc: "Alerta quando sua sequencia esta em risco", icon: Flame, color: "text-secondary" },
     { key: "mensagens" as const, label: "Mensagens do pastor", desc: "Novas mensagens e comunicados", icon: MessageSquare, color: "text-accent-foreground" },
   ];
 
-  // Load prefs from DB
   useEffect(() => {
     if (!user) return;
+
     async function load() {
       const { data } = await supabase
         .from("notification_preferences")
         .select("*")
-        .eq("user_id", user!.id)
+        .eq("user_id", user.id)
         .maybeSingle();
+
       if (data) {
         setMasterOn(data.master_enabled);
         setPrefs({
@@ -101,10 +114,10 @@ export default function NotificationSettings() {
       } else {
         setMasterOn(isNotificationEnabled());
       }
-      const isPushSub = await isWebPushSubscribed();
-      setPushSubscribed(isPushSub);
+
       setLoading(false);
     }
+
     load();
   }, [user]);
 
@@ -112,57 +125,32 @@ export default function NotificationSettings() {
 
   const activeCount = masterOn ? Object.values(prefs).filter(Boolean).length : 0;
 
-  async function saveToDb(master: boolean, newPrefs: NotifPrefs, hour?: number) {
+  async function saveToDb(master: boolean, nextPrefs: NotifPrefs, hour?: number) {
     if (!user) return;
-    const payload: any = {
-      user_id: user.id,
-      master_enabled: master,
-      devocional: newPrefs.devocional,
-      eventos: newPrefs.eventos,
-      streak: newPrefs.streak,
-      mensagens: newPrefs.mensagens,
-      preferred_hour: hour ?? preferredHour,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo",
-    };
+
     await supabase
       .from("notification_preferences")
-      .upsert(payload, { onConflict: "user_id" });
-  }
-
-  async function handleToggleMaster() {
-    if (masterOn) {
-      setMasterOn(false);
-      localStorage.setItem("caminho_notifications_enabled", "false");
-      setExpanded(false);
-      setPermissionError(false);
-      setPreviewType(null);
-      await saveToDb(false, prefs);
-    } else {
-      setPermissionError(false);
-      setMasterOn(true);
-      localStorage.setItem("caminho_notifications_enabled", "true");
-      setExpanded(true);
-      await saveToDb(true, prefs);
-      try {
-        const granted = await requestNotificationPermission();
-        if (granted) {
-          await trySubscribeWebPush();
-        } else if (Notification.permission === "denied") {
-          setPermissionError(true);
-        }
-      } catch {
-        setPermissionError(true);
-      }
-    }
+      .upsert({
+        user_id: user.id,
+        master_enabled: master,
+        devocional: nextPrefs.devocional,
+        eventos: nextPrefs.eventos,
+        streak: nextPrefs.streak,
+        mensagens: nextPrefs.mensagens,
+        preferred_hour: hour ?? preferredHour,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo",
+      }, { onConflict: "user_id" });
   }
 
   async function trySubscribeWebPush() {
     try {
-      const permission = await Notification.requestPermission();
-      if (permission !== "granted") {
+      if (Notification.permission !== "granted") {
         setPermissionError(true);
         return;
       }
+
+      const alreadySubscribed = await isWebPushSubscribed();
+      if (alreadySubscribed) return;
 
       const { data, error: fnError } = await supabase.functions.invoke("get-vapid-key");
       if (fnError || !data?.publicKey) {
@@ -172,9 +160,9 @@ export default function NotificationSettings() {
       }
 
       const success = await subscribeToWebPush(data.publicKey);
-      setPushSubscribed(success);
       if (!success) {
         console.warn("subscribeToWebPush returned false");
+        setPermissionError(true);
       }
     } catch (err) {
       console.error("Web Push subscription failed:", err);
@@ -182,10 +170,39 @@ export default function NotificationSettings() {
     }
   }
 
+  async function handleToggleMaster() {
+    if (masterOn) {
+      setMasterOn(false);
+      setExpanded(false);
+      setPermissionError(false);
+      setPreviewType(null);
+      localStorage.setItem("caminho_notifications_enabled", "false");
+      await saveToDb(false, prefs);
+      return;
+    }
+
+    setPermissionError(false);
+    setMasterOn(true);
+    setExpanded(true);
+    localStorage.setItem("caminho_notifications_enabled", "true");
+    await saveToDb(true, prefs);
+
+    try {
+      const granted = await requestNotificationPermission();
+      if (granted) {
+        await trySubscribeWebPush();
+      } else if (Notification.permission === "denied") {
+        setPermissionError(true);
+      }
+    } catch {
+      setPermissionError(true);
+    }
+  }
+
   async function handleTestNotification() {
     await sendNotification(
-      "🔔 Teste de Notificação",
-      "Se você está vendo isso, as notificações estão funcionando! 🎉"
+      "Teste de notificacao",
+      "Se voce esta vendo isso, as notificacoes estao funcionando!",
     );
   }
 
@@ -194,12 +211,11 @@ export default function NotificationSettings() {
     setPrefs(updated);
     await saveToDb(masterOn, updated);
 
-    // Show preview when enabling
     if (!prefs[key]) {
       setPreviewType(key);
       setTimeout(() => setPreviewType(null), 5000);
-    } else {
-      if (previewType === key) setPreviewType(null);
+    } else if (previewType === key) {
+      setPreviewType(null);
     }
   }
 
@@ -216,20 +232,12 @@ export default function NotificationSettings() {
           className="w-full flex items-center gap-3 p-4 hover:bg-muted/50 transition-colors"
         >
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${masterOn ? "bg-brand-green/15" : "bg-muted"}`}>
-            {masterOn ? (
-              <Bell className="w-5 h-5 text-brand-green" />
-            ) : (
-              <BellOff className="w-5 h-5 text-muted-foreground" />
-            )}
+            {masterOn ? <Bell className="w-5 h-5 text-brand-green" /> : <BellOff className="w-5 h-5 text-muted-foreground" />}
           </div>
           <div className="text-left flex-1">
-            <p className="font-montserrat font-bold text-foreground text-sm">
-              Notificações
-            </p>
+            <p className="font-montserrat font-bold text-foreground text-sm">Notificacoes</p>
             <p className="text-muted-foreground text-xs font-inter">
-              {masterOn
-                ? `${activeCount} de ${NOTIF_OPTIONS.length} ativas`
-                : "Notificações desativadas"}
+              {masterOn ? `${activeCount} de ${notificationOptions.length} ativas` : "Notificacoes desativadas"}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -248,39 +256,37 @@ export default function NotificationSettings() {
                 className="w-full flex items-center justify-center gap-2 py-3 text-sm font-inter font-bold text-brand-green hover:bg-brand-green/5 transition-colors"
               >
                 <Bell className="w-4 h-4" />
-                Ativar todas as notificações
+                Ativar todas as notificacoes
               </button>
             ) : (
               <>
-                {/* Permission error banner */}
                 {permissionError && (
                   <div className="mx-4 mt-3 mb-1 p-3 rounded-xl bg-accent/20 border border-accent/30">
                     <div className="flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 text-accent-foreground flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="font-inter text-xs font-bold text-foreground mb-1">Não foi possível ativar as notificações</p>
+                        <p className="font-inter text-xs font-bold text-foreground mb-1">Nao foi possivel ativar as notificacoes</p>
                         <p className="font-inter text-[11px] text-muted-foreground leading-relaxed">
-                          O Android bloqueia permissões quando há sobreposições de outros apps. Para resolver:
+                          O Android bloqueia permissoes quando ha sobreposicoes de outros apps. Para resolver:
                         </p>
                         <ul className="font-inter text-[11px] text-muted-foreground mt-1.5 space-y-1 list-none">
-                          <li>📱 Feche <strong>bolhas flutuantes</strong> (Messenger, WhatsApp)</li>
-                          <li>🌙 Desative <strong>filtros de tela</strong> (modo noturno, Twilight)</li>
-                          <li>🎥 Feche <strong>gravadores de tela</strong></li>
-                          <li>🔄 Depois, tente ativar novamente</li>
+                          <li>Feche <strong>bolhas flutuantes</strong> (Messenger, WhatsApp)</li>
+                          <li>Desative <strong>filtros de tela</strong> (modo noturno, Twilight)</li>
+                          <li>Feche <strong>gravadores de tela</strong></li>
+                          <li>Depois, tente ativar novamente</li>
                         </ul>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* Notification preview */}
                 <NotificationPreview
                   type={previewType ?? ""}
                   visible={!!previewType}
                   onClose={() => setPreviewType(null)}
                 />
 
-                {NOTIF_OPTIONS.map(({ key, label, desc, icon: Icon, color }) => (
+                {notificationOptions.map(({ key, label, desc, icon: Icon, color }) => (
                   <button
                     key={key}
                     onClick={() => handleTogglePref(key)}
@@ -297,41 +303,38 @@ export default function NotificationSettings() {
                   </button>
                 ))}
 
-                {/* Preferred hour */}
                 <div className="border-t border-border px-4 py-3">
                   <div className="flex items-center gap-3">
                     <Clock className="w-4 h-4 text-muted-foreground" />
                     <div className="flex-1">
-                      <p className="font-inter text-sm font-semibold text-foreground">Horário do devocional</p>
-                      <p className="text-muted-foreground text-[10px] font-inter">Horário preferido para o lembrete</p>
+                      <p className="font-inter text-sm font-semibold text-foreground">Horario do devocional</p>
+                      <p className="text-muted-foreground text-[10px] font-inter">Horario preferido para o lembrete</p>
                     </div>
                     <select
                       value={preferredHour}
-                      onChange={e => handleHourChange(Number(e.target.value))}
+                      onChange={(e) => handleHourChange(Number(e.target.value))}
                       className="h-8 rounded-lg border border-input bg-background px-2 text-sm text-foreground appearance-none focus:outline-none focus:ring-2 focus:ring-ring"
                     >
-                      {HOUR_OPTIONS.map(h => (
-                        <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+                      {HOUR_OPTIONS.map((hour) => (
+                        <option key={hour} value={hour}>{String(hour).padStart(2, "0")}:00</option>
                       ))}
                     </select>
                   </div>
                 </div>
 
-                {/* Test notification button */}
                 <button
                   onClick={handleTestNotification}
                   className="w-full flex items-center justify-center gap-2 py-3 text-sm font-inter font-bold text-brand-green hover:bg-brand-green/5 transition-colors border-t border-border"
                 >
                   <Send className="w-3.5 h-3.5" />
-                  Enviar notificação de teste
+                  Enviar notificacao de teste
                 </button>
 
-                {/* Deactivate all */}
                 <button
                   onClick={handleToggleMaster}
                   className="w-full flex items-center justify-center gap-2 py-3 text-sm font-inter font-bold text-destructive hover:bg-destructive/5 transition-colors border-t border-border"
                 >
-                  Desativar todas as notificações
+                  Desativar todas as notificacoes
                 </button>
               </>
             )}

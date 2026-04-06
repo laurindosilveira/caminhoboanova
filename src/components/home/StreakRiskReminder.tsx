@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
 import { Flame, X, ChevronRight } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 type Props = {
   onNavigateToJornada: () => void;
@@ -14,44 +14,46 @@ export default function StreakRiskReminder({ onNavigateToJornada }: Props) {
   useEffect(() => {
     async function check() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
-      // Check both user_progress and devotional_progress for last activity
-      const [{ data: prog }, { data: devProg }] = await Promise.all([
+      const [{ data: progress }, { data: devotionalProgress }] = await Promise.all([
         supabase.from("user_progress").select("completed_at").eq("user_id", user.id).order("completed_at", { ascending: false }).limit(1),
         supabase.from("devotional_progress").select("completed_at").eq("user_id", user.id).order("completed_at", { ascending: false }).limit(1),
       ]);
 
       const dates: Date[] = [];
-      if (prog?.[0]?.completed_at) dates.push(new Date(prog[0].completed_at));
-      if (devProg?.[0]?.completed_at) dates.push(new Date(devProg[0].completed_at));
+      if (progress?.[0]?.completed_at) dates.push(new Date(progress[0].completed_at));
+      if (devotionalProgress?.[0]?.completed_at) dates.push(new Date(devotionalProgress[0].completed_at));
 
       if (dates.length === 0) {
-        setDaysInactive(99); // Never done anything
+        setDaysInactive(99);
         setLoading(false);
         return;
       }
 
-      const lastActivity = new Date(Math.max(...dates.map(d => d.getTime())));
-      const now = new Date();
-      const diffDays = Math.floor((now.getTime() - lastActivity.getTime()) / 86400000);
+      const lastActivity = new Date(Math.max(...dates.map((date) => date.getTime())));
+      const diffDays = Math.floor((Date.now() - lastActivity.getTime()) / 86400000);
       setDaysInactive(diffDays);
       setLoading(false);
     }
+
     check();
   }, []);
 
-  // Only show if 2+ days inactive
   if (loading || dismissed || daysInactive < 2) return null;
 
   const isLongAbsence = daysInactive >= 5;
 
   return (
-    <div className={`mx-5 mb-3 rounded-2xl border p-4 relative overflow-hidden ${
-      isLongAbsence
-        ? "border-destructive/30 bg-destructive/5"
-        : "border-accent/30 bg-accent/5"
-    }`}>
+    <div
+      data-reminder="true"
+      className={`mx-5 mb-3 rounded-2xl border p-4 relative overflow-hidden ${
+        isLongAbsence ? "border-destructive/30 bg-destructive/5" : "border-accent/30 bg-accent/5"
+      }`}
+    >
       <button
         onClick={() => setDismissed(true)}
         className="absolute top-3 right-3 p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
@@ -67,12 +69,12 @@ export default function StreakRiskReminder({ onNavigateToJornada }: Props) {
         </div>
         <div className="flex-1 min-w-0 pr-4">
           <p className="font-montserrat font-bold text-foreground text-sm">
-            🔥 {daysInactive >= 99 ? "Comece sua jornada!" : `${daysInactive} dias sem atividade`}
+            {daysInactive >= 99 ? "Comece sua jornada!" : `${daysInactive} dias sem atividade`}
           </p>
           <p className="text-muted-foreground font-inter text-[10px] mt-0.5 italic">
             {isLongAbsence
-              ? "Sua chama está se apagando... Volte e reacenda seu coração!"
-              : "Não perca sua sequência! Um devocional por dia faz toda a diferença."}
+              ? "Sua chama esta se apagando. Volte e reacenda seu coracao!"
+              : "Nao perca sua sequencia. Um devocional por dia faz toda a diferenca."}
           </p>
         </div>
       </div>
@@ -85,7 +87,7 @@ export default function StreakRiskReminder({ onNavigateToJornada }: Props) {
             : "bg-accent/15 text-accent-foreground hover:bg-accent/25"
         }`}
       >
-        {daysInactive >= 99 ? "Começar agora" : "Retomar atividades"}
+        {daysInactive >= 99 ? "Comecar agora" : "Retomar atividades"}
         <ChevronRight className="w-3.5 h-3.5" />
       </button>
     </div>

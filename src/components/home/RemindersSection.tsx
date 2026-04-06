@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Bell } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import DevotionalReminder from "./DevotionalReminder";
@@ -16,14 +16,14 @@ export default function RemindersSection({ onNavigateToDiscipulado, onNavigateTo
   const [hasContent, setHasContent] = useState(true);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Check if inner content rendered anything
   useEffect(() => {
     const timer = setTimeout(() => {
       if (contentRef.current) {
-        const childElements = contentRef.current.querySelectorAll('[data-reminder]');
+        const childElements = contentRef.current.querySelectorAll('[data-reminder="true"]');
         setHasContent(childElements.length > 0);
       }
     }, 1500);
+
     return () => clearTimeout(timer);
   }, []);
 
@@ -51,10 +51,7 @@ export default function RemindersSection({ onNavigateToDiscipulado, onNavigateTo
             </p>
           </div>
         </div>
-        <motion.div
-          animate={{ rotate: isOpen ? 180 : 0 }}
-          transition={{ duration: 0.25 }}
-        >
+        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.25 }}>
           <ChevronDown className="w-4 h-4 text-muted-foreground" />
         </motion.div>
       </button>
@@ -69,18 +66,10 @@ export default function RemindersSection({ onNavigateToDiscipulado, onNavigateTo
             className="overflow-hidden"
           >
             <div ref={contentRef} className="pt-2 space-y-0">
-              <div data-reminder>
-                <ConversationReminderBanner />
-              </div>
-              <div data-reminder>
-                <DevotionalReminder onNavigateToDiscipulado={onNavigateToDiscipulado} />
-              </div>
-              <div data-reminder>
-                <UpcomingEventReminder onNavigateToAgenda={onNavigateToAgenda} />
-              </div>
-              <div data-reminder>
-                <StreakRiskReminder onNavigateToJornada={onNavigateToDiscipulado} />
-              </div>
+              <ConversationReminderBanner />
+              <DevotionalReminder onNavigateToDiscipulado={onNavigateToDiscipulado} />
+              <UpcomingEventReminder onNavigateToAgenda={onNavigateToAgenda} />
+              <StreakRiskReminder onNavigateToJornada={onNavigateToDiscipulado} />
             </div>
           </motion.div>
         )}
