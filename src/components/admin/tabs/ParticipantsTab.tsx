@@ -73,18 +73,18 @@ type RealWorshipRecord = {
 
 const ACTIVITY_TYPES = [
   { value: "todos", label: "Todos os tipos" },
-  { value: "devocional", label: "📖 Devocionais" },
-  { value: "estudo", label: "🎓 Estudos de lição" },
-  { value: "presenca", label: "📅 Presenças" },
-  { value: "culto", label: "⛪ Cultos" },
+  { value: "devocional", label: "Devocionais" },
+  { value: "estudo", label: "Estudos de licao" },
+  { value: "presenca", label: "Presencas" },
+  { value: "culto", label: "Cultos" },
 ];
 
 function getStatusInfo(completed: number, total: number) {
   const pct = total > 0 ? (completed / total) * 100 : 0;
-  if (pct === 0) return { label: "Não iniciou", color: "text-muted-foreground", bg: "bg-muted", dot: "bg-muted-foreground" };
+  if (pct === 0) return { label: "Nao iniciou", color: "text-muted-foreground", bg: "bg-muted", dot: "bg-muted-foreground" };
   if (pct < 34) return { label: "Iniciando", color: "text-destructive", bg: "bg-destructive/10", dot: "bg-destructive" };
   if (pct < 70) return { label: "Em andamento", color: "text-accent-foreground", bg: "bg-accent/30", dot: "bg-accent" };
-  return { label: "Avançado", color: "text-brand-green", bg: "bg-brand-green/10", dot: "bg-brand-green" };
+  return { label: "Avancado", color: "text-brand-green", bg: "bg-brand-green/10", dot: "bg-brand-green" };
 }
 
 function calcAge(birthDate: string) {
@@ -101,22 +101,33 @@ function AuditLogSection({ targetUserId, userName }: { targetUserId: string; use
   const [logs, setLogs] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
     async function fetch() {
       setLoading(true);
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("activity_removal_log" as any)
         .select("*")
         .eq("target_user_id", targetUserId)
         .order("removed_at", { ascending: false }) as any;
+      if (error) {
+        setLogs([]);
+        setProfiles({});
+        setLoading(false);
+        toast({ title: "Erro ao carregar log", description: error.message, variant: "destructive" });
+        return;
+      }
       const items = data ?? [];
       setLogs(items);
 
       // Fetch admin names
       const adminIds = [...new Set(items.map((l: any) => l.removed_by))] as string[];
       if (adminIds.length > 0) {
-        const { data: profs } = await supabase.from("profiles").select("user_id, full_name").in("user_id", adminIds);
+        const { data: profs, error: profilesError } = await supabase.from("profiles").select("user_id, full_name").in("user_id", adminIds);
+        if (profilesError) {
+          toast({ title: "Erro ao carregar responsaveis", description: profilesError.message, variant: "destructive" });
+        }
         const map: Record<string, string> = {};
         (profs ?? []).forEach((p: any) => { map[p.user_id] = p.full_name; });
         setProfiles(map);
@@ -126,20 +137,20 @@ function AuditLogSection({ targetUserId, userName }: { targetUserId: string; use
     fetch();
   }, [targetUserId]);
 
-  const typeEmoji: Record<string, string> = { estudo: "🎓", devocional: "📖", presenca: "📅" };
+  const typeEmoji: Record<string, string> = { estudo: "L", devocional: "D", presenca: "P" };
 
   if (loading) return <p className="text-center text-muted-foreground font-inter text-xs py-4 animate-pulse">Carregando log...</p>;
 
   if (logs.length === 0) return (
     <div className="text-center py-6 mt-3">
       <History className="w-6 h-6 text-muted-foreground mx-auto mb-2 opacity-40" />
-      <p className="font-inter text-xs text-muted-foreground">Nenhuma remoção registrada para {userName}.</p>
+      <p className="font-inter text-xs text-muted-foreground">Nenhuma remocao registrada para {userName}.</p>
     </div>
   );
 
   return (
     <div className="mt-3 bg-card rounded-2xl border border-border p-4 space-y-2">
-      <p className="font-montserrat font-bold text-foreground text-sm mb-2">📋 Log de remoções</p>
+      <p className="font-montserrat font-bold text-foreground text-sm mb-2">Log de remocoes</p>
       {logs.map((log: any) => (
         <div key={log.id} className="bg-muted/30 rounded-xl p-3 border border-border">
           <div className="flex items-start gap-2">
@@ -149,7 +160,7 @@ function AuditLogSection({ targetUserId, userName }: { targetUserId: string; use
                 {log.activity_title || log.activity_type}
               </p>
               <p className="font-inter text-[10px] text-muted-foreground">
-                Removido por <strong>{profiles[log.removed_by] ?? "Admin"}</strong> · -{log.points_removed}pts
+                Removido por <strong>{profiles[log.removed_by] ?? "Admin"}</strong> - {log.points_removed}pts
               </p>
               <p className="font-inter text-[10px] text-muted-foreground">
                 {new Date(log.removed_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
@@ -342,10 +353,17 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
   }
 
   async function fetchExtendedProfile() {
-    const [{ data: profileData }, { data: turmasData }] = await Promise.all([
+    const [{ data: profileData, error: profileError }, { data: turmasData, error: turmasError }] = await Promise.all([
       supabase.from("profiles").select("address, father_name, mother_name, father_phone, mother_phone, turma_id").eq("user_id", p.user_id).maybeSingle(),
       supabase.from("turmas").select("id, name, area").eq("is_active", true).order("name"),
     ]);
+    if (profileError || turmasError) {
+      toast({
+        title: "Erro ao carregar dados complementares",
+        description: profileError?.message ?? turmasError?.message,
+        variant: "destructive",
+      });
+    }
     setExtProfile(profileData ?? {});
     setTurmas(turmasData ?? []);
   }
@@ -376,7 +394,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
       turma_id: editForm.turma_id ?? null,
     } as any).eq("user_id", p.user_id);
     if (error) {
-      toast({ title: "Erro ao salvar", variant: "destructive" });
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Dados atualizados!" });
       setLocalOverrides(prev => ({
@@ -428,7 +446,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
       toast({ title: "Estudo removido com alerta", description: `As respostas foram removidas, mas o log falhou: ${logError.message}`, variant: "destructive" });
     }
     setLessonCompletions(prev => prev.filter(l => l.lesson_id !== lessonId));
-    toast({ title: "Estudo removido", description: "Respostas e pontuação foram removidas. Registro salvo no log." });
+    toast({ title: "Estudo removido", description: "Respostas e pontuacao foram removidas. Registro salvo no log." });
     setDeletingType(null);
     setDeletingId(null);
     setConfirmDeleteKey(null);
@@ -453,7 +471,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
       toast({ title: "Devocional removido com alerta", description: `A conclusao foi removida, mas o log falhou: ${logError.message}`, variant: "destructive" });
     }
     setDevotionalCompletions(prev => prev.filter(d => d.devotional_id !== devotionalId));
-    toast({ title: "Devocional removido", description: "Conclusão e pontuação foram removidas. Registro salvo no log." });
+    toast({ title: "Devocional removido", description: "Conclusao e pontuacao foram removidas. Registro salvo no log." });
     setDeletingType(null);
     setDeletingId(null);
     setConfirmDeleteKey(null);
@@ -477,7 +495,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
       toast({ title: "Presenca removida com alerta", description: `O registro foi removido, mas o log falhou: ${logError.message}`, variant: "destructive" });
     }
     setAttendanceRecords(prev => prev.filter(a => a.event_id !== eventId));
-    toast({ title: "Presença removida", description: "Registro de presença foi removido. Registro salvo no log." });
+    toast({ title: "Presenca removida", description: "Registro de presenca foi removido. Registro salvo no log." });
     setDeletingType(null);
     setDeletingId(null);
     setConfirmDeleteKey(null);
@@ -499,7 +517,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
     return (
       <div>
         <button onClick={() => { setViewingLesson(null); }} className="flex items-center gap-2 text-muted-foreground font-inter text-sm mb-4 hover:text-foreground transition-colors">
-          <ChevronLeft className="w-4 h-4" /> Voltar às atividades
+          <ChevronLeft className="w-4 h-4" /> Voltar as atividades
         </button>
 
         <div className="bg-card rounded-2xl border border-border p-5 mb-4 shadow-sm">
@@ -510,16 +528,16 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
             <div className="flex-1">
               <h3 className="font-montserrat font-bold text-foreground text-sm">{viewingLesson.lesson_title}</h3>
               <p className="font-inter text-[10px] text-muted-foreground">
-                🎓 Estudo de lição · {viewingLesson.course_title} · +20 pts
+                Estudo de licao - {viewingLesson.course_title} - +20 pts
               </p>
             </div>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-green/10 text-brand-green">✅ Concluída</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-green/10 text-brand-green">Concluida</span>
           </div>
 
           {viewingLesson.completed_at && (
             <div className="bg-brand-green/5 rounded-xl p-3 border border-brand-green/20 mb-3">
               <p className="font-inter text-xs text-brand-green">
-                ✅ Respondido em {new Date(viewingLesson.completed_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                Respondido em {new Date(viewingLesson.completed_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
               </p>
             </div>
           )}
@@ -529,7 +547,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
               <p className="font-montserrat font-bold text-foreground text-xs">Respostas do aluno:</p>
               {viewingLesson.responses.map((r, i) => (
                 <div key={i} className="bg-muted/30 rounded-xl p-3 border border-border space-y-1.5">
-                  <p className="font-inter text-xs text-muted-foreground font-medium">📝 {r.question}</p>
+                  <p className="font-inter text-xs text-muted-foreground font-medium">{r.question}</p>
                   <p className="font-inter text-sm text-foreground leading-relaxed whitespace-pre-wrap">{r.response}</p>
                 </div>
               ))}
@@ -537,7 +555,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
           ) : (
             <div className="text-center py-6">
               <Eye className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-40" />
-              <p className="font-inter text-sm text-muted-foreground">Nenhuma resposta encontrada para esta lição.</p>
+              <p className="font-inter text-sm text-muted-foreground">Nenhuma resposta encontrada para esta licao.</p>
             </div>
           )}
         </div>
@@ -546,13 +564,13 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
         <div className="bg-destructive/5 border border-destructive/20 rounded-2xl p-4">
           {confirmDeleteKey === `lesson-${viewingLesson.lesson_id}` ? (
             <div className="space-y-3">
-              <p className="font-inter text-sm text-destructive font-medium">⚠️ Tem certeza que deseja remover este estudo?</p>
-              <p className="font-inter text-xs text-muted-foreground">Isso irá remover as respostas e -20pts de <strong>{p.full_name}</strong>.</p>
+              <p className="font-inter text-sm text-destructive font-medium">Tem certeza que deseja remover este estudo?</p>
+              <p className="font-inter text-xs text-muted-foreground">Isso ira remover as respostas e -20pts de <strong>{p.full_name}</strong>.</p>
               <div className="flex gap-2">
                 <button onClick={() => handleDeleteLesson(viewingLesson.lesson_id)}
                   disabled={deletingId === viewingLesson.lesson_id}
                   className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground font-inter text-sm font-medium disabled:opacity-50">
-                  {deletingId === viewingLesson.lesson_id ? "Removendo..." : "🗑️ Confirmar remoção"}
+                  {deletingId === viewingLesson.lesson_id ? "Removendo..." : "Confirmar remocao"}
                 </button>
                 <button onClick={() => setConfirmDeleteKey(null)} className="px-4 py-2.5 rounded-xl bg-muted text-foreground font-inter text-sm">Cancelar</button>
               </div>
@@ -560,7 +578,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
           ) : (
             <button onClick={() => setConfirmDeleteKey(`lesson-${viewingLesson.lesson_id}`)}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-destructive/30 text-destructive font-inter text-sm font-medium hover:bg-destructive/10 transition-colors">
-              <Trash2 className="w-4 h-4" /> Remover estudo e pontuação
+              <Trash2 className="w-4 h-4" /> Remover estudo e pontuacao
             </button>
           )}
         </div>
@@ -573,7 +591,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
     return (
       <div>
         <button onClick={() => setViewingDevotional(null)} className="flex items-center gap-2 text-muted-foreground font-inter text-sm mb-4 hover:text-foreground transition-colors">
-          <ChevronLeft className="w-4 h-4" /> Voltar às atividades
+          <ChevronLeft className="w-4 h-4" /> Voltar as atividades
         </button>
 
         <div className="bg-card rounded-2xl border border-border p-5 mb-4 shadow-sm">
@@ -584,22 +602,22 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
             <div className="flex-1">
               <h3 className="font-montserrat font-bold text-foreground text-sm">{viewingDevotional.title}</h3>
               <p className="font-inter text-[10px] text-muted-foreground">
-                📖 Devocional · {viewingDevotional.lesson_title} · +{viewingDevotional.is_weekend ? 2 : 5} pts
+                Devocional - {viewingDevotional.lesson_title} - +{viewingDevotional.is_weekend ? 2 : 5} pts
                 {viewingDevotional.is_weekend && <span className="text-accent-foreground ml-1">(fim de semana)</span>}
               </p>
             </div>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-green/10 text-brand-green">✅ Concluído</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-green/10 text-brand-green">Concluido</span>
           </div>
 
           <div className="space-y-3">
             <div className="bg-muted/50 rounded-xl p-3">
-              <p className="font-inter text-xs text-muted-foreground mb-1">📖 Referência bíblica</p>
-              <p className="font-inter text-sm text-foreground">{viewingDevotional.bible_reference || "Não informada"}</p>
+              <p className="font-inter text-xs text-muted-foreground mb-1">Referencia biblica</p>
+              <p className="font-inter text-sm text-foreground">{viewingDevotional.bible_reference || "Nao informada"}</p>
             </div>
             <div className="bg-brand-green/5 rounded-xl p-3 border border-brand-green/20">
               <p className="font-inter text-xs text-brand-green">
-                ✅ Concluído em {new Date(viewingDevotional.completed_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                {viewingDevotional.is_weekend && " (recuperação de fim de semana)"}
+                Concluido em {new Date(viewingDevotional.completed_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                {viewingDevotional.is_weekend && " (recuperacao de fim de semana)"}
               </p>
             </div>
             {viewingDevotional.questions.length > 0 && (
@@ -609,7 +627,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
                   <div key={i} className="bg-muted/30 rounded-xl p-3 border border-border">
                     <p className="font-inter text-xs text-muted-foreground mb-1">Pergunta {i + 1}:</p>
                     <p className="font-inter text-sm text-foreground">{q}</p>
-                    <p className="font-inter text-[10px] text-muted-foreground mt-1 italic">⚠️ Respostas de devocionais não são salvas no banco</p>
+                    <p className="font-inter text-[10px] text-muted-foreground mt-1 italic">Respostas de devocionais nao sao salvas no banco</p>
                   </div>
                 ))}
               </div>
@@ -621,13 +639,13 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
         <div className="bg-destructive/5 border border-destructive/20 rounded-2xl p-4">
           {confirmDeleteKey === `dev-${viewingDevotional.devotional_id}` ? (
             <div className="space-y-3">
-              <p className="font-inter text-sm text-destructive font-medium">⚠️ Tem certeza que deseja remover este devocional?</p>
-              <p className="font-inter text-xs text-muted-foreground">Isso irá remover a conclusão e -{viewingDevotional.is_weekend ? 2 : 5}pts de <strong>{p.full_name}</strong>.</p>
+              <p className="font-inter text-sm text-destructive font-medium">Tem certeza que deseja remover este devocional?</p>
+              <p className="font-inter text-xs text-muted-foreground">Isso ira remover a conclusao e -{viewingDevotional.is_weekend ? 2 : 5}pts de <strong>{p.full_name}</strong>.</p>
               <div className="flex gap-2">
                 <button onClick={() => handleDeleteDevotional(viewingDevotional.devotional_id)}
                   disabled={deletingId === viewingDevotional.devotional_id}
                   className="flex-1 py-2.5 rounded-xl bg-destructive text-destructive-foreground font-inter text-sm font-medium disabled:opacity-50">
-                  {deletingId === viewingDevotional.devotional_id ? "Removendo..." : "🗑️ Confirmar remoção"}
+                  {deletingId === viewingDevotional.devotional_id ? "Removendo..." : "Confirmar remocao"}
                 </button>
                 <button onClick={() => setConfirmDeleteKey(null)} className="px-4 py-2.5 rounded-xl bg-muted text-foreground font-inter text-sm">Cancelar</button>
               </div>
