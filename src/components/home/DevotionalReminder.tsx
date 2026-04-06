@@ -67,11 +67,12 @@ export default function DevotionalReminder({ onNavigateToDiscipulado }: Props) {
         const lessonDevs = (devs ?? [])
           .filter((d: any) => d.lesson_id === entry.lessonId)
           .sort((a: any, b: any) => a.day_number - b.day_number);
+        const releasedDays = entry.releasedDayNumbers ? new Set(entry.releasedDayNumbers) : null;
+        const visibleLessonDevs = lessonDevs.filter((dev: any) => !releasedDays || releasedDays.has(dev.day_number));
 
         let hasAvailableToday = false;
-        for (let i = 0; i < lessonDevs.length; i++) {
-          const devotional = lessonDevs[i];
-          const releaseDate = entry.devotionalDates[i];
+        for (const devotional of visibleLessonDevs) {
+          const releaseDate = entry.devotionalDates[devotional.day_number - 1];
           if (!releaseDate || completedSet.has(devotional.id)) continue;
           if (today >= releaseDate) {
             hasAvailableToday = true;
@@ -80,14 +81,14 @@ export default function DevotionalReminder({ onNavigateToDiscipulado }: Props) {
         }
 
         if (hasAvailableToday) {
-          const info = lessonDevMap[entry.lessonId] ?? { total: lessonDevs.length, completed: 0 };
+          const info = lessonDevMap[entry.lessonId] ?? { total: visibleLessonDevs.length, completed: 0 };
           currentLesson = {
             totalCompleted,
             currentLessonId: entry.lessonId,
             currentLessonTitle: entry.lessonTitle,
             currentLessonOrder: entry.lessonOrder,
             currentLessonCompleted: info.completed,
-            currentLessonTotal: info.total,
+            currentLessonTotal: visibleLessonDevs.length || info.total,
             hasAnyPending: true,
           };
           break;
