@@ -21,6 +21,7 @@ type Props = {
   completedLessonIds: Set<string>;
   fullyCompletedLessonIds: Set<string>;
   agendaSchedule: AgendaSchedule;
+  manualLessonOverrideIds: Set<string>;
   isLeaderOrAdmin: boolean;
   onSelectLesson: (lesson: Lesson) => void;
 };
@@ -28,7 +29,7 @@ type Props = {
 export default function CourseTrailSection({
   courses, expandedCourse, onExpandCourse,
   unlockedCourseIds, completedLessonIds, fullyCompletedLessonIds,
-  agendaSchedule, isLeaderOrAdmin, onSelectLesson,
+  agendaSchedule, manualLessonOverrideIds, isLeaderOrAdmin, onSelectLesson,
 }: Props) {
   if (courses.length === 0) return null;
 
@@ -122,18 +123,21 @@ export default function CourseTrailSection({
                     const isFullyDone = fullyCompletedLessonIds.has(lesson.id);
                     const isScheduled = agendaSchedule.scheduledLessonIds.has(lesson.id);
                     const isStudyOpen = agendaSchedule.studyOpenLessonIds.has(lesson.id);
+                    const hasManualOverride = manualLessonOverrideIds.has(lesson.id);
                     const eventDate = agendaSchedule.lessonEventDate.get(lesson.id);
                     const eventDay = eventDate ? new Date(eventDate) : null;
                     if (eventDay) eventDay.setHours(0, 0, 0, 0);
                     const todayZero = new Date(); todayZero.setHours(0, 0, 0, 0);
                     const isLateAccess = !isLeaderOrAdmin && agendaSchedule.lateAccessLessonIds.has(lesson.id) && !isFullyDone;
-                    const isAccessible = isLeaderOrAdmin || isStudyOpen || isLateAccess || isFullyDone;
+                    const isAccessible = isLeaderOrAdmin || isStudyOpen || isLateAccess || isFullyDone || hasManualOverride;
                     const isLocked = !isLeaderOrAdmin && agendaSchedule.hasScheduledEvents && !isAccessible && !isFullyDone;
-                    const isNotScheduled = !isLeaderOrAdmin && agendaSchedule.hasScheduledEvents && !isScheduled && !isFullyDone;
+                    const isNotScheduled = !isLeaderOrAdmin && agendaSchedule.hasScheduledEvents && !isScheduled && !isFullyDone && !hasManualOverride;
 
                     let lockMessage = "";
                     if (isNotScheduled) {
                       lockMessage = "Aguardando agenda";
+                    } else if (hasManualOverride) {
+                      lockMessage = "Liberação manual do líder";
                     } else if (isLateAccess) {
                       lockMessage = "Acesso tardio — sem pontuação";
                     } else if (isLocked) {

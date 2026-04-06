@@ -61,9 +61,11 @@ type Props = {
   isAdmin?: boolean;
   targetUserId?: string;
   isLateAccess?: boolean;
+  overrideId?: string | null;
+  awardedPoints?: number | null;
 };
 
-export default function JourneyLessonView({ lesson, onBack, isAdmin = false, targetUserId, isLateAccess = false }: Props) {
+export default function JourneyLessonView({ lesson, onBack, isAdmin = false, targetUserId, isLateAccess = false, overrideId = null, awardedPoints = null }: Props) {
   const [content, setContent] = useState<LessonContent>(getDefaultContent(lesson.order_num));
   const [responses, setResponses] = useState<Response>({});
   const [bibleRef, setBibleRef] = useState<string | null>(null);
@@ -129,12 +131,23 @@ export default function JourneyLessonView({ lesson, onBack, isAdmin = false, tar
     if (isAdmin) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { error } = await supabase.from("lesson_responses").upsert({
+    let { error } = await supabase.from("lesson_responses").upsert({
       user_id: user.id,
       lesson_id: lesson.id,
       question_key: key,
       response: value,
+      awarded_points: isLateAccess ? 0 : awardedPoints,
+      override_release_id: overrideId,
     }, { onConflict: "user_id,lesson_id,question_key" });
+    if (error && /awarded_points|override_release_id/i.test(error.message)) {
+      const fallback = await supabase.from("lesson_responses").upsert({
+        user_id: user.id,
+        lesson_id: lesson.id,
+        question_key: key,
+        response: value,
+      }, { onConflict: "user_id,lesson_id,question_key" });
+      error = fallback.error;
+    }
     if (error) {
       toast.error("Falha ao salvar a resposta da lição.", {
         description: error.message,
@@ -159,11 +172,24 @@ export default function JourneyLessonView({ lesson, onBack, isAdmin = false, tar
         lesson_id: lesson.id,
         question_key: key,
         response,
+        awarded_points: isLateAccess ? 0 : awardedPoints,
+        override_release_id: overrideId,
       }));
 
-      const { error } = await supabase
+      let { error } = await supabase
         .from("lesson_responses")
         .upsert(upserts, { onConflict: "user_id,lesson_id,question_key" });
+      if (error && /awarded_points|override_release_id/i.test(error.message)) {
+        const fallback = await supabase
+          .from("lesson_responses")
+          .upsert(entries.map(([key, response]) => ({
+            user_id: user.id,
+            lesson_id: lesson.id,
+            question_key: key,
+            response,
+          })), { onConflict: "user_id,lesson_id,question_key" });
+        error = fallback.error;
+      }
 
       if (!error) {
         setLastSaved(new Date());
@@ -200,12 +226,28 @@ export default function JourneyLessonView({ lesson, onBack, isAdmin = false, tar
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
     const upserts = Object.entries(responses).map(([key, response]) => ({
-      user_id: user.id, lesson_id: lesson.id, question_key: key, response,
+      user_id: user.id,
+      lesson_id: lesson.id,
+      question_key: key,
+      response,
+      awarded_points: isLateAccess ? 0 : awardedPoints,
+      override_release_id: overrideId,
     }));
     if (upserts.length > 0) {
-      const { error } = await supabase
+      let { error } = await supabase
         .from("lesson_responses")
         .upsert(upserts, { onConflict: "user_id,lesson_id,question_key" });
+      if (error && /awarded_points|override_release_id/i.test(error.message)) {
+        const fallback = await supabase
+          .from("lesson_responses")
+          .upsert(Object.entries(responses).map(([key, response]) => ({
+            user_id: user.id,
+            lesson_id: lesson.id,
+            question_key: key,
+            response,
+          })), { onConflict: "user_id,lesson_id,question_key" });
+        error = fallback.error;
+      }
       if (error) {
         setSaving(false);
         toast.error("Não foi possível salvar as respostas da lição.", {

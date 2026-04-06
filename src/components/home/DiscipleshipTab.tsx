@@ -71,6 +71,7 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
   const [allAssessments, setAllAssessments] = useState<Assessment[]>([]);
   const [worshipCount, setWorshipCount] = useState(0);
   const [unlockedCourseIds, setUnlockedCourseIds] = useState<Set<string>>(new Set());
+  const [manualLessonOverrideMap, setManualLessonOverrideMap] = useState<Map<string, { id: string; custom_points: number | null }>>(new Map());
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [helpType, setHelpType] = useState<"crise" | "conversar" | "oracao" | null>(null);
   const [helpMessage, setHelpMessage] = useState("");
@@ -113,7 +114,7 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const [{ data: acts }, { data: prog }, { data: assess }, { data: planData }, { data: coursesData }, { data: lessonsData }, { data: responsesData }, { data: eventsData }, { data: attendanceData }, { data: allAssess }, { data: devContentData }, { data: devProgressData }, { data: worshipData }, { data: unlocksData }] = await Promise.all([
+    const [{ data: acts }, { data: prog }, { data: assess }, { data: planData }, { data: coursesData }, { data: lessonsData }, { data: responsesData }, { data: eventsData }, { data: attendanceData }, { data: allAssess }, { data: devContentData }, { data: devProgressData }, { data: worshipData }, { data: unlocksData }, { data: lessonOverrideData }] = await Promise.all([
       supabase.from("activities").select("id, type, title, points"),
       supabase.from("user_progress").select("activity_id").eq("user_id", user.id),
       supabase.from("spiritual_assessments").select("*").eq("user_id", user.id).eq("month", month).eq("year", year).maybeSingle(),
@@ -128,6 +129,7 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
       supabase.from("devotional_progress").select("devotional_id").eq("user_id", user.id),
       supabase.from("worship_attendance").select("id").eq("user_id", user.id).eq("status", "aprovado"),
       supabase.from("course_unlocks").select("course_id").eq("area", currentArea),
+      supabase.from("user_lesson_overrides" as any).select("id, lesson_id, custom_points, available_from, available_until, is_unlocked").eq("user_id", user.id),
     ]);
 
     setActivities(acts ?? []);
@@ -161,6 +163,15 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
     }));
     setCourses(courseList);
     setUnlockedCourseIds(new Set((unlocksData ?? []).map((u: any) => u.course_id)));
+    const nowIso = new Date();
+    const activeLessonOverrides = new Map<string, { id: string; custom_points: number | null }>();
+    (lessonOverrideData ?? []).forEach((item: any) => {
+      if (!item?.lesson_id || item.is_unlocked === false) return;
+      if (item.available_from && new Date(item.available_from) > nowIso) return;
+      if (item.available_until && new Date(item.available_until) < nowIso) return;
+      activeLessonOverrides.set(item.lesson_id, { id: item.id, custom_points: item.custom_points ?? null });
+    });
+    setManualLessonOverrideMap(activeLessonOverrides);
     const unlockedSet = new Set((unlocksData ?? []).map((u: any) => u.course_id));
     const firstUnlocked = courseList.find(c => unlockedSet.has(c.id));
     if (firstUnlocked) setExpandedCourse(firstUnlocked.id);
@@ -369,7 +380,13 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
       const isLateAccessStudy = !isLeaderOrAdmin && agendaSchedule.lateAccessLessonIds.has(selectedLesson.id) && !fullyCompletedLessonIds.has(selectedLesson.id);
       return (
         <div className="px-5 pt-5 pb-6">
-          <JourneyLessonView lesson={selectedLesson} onBack={() => { setSelectedLesson(null); setSelectedLessonMode("choice"); }} isLateAccess={isLateAccessStudy} />
+          <JourneyLessonView
+            lesson={selectedLesson}
+            onBack={() => { setSelectedLesson(null); setSelectedLessonMode("choice"); }}
+            isLateAccess={isLateAccessStudy}
+            overrideId={manualLessonOverrideMap.get(selectedLesson.id)?.id}
+            awardedPoints={manualLessonOverrideMap.get(selectedLesson.id)?.custom_points ?? null}
+          />
         </div>
       );
     }
@@ -391,6 +408,8 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
         isStudyLocked={false}
         isLateAccess={isLateAccess}
         isStudyCompleted={studyDone}
+        overrideId={manualLessonOverrideMap.get(selectedLesson.id)?.id}
+        awardedPoints={manualLessonOverrideMap.get(selectedLesson.id)?.custom_points ?? null}
       />
     );
   }
@@ -445,6 +464,7 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
               completedLessonIds={completedLessonIds}
               fullyCompletedLessonIds={fullyCompletedLessonIds}
               agendaSchedule={agendaSchedule}
+              manualLessonOverrideIds={new Set(manualLessonOverrideMap.keys())}
               isLeaderOrAdmin={isLeaderOrAdmin}
               onSelectLesson={(lesson) => {
                 setSelectedLesson(lesson);

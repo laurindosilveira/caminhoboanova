@@ -112,10 +112,12 @@ type DevotionalCatalogItem = {
   lesson_title: string;
   course_title: string;
 };
-type ManualDevotionalReleaseDraft = {
+type ManualReleaseDraft = {
   id: string;
   user_id?: string;
-  devotional_id: string;
+  content_kind: "lesson" | "devotional";
+  lesson_id: string | null;
+  devotional_id: string | null;
   custom_points: number;
   available_from: string;
   available_until: string;
@@ -165,7 +167,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [lessonCompletions, setLessonCompletions] = useState<LessonCompletion[]>([]);
   const [devotionalCompletions, setDevotionalCompletions] = useState<DevotionalCompletion[]>([]);
-  const [manualReleaseDrafts, setManualReleaseDrafts] = useState<ManualDevotionalReleaseDraft[]>([]);
+  const [manualReleaseDrafts, setManualReleaseDrafts] = useState<ManualReleaseDraft[]>([]);
   const [manualReleaseSelection, setManualReleaseSelection] = useState({
     course_id: "",
     lesson_id: "",
@@ -493,17 +495,35 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   }, [p.user_id]);
 
   async function fetchManualReleaseDrafts() {
-    const storageKey = `manual-devotional-release-drafts:${p.user_id}`;
+    const storageKey = `manual-content-release-drafts:${p.user_id}`;
     setLoadingManualReleases(true);
 
-    const { data, error } = await supabase
+    const { data: devotionalData, error: devotionalError } = await supabase
       .from("user_devotional_overrides" as any)
       .select("id, user_id, devotional_id, custom_points, available_from, available_until, notes, is_unlocked, created_at, granted_by")
       .eq("user_id", p.user_id)
       .order("created_at", { ascending: false });
 
-    if (!error) {
-      setManualReleaseDrafts((data ?? []) as ManualDevotionalReleaseDraft[]);
+    const { data: lessonData, error: lessonError } = await supabase
+      .from("user_lesson_overrides" as any)
+      .select("id, user_id, lesson_id, custom_points, available_from, available_until, notes, is_unlocked, created_at, granted_by")
+      .eq("user_id", p.user_id)
+      .order("created_at", { ascending: false });
+
+    if (!devotionalError && !lessonError) {
+      const merged = [
+        ...((devotionalData ?? []).map((item: any) => ({
+          ...item,
+          content_kind: "devotional" as const,
+          lesson_id: null,
+        }))),
+        ...((lessonData ?? []).map((item: any) => ({
+          ...item,
+          content_kind: "lesson" as const,
+          devotional_id: null,
+        }))),
+      ].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      setManualReleaseDrafts(merged as ManualReleaseDraft[]);
       window.localStorage.removeItem(storageKey);
       setLoadingManualReleases(false);
       return;
@@ -514,7 +534,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
       if (!raw) {
         setManualReleaseDrafts([]);
       } else {
-        const parsed = JSON.parse(raw) as ManualDevotionalReleaseDraft[];
+        const parsed = JSON.parse(raw) as ManualReleaseDraft[];
         setManualReleaseDrafts(Array.isArray(parsed) ? parsed : []);
       }
     } catch {
@@ -580,17 +600,19 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
       is_unlocked: true,
     });
   }
-
   async function handleAddManualReleaseDraft() {
-    if (!manualReleaseForm.devotional_id) return;
+    if (manualReleaseSelection.content_kind === "devotional" && !manualReleaseForm.devotional_id) return;
+    if (manualReleaseSelection.content_kind === "lesson" && !manualReleaseSelection.lesson_id) return;
 
     const customPoints = Number.isFinite(manualReleaseForm.custom_points)
       ? Math.max(0, Number(manualReleaseForm.custom_points))
       : 0;
 
-    const draft: ManualDevotionalReleaseDraft = {
+    const draft: ManualReleaseDraft = {
       id: crypto.randomUUID(),
-      devotional_id: manualReleaseForm.devotional_id,
+      content_kind: manualReleaseSelection.content_kind,
+      lesson_id: manualReleaseSelection.content_kind === "lesson" ? manualReleaseSelection.lesson_id : null,
+      devotional_id: manualReleaseSelection.content_kind === "devotional" ? manualReleaseForm.devotional_id : null,
       custom_points: customPoints,
       available_from: manualReleaseForm.available_from,
       available_until: manualReleaseForm.available_until,
@@ -602,29 +624,51 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
     setSavingManualRelease(true);
     const { data: authData } = await supabase.auth.getUser();
     const leaderId = authData.user?.id ?? null;
-    const payload = {
-      user_id: p.user_id,
-      devotional_id: manualReleaseForm.devotional_id,
-      custom_points: customPoints,
-      available_from: manualReleaseForm.available_from || null,
-      available_until: manualReleaseForm.available_until || null,
-      notes: manualReleaseForm.notes.trim() || null,
-      is_unlocked: manualReleaseForm.is_unlocked,
-      granted_by: leaderId,
-    };
+    const isLessonRelease = manualReleaseSelection.content_kind === "lesson";
+    const payload = isLessonRelease
+      ? {
+          user_id: p.user_id,
+          lesson_id: manualReleaseSelection.lesson_id,
+          custom_points: customPoints,
+          available_from: manualReleaseForm.available_from || null,
+          available_until: manualReleaseForm.available_until || null,
+          notes: manualReleaseForm.notes.trim() || null,
+          is_unlocked: manualReleaseForm.is_unlocked,
+          granted_by: leaderId,
+        }
+      : {
+          user_id: p.user_id,
+          devotional_id: manualReleaseForm.devotional_id,
+          custom_points: customPoints,
+          available_from: manualReleaseForm.available_from || null,
+          available_until: manualReleaseForm.available_until || null,
+          notes: manualReleaseForm.notes.trim() || null,
+          is_unlocked: manualReleaseForm.is_unlocked,
+          granted_by: leaderId,
+        };
 
     const { error } = await supabase
-      .from("user_devotional_overrides" as any)
-      .upsert(payload, { onConflict: "user_id,devotional_id" })
-      .select("id, user_id, devotional_id, custom_points, available_from, available_until, notes, is_unlocked, created_at, granted_by");
+      .from((isLessonRelease ? "user_lesson_overrides" : "user_devotional_overrides") as any)
+      .upsert(payload, { onConflict: isLessonRelease ? "user_id,lesson_id" : "user_id,devotional_id" })
+      .select(isLessonRelease
+        ? "id, user_id, lesson_id, custom_points, available_from, available_until, notes, is_unlocked, created_at, granted_by"
+        : "id, user_id, devotional_id, custom_points, available_from, available_until, notes, is_unlocked, created_at, granted_by");
 
     if (error) {
-      const storageKey = `manual-devotional-release-drafts:${p.user_id}`;
-      setManualReleaseDrafts((prev) => [draft, ...prev.filter((item) => item.devotional_id !== draft.devotional_id)]);
-      window.localStorage.setItem(storageKey, JSON.stringify([draft, ...manualReleaseDrafts.filter((item) => item.devotional_id !== draft.devotional_id)]));
+      const storageKey = `manual-content-release-drafts:${p.user_id}`;
+      const next = [
+        draft,
+        ...manualReleaseDrafts.filter((item) => (
+          draft.content_kind === "lesson"
+            ? !(item.content_kind == "lesson" && item.lesson_id == draft.lesson_id)
+            : !(item.content_kind == "devotional" && item.devotional_id == draft.devotional_id)
+        )),
+      ];
+      setManualReleaseDrafts(next);
+      window.localStorage.setItem(storageKey, JSON.stringify(next));
       toast({
         title: "Rascunho salvo localmente",
-        description: "A tabela ainda não existe no Supabase. Rode o SQL da parte 2 para persistir de verdade.",
+        description: "A tabela ainda n?o existe no Supabase. Rode o SQL da parte 2 para persistir de verdade.",
       });
       resetManualReleaseForm();
       setSavingManualRelease(false);
@@ -634,8 +678,10 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
 
     await fetchManualReleaseDrafts();
     toast({
-      title: "Liberação manual salva",
-      description: "O override deste devocional já está registrado no banco.",
+      title: "Libera??o manual salva",
+      description: isLessonRelease
+        ? "O override desta li??o j? est? registrado no banco."
+        : "O override deste devocional j? est? registrado no banco.",
     });
     resetManualReleaseForm();
     setSavingManualRelease(false);
@@ -646,28 +692,30 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
     const draft = manualReleaseDrafts.find((item) => item.id === draftId);
     if (!draft) return;
 
+    const tableName = draft.content_kind === "lesson" ? "user_lesson_overrides" : "user_devotional_overrides";
     const { error } = await supabase
-      .from("user_devotional_overrides" as any)
+      .from(tableName as any)
       .delete()
       .eq("id", draftId);
 
     if (!error) {
       setManualReleaseDrafts((prev) => prev.filter((item) => item.id !== draftId));
       toast({
-        title: "Liberação removida",
-        description: "O override foi apagado do banco.",
+        title: "Libera??o removida",
+        description: draft.content_kind === "lesson"
+          ? "O override da li??o foi apagado do banco."
+          : "O override do devocional foi apagado do banco.",
       });
       return;
     }
 
-    const storageKey = `manual-devotional-release-drafts:${p.user_id}`;
+    const storageKey = `manual-content-release-drafts:${p.user_id}`;
     setManualReleaseDrafts((prev) => {
       const next = prev.filter((item) => item.id !== draftId);
       window.localStorage.setItem(storageKey, JSON.stringify(next));
       return next;
     });
   }
-
   const completedIds = new Set(p.completed_activity_ids);
   const formacoes = activities.filter(a => a.type === "formacao");
   const devocionais = activities.filter(a => a.type === "devocional");
@@ -1850,7 +1898,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
             <div className="flex gap-2">
               <button
                 onClick={handleAddManualReleaseDraft}
-                disabled={manualReleaseSelection.content_kind !== "devotional" || !manualReleaseForm.devotional_id || savingManualRelease}
+                disabled={savingManualRelease || (manualReleaseSelection.content_kind === "devotional" && !manualReleaseForm.devotional_id) || (manualReleaseSelection.content_kind === "lesson" && !manualReleaseSelection.lesson_id)}
                 className="flex-1 h-11 rounded-xl font-inter text-sm font-bold text-primary-foreground disabled:opacity-60"
                 style={{ background: "var(--gradient-hero)" }}
               >
@@ -1894,16 +1942,25 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
             ) : (
               <div className="space-y-2">
                 {manualReleaseDrafts.map((draft) => {
-                  const devotional = devotionalCatalog.find((item) => item.id === draft.devotional_id);
+                  const lessonDraft = draft.lesson_id ? lessons.find((item) => item.id === draft.lesson_id) : null;
+                  const devotional = draft.devotional_id ? devotionalCatalog.find((item) => item.id === draft.devotional_id) : null;
                   return (
                     <div key={draft.id} className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-inter text-sm font-semibold text-foreground">
-                            {devotional?.title ?? "Devocional removido"}
+                            {draft.content_kind === "lesson"
+                              ? lessonDraft?.title ?? "Li??o removida"
+                              : devotional?.title ?? "Devocional removido"}
                           </p>
                           <p className="font-inter text-[11px] text-muted-foreground">
-                            {devotional ? `${devotional.lesson_title} · Dia ${devotional.day_number}` : "Devocional não encontrado na lista atual"}
+                            {draft.content_kind === "lesson"
+                              ? lessonDraft
+                                ? `Li??o ${lessonDraft.order_num} ? Conte?do da li??o`
+                                : "Li??o n?o encontrada na lista atual"
+                              : devotional
+                                ? `${devotional.lesson_title} ? Dia ${devotional.day_number}`
+                                : "Devocional n?o encontrado na lista atual"}
                           </p>
                         </div>
                         <button
@@ -1914,6 +1971,9 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                         </button>
                       </div>
                       <div className="flex flex-wrap gap-2">
+                        <span className="px-2 py-1 rounded-lg bg-background border border-border text-[10px] font-inter text-muted-foreground">
+                          {draft.content_kind === "lesson" ? "Conte?do da li??o" : "Devocional"}
+                        </span>
                         <span className="px-2 py-1 rounded-lg bg-background border border-border text-[10px] font-inter text-foreground">
                           {draft.custom_points} pts
                         </span>
@@ -1922,7 +1982,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                         </span>
                         {draft.available_from && (
                           <span className="px-2 py-1 rounded-lg bg-background border border-border text-[10px] font-inter text-muted-foreground">
-                            Início: {new Date(draft.available_from).toLocaleString("pt-BR")}
+                            In?cio: {new Date(draft.available_from).toLocaleString("pt-BR")}
                           </span>
                         )}
                         {draft.available_until && (
