@@ -748,7 +748,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
   const typeLabel = (type: string) => {
     if (type === "devocional") return "devocional";
     if (type === "estudo") return "estudo";
-    if (type === "presenca") return "presença";
+    if (type === "presenca") return "presenca";
     if (type === "culto") return "culto";
     return type;
   };
@@ -761,12 +761,12 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
     ((attendanceRecords.filter(a => a.status === "presente").length / Math.max(1, 1)) * 30)
   ));
   const status = totalRealActivities === 0
-    ? { label: "Não iniciou", color: "text-muted-foreground", bg: "bg-muted" }
+    ? { label: "Nao iniciou", color: "text-muted-foreground", bg: "bg-muted" }
     : totalRealActivities < 5
     ? { label: "Iniciando", color: "text-destructive", bg: "bg-destructive/10" }
     : totalRealActivities < 15
     ? { label: "Em andamento", color: "text-accent-foreground", bg: "bg-accent/30" }
-    : { label: "Avançado", color: "text-brand-green", bg: "bg-brand-green/10" };
+    : { label: "Avancado", color: "text-brand-green", bg: "bg-brand-green/10" };
 
   return (
     <div>
@@ -833,12 +833,12 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
               </div>
             </div>
             <div>
-              <label className="text-xs font-inter font-semibold text-muted-foreground mb-1 block">Endereço</label>
+              <label className="text-xs font-inter font-semibold text-muted-foreground mb-1 block">Endereco</label>
               <Input value={editForm.address ?? ""} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} className="text-sm" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-inter font-semibold text-muted-foreground mb-1 block">Ano confirmação</label>
+                <label className="text-xs font-inter font-semibold text-muted-foreground mb-1 block">Ano confirmacao</label>
                 <Input type="number" min={1} max={3} value={editForm.confirmation_year ?? ""} onChange={e => setEditForm(f => ({ ...f, confirmation_year: e.target.value ? Number(e.target.value) : null }))} className="text-sm" placeholder="1 ou 2" />
               </div>
               <div>
@@ -862,11 +862,11 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-inter font-semibold text-muted-foreground mb-1 block">Nome da mãe</label>
+                <label className="text-xs font-inter font-semibold text-muted-foreground mb-1 block">Nome da mae</label>
                 <Input value={editForm.mother_name ?? ""} onChange={e => setEditForm(f => ({ ...f, mother_name: e.target.value }))} className="text-sm" />
               </div>
               <div>
-                <label className="text-xs font-inter font-semibold text-muted-foreground mb-1 block">Tel. mãe</label>
+                <label className="text-xs font-inter font-semibold text-muted-foreground mb-1 block">Tel. mae</label>
                 <Input value={editForm.mother_phone ?? ""} onChange={e => setEditForm(f => ({ ...f, mother_phone: e.target.value }))} className="text-sm" />
               </div>
             </div>
@@ -900,7 +900,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
               )}
               <div className="flex items-center gap-2 text-muted-foreground font-inter">
                 <GraduationCap className="w-4 h-4 flex-shrink-0" />
-                <span>{p.confirmation_year ? `${p.confirmation_year}º Ano` : <span className="text-destructive">Ano não definido</span>}</span>
+                <span>{p.confirmation_year ? `${p.confirmation_year}º Ano` : <span className="text-destructive">Ano nao definido</span>}</span>
               </div>
               <div className="flex items-center gap-2 text-accent font-montserrat font-bold">
                 <Star className="w-4 h-4 flex-shrink-0" />
@@ -927,7 +927,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
                 )}
                 {extProfile.mother_name && (
                   <div className="text-xs font-inter text-muted-foreground">
-                    <span className="font-semibold">Mãe:</span> {extProfile.mother_name}
+                    <span className="font-semibold">Mae:</span> {extProfile.mother_name}
                     {extProfile.mother_phone && (
                       <a href={`tel:${extProfile.mother_phone}`} className="ml-1.5 text-primary hover:underline">{extProfile.mother_phone}</a>
                     )}
@@ -944,7 +944,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
         {[
           { label: "Devocionais", icon: "📖", done: devotionalCompletions.length },
           { label: "Estudos", icon: "🎓", done: lessonCompletions.length },
-          { label: "Presenças", icon: "📅", done: attendanceRecords.filter(a => a.status === "presente").length },
+          { label: "Presencas", icon: "📅", done: attendanceRecords.filter(a => a.status === "presente").length },
           { label: "Cultos", icon: "⛪", done: worshipRecords.length },
         ].map(({ label, icon, done }) => (
           <div key={label} className="bg-card rounded-xl border border-border p-3">
@@ -957,23 +957,20 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
         ))}
       </div>
 
-      {/* Pontuação detalhada */}
+      {/* Pontuacao detalhada */}
       <div className="bg-card rounded-2xl border border-border p-4 mb-4">
         <p className="font-montserrat font-bold text-foreground text-sm mb-2">📊 Detalhamento de pontos</p>
         <div className="space-y-1.5">
           <div className="flex justify-between font-inter text-xs">
-            <span className="text-muted-foreground">Estudos ({lessonCompletions.length} × 20pts)</span>
+            <span className="text-muted-foreground">Estudos ({lessonCompletions.length} concluidos)</span>
             <span className="text-brand-green font-bold">+{lessonPts}</span>
           </div>
           <div className="flex justify-between font-inter text-xs">
-            <span className="text-muted-foreground">
-              Devocionais ({devotionalCompletions.filter(d => !d.is_weekend).length} × 5pts
-              {devotionalCompletions.filter(d => d.is_weekend).length > 0 && ` + ${devotionalCompletions.filter(d => d.is_weekend).length} × 2pts fim de sem.`})
-            </span>
+            <span className="text-muted-foreground">Devocionais ({devotionalCompletions.length} concluidos)</span>
             <span className="text-brand-green font-bold">+{devPts}</span>
           </div>
           <div className="flex justify-between font-inter text-xs">
-            <span className="text-muted-foreground">Presenças ({attendanceRecords.filter(a => a.status === "presente").length} × 10pts)</span>
+            <span className="text-muted-foreground">Presencas ({attendanceRecords.filter(a => a.status === "presente").length} confirmadas)</span>
             <span className="text-brand-green font-bold">+{attendancePts}</span>
           </div>
           <div className="flex justify-between font-inter text-xs">
@@ -1186,8 +1183,12 @@ export default function ParticipantsTab({ participants, activities, communities 
         const statuses = userAtt[p.user_id] ?? [];
         let consecutive = 0;
         for (const s of statuses) {
-          if (s !== "presente") consecutive++;
-          else break;
+          if (s === "presente") break;
+          if (s === "falta") {
+            consecutive++;
+            continue;
+          }
+          continue;
         }
         if (consecutive >= 3) r.push({ icon: "📅", label: `${consecutive} faltas seguidas`, severity: "high" });
         else if (consecutive === 2) r.push({ icon: "📅", label: "2 faltas seguidas", severity: "medium" });
@@ -1198,10 +1199,10 @@ export default function ParticipantsTab({ participants, activities, communities 
           r.push({ icon: "📖", label: "Nunca fez devocional", severity: "high" });
         } else if (last < fourteenDaysAgo) {
           const days = Math.floor((now.getTime() - last.getTime()) / (1000 * 60 * 60 * 24));
-          r.push({ icon: "📖", label: `Sem devocional há ${days} dias`, severity: "high" });
+          r.push({ icon: "📖", label: `Sem devocional ha ${days} dias`, severity: "high" });
         } else if (last < tenDaysAgo) {
           const days = Math.floor((now.getTime() - last.getTime()) / (1000 * 60 * 60 * 24));
-          r.push({ icon: "📖", label: `Sem devocional há ${days} dias`, severity: "medium" });
+          r.push({ icon: "📖", label: `Sem devocional ha ${days} dias`, severity: "medium" });
         }
 
         // Needs pastor
@@ -1212,7 +1213,7 @@ export default function ParticipantsTab({ participants, activities, communities 
         // Health status
         const plan = planMap[p.user_id];
         if (plan?.health_status === "critico") {
-          r.push({ icon: "🚨", label: "Status crítico", severity: "high" });
+          r.push({ icon: "🚨", label: "Status critico", severity: "high" });
         } else if (plan?.is_priority) {
           r.push({ icon: "⚠️", label: "Prioridade pastoral", severity: "medium" });
         }
