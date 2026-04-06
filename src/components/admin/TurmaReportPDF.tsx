@@ -14,9 +14,26 @@ type Props = {
   turmaName: string;
 };
 
+function parseLocalDate(value?: string | null) {
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(`${value}T12:00:00`);
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatPtDate(value?: string | null) {
+  const parsed = parseLocalDate(value);
+  return parsed ? parsed.toLocaleDateString("pt-BR") : "—";
+}
+
+function getTimeOrMax(value?: string | null) {
+  const parsed = parseLocalDate(value);
+  return parsed ? parsed.getTime() : Number.MAX_SAFE_INTEGER;
+}
+
 function calcAge(birthDate: string) {
-  if (!birthDate) return null;
-  const birth = new Date(birthDate);
+  const birth = parseLocalDate(birthDate);
+  if (!birth) return null;
   const today = new Date();
   let age = today.getFullYear() - birth.getFullYear();
   if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age--;
@@ -255,7 +272,7 @@ export default function TurmaReportPDF({ participants, activities, turmaName }: 
         addRow("Area", p.area);
         addRow("Idade", age ? `${age} anos` : "—");
         addRow("Telefone", p.phone);
-        addRow("Data de nascimento", p.birth_date ? new Date(p.birth_date).toLocaleDateString("pt-BR") : "—");
+        addRow("Data de nascimento", formatPtDate(p.birth_date));
 
         // Aptidão
         const plan = plansMap.get(p.user_id);
@@ -320,13 +337,13 @@ export default function TurmaReportPDF({ participants, activities, turmaName }: 
           const sorted = [...userAtt].sort((a: any, b: any) => {
             const da = evMap.get(a.event_id)?.event_date ?? "";
             const db = evMap.get(b.event_id)?.event_date ?? "";
-            return new Date(da).getTime() - new Date(db).getTime();
+            return getTimeOrMax(da) - getTimeOrMax(db);
           });
           for (const att of sorted) {
             checkPage(5);
             const ev = evMap.get(att.event_id);
             const statusTxt = att.status === "presente" ? "Presente" : att.status === "faltou" ? "Faltou" : "Justificou";
-            const dateStr = ev?.event_date ? new Date(ev.event_date).toLocaleDateString("pt-BR") : "";
+            const dateStr = formatPtDate(ev?.event_date);
             addText(`${dateStr} - ${ev?.title ?? "Evento"}: ${statusTxt}`, margin + 4, y, 7, false,
               att.status === "presente" ? "#065F46" : att.status === "faltou" ? "#991B1B" : "#92400E");
             y += 4;
@@ -352,7 +369,7 @@ export default function TurmaReportPDF({ participants, activities, turmaName }: 
           for (const ev of userEvals) {
             checkPage(20);
             const evInfo = evalEvMap.get(ev.event_id);
-            const dateStr = evInfo?.event_date ? new Date(evInfo.event_date).toLocaleDateString("pt-BR") : "";
+            const dateStr = formatPtDate(evInfo?.event_date);
             addText(`${evInfo?.title ?? "Encontro"} (${dateStr})`, margin, y, 8, true, "#333");
             y += 4;
             if (ev.participation_score) addRow("  Participacao", `${SCORE_LABELS[ev.participation_score]} (${ev.participation_score}/5)`);
@@ -373,7 +390,7 @@ export default function TurmaReportPDF({ participants, activities, turmaName }: 
           if (plan.next_steps) addRow("Proximos passos", plan.next_steps);
           if (plan.challenges) addRow("Desafios", plan.challenges);
           if (plan.recommendations) addRow("Recomendacoes", plan.recommendations);
-          if (plan.last_contact_at) addRow("Ultimo contato", new Date(plan.last_contact_at).toLocaleDateString("pt-BR"));
+          if (plan.last_contact_at) addRow("Ultimo contato", formatPtDate(plan.last_contact_at));
           if (plan.pastor_notes) addRow("Observacoes", plan.pastor_notes);
         }
 
@@ -387,7 +404,7 @@ export default function TurmaReportPDF({ participants, activities, turmaName }: 
           };
           for (const note of userNotes) {
             checkPage(10);
-            const dateStr = new Date(note.created_at).toLocaleDateString("pt-BR");
+            const dateStr = formatPtDate(note.created_at);
             addText(`${dateStr} - ${NOTE_LABELS[note.note_type] ?? note.note_type}`, margin, y, 7, true, "#555");
             y += 4;
             const lines = doc.splitTextToSize(note.content, W - margin * 2 - 8);

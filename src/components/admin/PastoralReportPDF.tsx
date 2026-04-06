@@ -16,9 +16,26 @@ type Activity = { id: string; type: string; title: string; points: number; order
 
 type Props = { participant: Participant; activities: Activity[] };
 
+function parseLocalDate(value?: string | null) {
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(`${value}T12:00:00`);
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatPtDate(value?: string | null) {
+  const parsed = parseLocalDate(value);
+  return parsed ? parsed.toLocaleDateString("pt-BR") : "—";
+}
+
+function getTimeOrMax(value?: string | null) {
+  const parsed = parseLocalDate(value);
+  return parsed ? parsed.getTime() : Number.MAX_SAFE_INTEGER;
+}
+
 function calcAge(birthDate: string) {
-  if (!birthDate) return null;
-  const birth = new Date(birthDate);
+  const birth = parseLocalDate(birthDate);
+  if (!birth) return null;
   const today = new Date();
   let age = today.getFullYear() - birth.getFullYear();
   if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) age--;
@@ -89,7 +106,7 @@ export default function PastoralReportPDF({ participant: p, activities }: Props)
         ...a,
         event_title: evMap.get(a.event_id)?.title ?? "Evento",
         event_date: evMap.get(a.event_id)?.event_date ?? "",
-      })).sort((a: any, b: any) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime()));
+      })).sort((a: any, b: any) => getTimeOrMax(a.event_date) - getTimeOrMax(b.event_date)));
     }
 
     // Enrich meeting evaluations with event details
@@ -101,7 +118,7 @@ export default function PastoralReportPDF({ participant: p, activities }: Props)
         ...e,
         event_title: evMap.get(e.event_id)?.title ?? "Encontro",
         event_date: evMap.get(e.event_id)?.event_date ?? "",
-      })).sort((a: any, b: any) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime()));
+      })).sort((a: any, b: any) => getTimeOrMax(a.event_date) - getTimeOrMax(b.event_date)));
     }
 
     setLoaded(true);
@@ -209,7 +226,7 @@ export default function PastoralReportPDF({ participant: p, activities }: Props)
       addRow("Area", p.area);
       addRow("Idade", age ? `${age} anos` : "—");
       addRow("Telefone", p.phone);
-      addRow("Data de nascimento", p.birth_date ? new Date(p.birth_date).toLocaleDateString("pt-BR") : "—");
+      addRow("Data de nascimento", formatPtDate(p.birth_date));
       if (p.address) addRow("Endereco", p.address);
 
       // 2. Dados dos pais / responsáveis
@@ -283,7 +300,7 @@ export default function PastoralReportPDF({ participant: p, activities }: Props)
           for (const att of attendanceDetails) {
             checkPage(6);
             const statusTxt = att.status === "presente" ? "Presente" : att.status === "faltou" ? "Faltou" : "Justificou";
-            const dateStr = att.event_date ? new Date(att.event_date).toLocaleDateString("pt-BR") : "";
+            const dateStr = formatPtDate(att.event_date);
             addText(`${dateStr} - ${att.event_title}: ${statusTxt}`, margin + 4, y, 8, false, 
               att.status === "presente" ? "#065F46" : att.status === "faltou" ? "#991B1B" : "#92400E");
             y += 4.5;
@@ -300,7 +317,7 @@ export default function PastoralReportPDF({ participant: p, activities }: Props)
         const SCORE_LABELS = ["", "Fraco", "Regular", "Bom", "Muito bom", "Excelente"];
         for (const ev of meetingEvals) {
           checkPage(25);
-          const dateStr = ev.event_date ? new Date(ev.event_date).toLocaleDateString("pt-BR") : "";
+          const dateStr = formatPtDate(ev.event_date);
           addText(`${ev.event_title} (${dateStr})`, margin, y, 9, true, "#333");
           y += 5;
           if (ev.participation_score) addRow("  Participacao", `${SCORE_LABELS[ev.participation_score]} (${ev.participation_score}/5)`);
@@ -321,7 +338,7 @@ export default function PastoralReportPDF({ participant: p, activities }: Props)
         if (plan.next_steps) addRow("Proximos passos", plan.next_steps);
         if (plan.challenges) addRow("Desafios", plan.challenges);
         if (plan.recommendations) addRow("Recomendacoes", plan.recommendations);
-        if (plan.last_contact_at) addRow("Ultimo contato", new Date(plan.last_contact_at).toLocaleDateString("pt-BR"));
+        if (plan.last_contact_at) addRow("Ultimo contato", formatPtDate(plan.last_contact_at));
       }
 
       // 8. Notas pastorais
@@ -333,7 +350,7 @@ export default function PastoralReportPDF({ participant: p, activities }: Props)
         };
         for (const note of pastoralNotes) {
           checkPage(12);
-          const dateStr = new Date(note.created_at).toLocaleDateString("pt-BR");
+          const dateStr = formatPtDate(note.created_at);
           const typeLabel = NOTE_LABELS[note.note_type] ?? note.note_type;
           addText(`${dateStr} - ${typeLabel}`, margin, y, 8, true, "#555");
           y += 4;
