@@ -61,7 +61,9 @@ export function useAgendaSchedule() {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [currentArea, profile]);
 
   async function fetchSchedule() {
@@ -118,40 +120,35 @@ export function useAgendaSchedule() {
       return;
     }
 
-    const lessonMap = new Map((lessons ?? []).map(l => [l.id, l]));
-    const courseMap = new Map((courses ?? []).map(c => [c.id, c]));
+    const lessonMap = new Map((lessons ?? []).map((l) => [l.id, l]));
+    const courseMap = new Map((courses ?? []).map((c) => [c.id, c]));
 
     const entries: ScheduleEntry[] = [];
-    for (const event of (events ?? [])) {
+    for (const event of events ?? []) {
       if (!event.linked_lesson_id) continue;
-      // Area filter: only include events for the user's area (or events with no area assigned)
       if (event.area && currentArea && event.area !== currentArea) continue;
+
       const lesson = lessonMap.get(event.linked_lesson_id);
       if (!lesson) continue;
       const course = courseMap.get(lesson.course_id);
       if (!course) continue;
 
-      // Parse date safely: appending T12:00:00 avoids UTC-midnight being interpreted
-      // as the previous day in UTC-3 (Brazil) when no time component is present.
       const rawDate = event.event_date as string;
-      const eventDate = new Date(rawDate.includes("T") ? rawDate : rawDate + "T12:00:00");
+      const eventDate = new Date(rawDate.includes("T") ? rawDate : `${rawDate}T12:00:00`);
 
-      // Always compute 10 business days. For 5_days mode: [0..4]=primary, [5..9]=recovery.
       const devotionalDates = getBusinessDaysBefore(eventDate, 10);
       const windowStart = devotionalDates[0];
 
-      // Auto-limit: if < 10 calendar days from previous event, cap to days 1–5.
       const prevEntry = entries[entries.length - 1];
       const autoLimited = prevEntry
         ? Math.round((eventDate.getTime() - prevEntry.eventDate.getTime()) / 86400000) < 10
         : false;
 
-      // Leader-selected release days (null = all).
       const rawReleased: number[] | null = (event as any).released_devotional_days ?? null;
       let releasedDayNumbers: number[] | null;
       if (autoLimited) {
         const base = rawReleased ?? null;
-        releasedDayNumbers = base ? base.filter(d => d <= 5) : [1, 2, 3, 4, 5];
+        releasedDayNumbers = base ? base.filter((d) => d <= 5) : [1, 2, 3, 4, 5];
       } else {
         releasedDayNumbers = rawReleased;
       }
@@ -202,12 +199,12 @@ export function useAgendaSchedule() {
     lessonDevotionalMode.set(entry.lessonId, entry.devotionalMode);
   }
 
-  const currentOpenEntry = schedule.find(e => today >= e.windowStart && now < e.eventDate);
+  const currentOpenEntry = schedule.find((e) => today >= e.windowStart && now < e.eventDate);
   if (currentOpenEntry) studyOpenLessonIds.add(currentOpenEntry.lessonId);
 
-  const scheduledLessonIds = new Set(schedule.map(e => e.lessonId));
-  const nextScheduledEvent = schedule.find(e => e.eventDate >= now) ?? null;
-  const currentEntry = schedule.find(e => today >= e.windowStart && e.eventDate >= now) ?? null;
+  const scheduledLessonIds = new Set(schedule.map((e) => e.lessonId));
+  const nextScheduledEvent = schedule.find((e) => e.eventDate >= now) ?? null;
+  const currentEntry = schedule.find((e) => today >= e.windowStart && e.eventDate >= now) ?? null;
 
   return {
     schedule,
