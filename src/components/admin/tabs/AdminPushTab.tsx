@@ -39,12 +39,12 @@ interface ScheduledPush {
 }
 
 const AUTOMATION_LABELS: Record<string, string> = {
-  devotional_reminder: "📖 Lembrete de Devocional",
-  streak_risk:         "🔥 Sequência em Risco",
-  pastor_message:      "💬 Mensagem do Pastor",
-  event_upcoming:      "🔔 Evento em 2 Dias",
-  event_attendance:    "📋 Confirmar Presença",
-  prayer_pairs:        "🙏 Dupla de Oração",
+  devotional_reminder: "Lembrete de devocional",
+  streak_risk:         "Sequencia em risco",
+  pastor_message:      "Mensagem do pastor",
+  event_upcoming:      "Evento em 2 dias",
+  event_attendance:    "Confirmar presenca",
+  prayer_pairs:        "Dupla de oracao",
 };
 
 // ─── Root component ────────────────────────────────────────────────────────────
@@ -123,7 +123,7 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
 
   async function handleSend() {
     if (!title.trim() || !body.trim()) {
-      setError("Preencha o título e a mensagem."); return;
+      setError("Preencha o titulo e a mensagem."); return;
     }
     if (target !== "all" && !targetValue) {
       setError("Selecione o destino."); return;
@@ -147,14 +147,19 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
         setError(err.message || "Erro ao enviar.");
       }
     } else {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        setError(userError?.message ?? "Nao foi possivel identificar o lider.");
+        setSending(false);
+        return;
+      }
       const { error: insertError } = await supabase.rpc("insert_push_scheduled" as any, {
         _title:        title,
         _body:         body,
         _target:       target,
         _target_value: target === "all" ? null : targetValue,
         _scheduled_at: new Date(scheduledAt).toISOString(),
-        _created_by:   user?.id ?? null,
+        _created_by:   user.id,
       });
       if (insertError) {
         setError(insertError.message);
@@ -222,10 +227,10 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
 
       {/* Title */}
       <div>
-        <label className="block text-xs font-inter font-bold text-foreground mb-1.5">Título</label>
+        <label className="block text-xs font-inter font-bold text-foreground mb-1.5">Titulo</label>
         <input
           type="text" value={title} onChange={e => setTitle(e.target.value)}
-          placeholder="Ex: Encontro cancelado amanhã" maxLength={80}
+          placeholder="Ex: Encontro cancelado amanha" maxLength={80}
           className="w-full px-3 py-2.5 rounded-xl border border-border bg-card text-sm font-inter text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
         <p className="text-muted-foreground text-[10px] font-inter mt-1 text-right">{title.length}/80</p>
@@ -236,7 +241,7 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
         <label className="block text-xs font-inter font-bold text-foreground mb-1.5">Mensagem</label>
         <textarea
           value={body} onChange={e => setBody(e.target.value)}
-          placeholder="Escreva a mensagem que será enviada..." maxLength={200} rows={3}
+          placeholder="Escreva a mensagem que sera enviada..." maxLength={200} rows={3}
           className="w-full px-3 py-2.5 rounded-xl border border-border bg-card text-sm font-inter text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
         />
         <p className="text-muted-foreground text-[10px] font-inter mt-1 text-right">{body.length}/200</p>
@@ -257,7 +262,7 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
             className="w-full px-3 py-2.5 rounded-xl border border-border bg-card text-sm font-inter text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
           <p className="text-muted-foreground text-[10px] font-inter mt-1">
-            O envio ocorre no ciclo do cron seguinte (até 1h de tolerância).
+            O envio ocorre no ciclo do cron seguinte (ate 1h de tolerancia).
           </p>
         </div>
       )}
@@ -286,7 +291,7 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
                 : "border-border bg-card text-muted-foreground hover:border-primary/30"
             }`}
           >
-            <MapPin className="w-4 h-4" /> Por Área
+            <MapPin className="w-4 h-4" /> Por area
           </button>
           <button
             onClick={() => { setTarget("community"); setTargetValue(""); }}
@@ -318,7 +323,7 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
           value={targetValue} onChange={e => setTargetValue(e.target.value)}
           className="w-full px-3 py-2.5 rounded-xl border border-border bg-card text-sm font-inter text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
         >
-          <option value="">Selecione a área...</option>
+          <option value="">Selecione a area...</option>
           {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
       )}
@@ -353,7 +358,7 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
           <CheckCircle className="w-4 h-4 text-brand-green flex-shrink-0" />
           <p className="text-brand-green text-xs font-inter font-bold">
             {result.sent > 0
-              ? `✅ Enviado para ${result.sent} dispositivo${result.sent !== 1 ? "s" : ""}${result.failed > 0 ? ` (${result.failed} falha${result.failed !== 1 ? "s" : ""})` : ""}`
+              ? `Enviado para ${result.sent} dispositivo${result.sent !== 1 ? "s" : ""}${result.failed > 0 ? ` (${result.failed} falha${result.failed !== 1 ? "s" : ""})` : ""}`
               : "Nenhum dispositivo com push ativo encontrado para esse destino."}
           </p>
         </div>
@@ -373,12 +378,12 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
         ) : mode === "agora" ? (
           <><Send className="w-4 h-4" /> Enviar Agora</>
         ) : (
-          <><Calendar className="w-4 h-4" /> Agendar Notificação</>
+          <><Calendar className="w-4 h-4" /> Agendar notificacao</>
         )}
       </button>
 
       <p className="text-muted-foreground text-[10px] font-inter text-center">
-        Apenas usuários com notificações de mensagens ativas receberão o aviso.
+        Apenas usuarios com notificacoes de mensagens ativas receberao o aviso.
       </p>
 
       {/* Pending scheduled list */}
@@ -396,7 +401,7 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
             </div>
           ) : scheduledList.length === 0 ? (
             <p className="text-muted-foreground text-xs font-inter text-center py-3">
-              Nenhuma notificação agendada.
+              Nenhuma notificacao agendada.
             </p>
           ) : (
             <div className="space-y-2">
@@ -416,9 +421,9 @@ function SendSection({ turmas }: { turmas: Array<{ id: string; name: string; are
                   <div className="flex items-center gap-3">
                     <span className="text-[10px] font-inter text-primary flex items-center gap-1">
                       <Clock className="w-3 h-3" />
-                      {format(new Date(s.scheduled_at), "d/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                      {format(new Date(s.scheduled_at), "d/MM/yyyy 'as' HH:mm", { locale: ptBR })}
                     </span>
-                    <span className="text-[10px] font-inter text-muted-foreground">🎯 {targetLabel(s)}</span>
+                    <span className="text-[10px] font-inter text-muted-foreground">Destino: {targetLabel(s)}</span>
                   </div>
                 </div>
               ))}
@@ -503,7 +508,7 @@ function AutomationsSection() {
           <Bell className="w-5 h-5 text-secondary" />
         </div>
         <div>
-          <h2 className="font-montserrat font-bold text-foreground text-base">Automacoes de Push</h2>
+          <h2 className="font-montserrat font-bold text-foreground text-base">Automacoes de push</h2>
           <p className="text-muted-foreground font-inter text-xs">Ative, desative ou edite as notificacoes automaticas</p>
         </div>
       </div>
@@ -516,10 +521,10 @@ function AutomationsSection() {
         <div className="text-center py-10">
           <Bell className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-30" />
           <p className="text-muted-foreground text-sm font-inter">
-            Nenhuma configuração encontrada.
+            Nenhuma configuracao encontrada.
           </p>
           <p className="text-muted-foreground text-xs font-inter mt-1">
-            Execute a migração SQL para criar as automações.
+            Execute a migracao SQL para criar as automacoes.
           </p>
         </div>
       ) : (
@@ -577,7 +582,7 @@ function AutomationsSection() {
                   {isEditing ? (
                     <div className="space-y-2 pt-1">
                       <div>
-                        <label className="text-[10px] font-inter font-semibold text-muted-foreground">Título</label>
+                        <label className="text-[10px] font-inter font-semibold text-muted-foreground">Titulo</label>
                         <input
                           value={editTitle}
                           onChange={e => setEditTitle(e.target.value)}
@@ -664,7 +669,7 @@ function EventRemindersTrigger() {
         </div>
         <div>
           <h3 className="font-montserrat font-bold text-foreground text-sm">Lembretes de Eventos</h3>
-          <p className="text-muted-foreground font-inter text-[10px]">Dispara automático às 8h · Eventos +2 dias e -1 dia</p>
+          <p className="text-muted-foreground font-inter text-[10px]">Dispara automatico as 8h - Eventos +2 dias e -1 dia</p>
         </div>
       </div>
 
@@ -679,11 +684,11 @@ function EventRemindersTrigger() {
         <div className="p-3 rounded-xl bg-brand-green/10 border border-brand-green/20 space-y-1">
           <p className="text-brand-green text-xs font-inter font-bold flex items-center gap-1.5">
             <CheckCircle className="w-3.5 h-3.5" />
-            {result.sent > 0 ? `${result.sent} notificação(ões) enviada(s)` : "Nenhuma notificação para enviar"}
+            {result.sent > 0 ? `${result.sent} notificacao(oes) enviada(s)` : "Nenhuma notificacao para enviar"}
           </p>
           <p className="text-muted-foreground text-[10px] font-inter">
-            📅 {result.upcomingEvents} evento(s) em 2 dias · 📋 {result.pastEvents} evento(s) de ontem
-            {result.failed > 0 && ` · ❌ ${result.failed} falha(s)`}
+            Eventos em 2 dias: {result.upcomingEvents} - Eventos de ontem: {result.pastEvents}
+            {result.failed > 0 && ` - ${result.failed} falha(s)`}
           </p>
         </div>
       )}
@@ -699,7 +704,7 @@ function EventRemindersTrigger() {
             Disparando...
           </>
         ) : (
-          <><CalendarClock className="w-4 h-4" /> Disparar Lembretes Agora</>
+          <><CalendarClock className="w-4 h-4" /> Disparar lembretes agora</>
         )}
       </button>
     </div>
@@ -743,10 +748,10 @@ function PushLogHistory() {
   }
 
   const typeLabels: Record<string, { label: string; emoji: string }> = {
-    manual:               { label: "Push Manual",        emoji: "📢" },
-    event_reminder:       { label: "Lembrete de Evento", emoji: "🔔" },
-    attendance_reminder:  { label: "Presenca",           emoji: "📋" },
-    prayer_pairs:         { label: "Dupla de Oracao",    emoji: "🙏" },
+    manual:               { label: "Push manual",        emoji: "P" },
+    event_reminder:       { label: "Lembrete de evento", emoji: "E" },
+    attendance_reminder:  { label: "Presenca",           emoji: "A" },
+    prayer_pairs:         { label: "Dupla de oracao",    emoji: "O" },
   };
 
   function formatDate(iso: string) {
@@ -769,8 +774,8 @@ function PushLogHistory() {
           <History className="w-5 h-5 text-muted-foreground" />
         </div>
         <div>
-          <h3 className="font-montserrat font-bold text-foreground text-sm">Histórico de Disparos</h3>
-          <p className="text-muted-foreground font-inter text-[10px]">Últimos 20 envios registrados</p>
+          <h3 className="font-montserrat font-bold text-foreground text-sm">Historico de disparos</h3>
+          <p className="text-muted-foreground font-inter text-[10px]">Ultimos 20 envios registrados</p>
         </div>
       </div>
 
@@ -785,7 +790,7 @@ function PushLogHistory() {
       ) : (
         <div className="space-y-2">
           {logs.map((log) => {
-            const typeInfo = typeLabels[log.type] || { label: log.type, emoji: "📨" };
+            const typeInfo = typeLabels[log.type] || { label: log.type, emoji: "P" };
             return (
               <div key={log.id} className="p-3 rounded-xl border border-border bg-card space-y-1">
                 <div className="flex items-center justify-between">
@@ -800,10 +805,10 @@ function PushLogHistory() {
                 <p className="text-xs font-inter text-foreground font-medium truncate">{log.title}</p>
                 <p className="text-[10px] font-inter text-muted-foreground truncate">{log.body}</p>
                 <div className="flex items-center gap-3 pt-1">
-                  <span className="text-[10px] font-inter text-muted-foreground">🎯 {targetLabel(log)}</span>
-                  <span className="text-[10px] font-inter text-brand-green font-bold">✅ {log.sent_count}</span>
+                  <span className="text-[10px] font-inter text-muted-foreground">Destino: {targetLabel(log)}</span>
+                  <span className="text-[10px] font-inter text-brand-green font-bold">OK {log.sent_count}</span>
                   {log.failed_count > 0 && (
-                    <span className="text-[10px] font-inter text-destructive font-bold">❌ {log.failed_count}</span>
+                    <span className="text-[10px] font-inter text-destructive font-bold">Falhas {log.failed_count}</span>
                   )}
                 </div>
               </div>
