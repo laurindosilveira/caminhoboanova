@@ -2,13 +2,14 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
-import { Heart, GraduationCap, Sparkles, Lock, ClipboardList, BookOpen } from "lucide-react";
+import { Heart, GraduationCap, Sparkles, Lock, ClipboardList, BookOpen, ArrowLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import JourneyLessonView from "@/components/home/JourneyLessonView";
 import LessonContentEditor from "@/components/admin/tabs/LessonContentEditor";
 import LessonDevotionalEditor from "@/components/admin/tabs/LessonDevotionalEditor";
 import LessonChoiceView from "@/components/home/LessonChoiceView";
 import ResourceLibrary from "@/components/home/ResourceLibrary";
+import LeaderRoomSection from "@/components/home/LeaderRoomSection";
 import { useAgendaSchedule } from "@/hooks/useAgendaSchedule";
 import { toast } from "sonner";
 
@@ -77,6 +78,7 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
   const [helpMessage, setHelpMessage] = useState("");
   const [helpSending, setHelpSending] = useState(false);
   const [helpSent, setHelpSent] = useState(false);
+  const [showLeaderRoom, setShowLeaderRoom] = useState(false);
 
   const [form, setForm] = useState({
     prayer_score: null as number | null,
@@ -414,6 +416,22 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
     );
   }
 
+  if (showLeaderRoom && isLeaderOrAdmin) {
+    return (
+      <div className="px-5 pt-5 pb-6 space-y-4">
+        <button
+          onClick={() => setShowLeaderRoom(false)}
+          className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-inter font-semibold text-foreground shadow-sm hover:bg-muted/50 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Voltar ao discipulado
+        </button>
+
+        <LeaderRoomSection asTab />
+      </div>
+    );
+  }
+
   return (
     <div className="px-5 pt-5 pb-6 space-y-4">
       {/* Hero — always visible */}
@@ -422,6 +440,24 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
         community={currentArea}
         healthStatus={healthStatus}
       />
+
+      {isLeaderOrAdmin && (
+        <button
+          onClick={() => setShowLeaderRoom(true)}
+          className="w-full flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm hover:bg-muted/50 transition-colors text-left"
+        >
+          <div className="w-11 h-11 rounded-2xl flex items-center justify-center bg-primary/10 text-primary">
+            <ClipboardList className="w-5 h-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-montserrat font-bold text-foreground text-sm">Sala do Discipulador</p>
+            <p className="text-muted-foreground text-xs font-inter">
+              Acesse rapidamente a gestão da turma, encontros, avisos e relatórios.
+            </p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        </button>
+      )}
 
       {/* Sub-tab pills */}
       <div className="flex gap-1.5 bg-muted/50 rounded-2xl p-1.5 border border-border/50">

@@ -22,15 +22,15 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === "development" && componentTagger(),
     VitePWA({
-      registerType: "prompt",
+      registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "robots.txt", "pwa-192x192.png", "pwa-512x512.png"],
       workbox: {
         navigateFallbackDenylist: [/^\/~oauth/],
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,webp,jpg,jpeg}"],
         importScripts: ["/push-sw.js"],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-        skipWaiting: false,
-        clientsClaim: false,
+        skipWaiting: true,
+        clientsClaim: true,
         cleanupOutdatedCaches: true,
         // Navigation requests — always go to network first so routing is fresh
         navigationPreload: true,

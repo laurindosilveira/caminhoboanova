@@ -3,10 +3,9 @@ import { getAreaForCommunity } from "@/config/areas";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
-import { MessageCircle, GraduationCap, Cake, Sparkles, Send, Trash2, Target, Check, Users, ClipboardList, Upload, Image, Camera } from "lucide-react";
+import { MessageCircle, GraduationCap, Cake, Sparkles, Send, Trash2, Target, Check, Users, Upload, Image, Camera } from "lucide-react";
 import ClassroomTab from "./ClassroomTab";
 import AnnouncementsSection from "./AnnouncementsSection";
-import LeaderRoomSection from "./LeaderRoomSection";
 import PollsSection from "./PollsSection";
 import CommunityAchievements from "./CommunityAchievements";
 import PrayerPairsSection from "./PrayerPairsSection";
@@ -59,7 +58,7 @@ interface BirthdayPerson {
   day: number;
 }
 
-type SubTab = "comunidade" | "sala" | "discipulador" | "galeria";
+type SubTab = "comunidade" | "sala" | "galeria";
 
 export default function CommunityTab() {
   const { profile, role } = useAuth();
@@ -333,26 +332,8 @@ export default function CommunityTab() {
             <Camera className="w-3.5 h-3.5" />
             Galeria
           </button>
-          {(role === "admin" || role === "lider") && (
-            <button
-              onClick={() => setSubTab("discipulador")}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-montserrat font-bold transition-all ${
-                subTab === "discipulador"
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <ClipboardList className="w-3.5 h-3.5" />
-              Discipulador
-            </button>
-          )}
         </div>
       </div>
-
-      {/* ===== DISCIPULADOR (admin/lider) ===== */}
-      {subTab === "discipulador" && (role === "admin" || role === "lider") && (
-        <LeaderRoomSection asTab />
-      )}
 
       {/* ===== GALERIA ===== */}
       {subTab === "galeria" && (
