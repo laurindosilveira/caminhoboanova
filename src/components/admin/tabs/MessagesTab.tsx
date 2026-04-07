@@ -131,7 +131,12 @@ export default function MessagesTab() {
     if (!form.title.trim() || !form.body.trim()) return;
     setSaving(true);
 
-    const { data: authData } = await supabase.auth.getUser();
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      toast.error(`Erro ao identificar o lider: ${authError.message}`);
+      setSaving(false);
+      return;
+    }
     const userId = authData.user?.id;
     const messageArea = form.target === "all" ? null : form.target === "turma" ? null : effectiveArea ?? null;
     const messageCommunity = form.target === "community" ? form.community : null;
@@ -213,6 +218,7 @@ export default function MessagesTab() {
   async function openViewers(messageId: string) {
     if (showViewers === messageId) {
       setShowViewers(null);
+      setViewers([]);
       return;
     }
 
@@ -263,7 +269,7 @@ export default function MessagesTab() {
   }
 
   function shareOnWhatsApp(message: Message) {
-    const text = `📢 *${message.title}*\n\n${message.body}`;
+    const text = `*${message.title}*\n\n${message.body}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   }
 
