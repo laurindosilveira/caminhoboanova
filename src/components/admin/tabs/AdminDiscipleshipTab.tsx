@@ -9,9 +9,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 const HEALTH_CFG = {
-  saudavel: { label: "🟢 Saudável", bg: "bg-brand-green/10", text: "text-brand-green" },
-  atencao:  { label: "🟡 Atenção", bg: "bg-accent/20", text: "text-accent-foreground" },
-  critico:  { label: "🔴 Necessita cuidado", bg: "bg-destructive/10", text: "text-destructive" },
+  saudavel: { label: "Saudavel", bg: "bg-brand-green/10", text: "text-brand-green" },
+  atencao:  { label: "Atencao", bg: "bg-accent/20", text: "text-accent-foreground" },
+  critico:  { label: "Necessita cuidado", bg: "bg-destructive/10", text: "text-destructive" },
 };
 
 type Props = {
@@ -44,18 +44,25 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
   }, [myArea]);
 
   async function fetchCourseUnlocks() {
-    const [{ data: coursesData }, { data: unlocksData }] = await Promise.all([
+    const [{ data: coursesData, error: coursesError }, { data: unlocksData, error: unlocksError }] = await Promise.all([
       supabase.from("courses").select("id, title, order_num").order("order_num"),
       supabase.from("course_unlocks").select("course_id, area").eq("area", myArea),
     ]);
+    if (coursesError || unlocksError) {
+      toast.error(coursesError?.message ?? unlocksError?.message ?? "Nao foi possivel carregar os cursos.");
+    }
     setCourses(coursesData ?? []);
     setUnlockedCourseIds(new Set((unlocksData ?? []).map((u: any) => u.course_id)));
   }
 
   async function toggleCourseUnlock(courseId: string) {
     setUnlockLoading(courseId);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setUnlockLoading(null); return; }
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      toast.error("Nao foi possivel identificar o lider.");
+      setUnlockLoading(null);
+      return;
+    }
 
     if (unlockedCourseIds.has(courseId)) {
       const { error } = await supabase
@@ -91,12 +98,19 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
     if (participants.length === 0) return;
     async function fetchPlans() {
       const ids = participants.map(p => p.user_id);
-      const [{ data: plansData }, { data: assessData }, { data: attendanceData }] = await Promise.all([
+      const [
+        { data: plansData, error: plansError },
+        { data: assessData, error: assessError },
+        { data: attendanceData, error: attendanceError },
+      ] = await Promise.all([
         supabase.from("discipleship_plans").select("user_id, health_status, is_priority").in("user_id", ids),
         supabase.from("spiritual_assessments").select("user_id, needs_pastor")
           .in("user_id", ids).eq("month", new Date().getMonth() + 1).eq("year", new Date().getFullYear()),
         supabase.from("attendance").select("user_id, status").in("user_id", ids),
       ]);
+      if (plansError || assessError || attendanceError) {
+        toast.error(plansError?.message ?? assessError?.message ?? attendanceError?.message ?? "Nao foi possivel carregar o acompanhamento.");
+      }
       const map: Record<string, { health_status: string; needs_pastor?: boolean; is_priority?: boolean }> = {};
       (plansData ?? []).forEach(pl => { map[pl.user_id] = { health_status: pl.health_status, is_priority: pl.is_priority }; });
       (assessData ?? []).forEach(a => {
@@ -108,7 +122,7 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
       // Build attendance map
       const attMap: Record<string, { present: number; total: number }> = {};
       (attendanceData ?? []).forEach(a => {
-        if (!["presente", "faltou", "justificou"].includes(a.status)) return;
+        if (!["presente", "falta", "justificado"].includes(a.status)) return;
         if (!attMap[a.user_id]) attMap[a.user_id] = { present: 0, total: 0 };
         attMap[a.user_id].total++;
         if (a.status === "presente") attMap[a.user_id].present++;
@@ -157,15 +171,15 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
         <div className="bg-card rounded-2xl border border-border p-4 shadow-sm">
           <div className="flex items-center gap-2 mb-3">
             <GraduationCap className="w-4 h-4 text-secondary" />
-            <p className="font-montserrat font-bold text-foreground text-sm">Liberação de Cursos</p>
+            <p className="font-montserrat font-bold text-foreground text-sm">Liberacao de cursos</p>
           </div>
           <p className="font-inter text-xs text-muted-foreground mb-2">
-            Libere os cursos que sua turma poderá acessar. Cursos bloqueados ficam visíveis mas inacessíveis.
+            Libere os cursos que sua turma podera acessar. Cursos bloqueados ficam visiveis, mas inacessiveis.
           </p>
           <div className="flex items-start gap-2 p-2.5 rounded-xl bg-secondary/5 border border-secondary/20 mb-3">
             <Info className="w-4 h-4 text-secondary flex-shrink-0 mt-0.5" />
             <p className="font-inter text-[10px] text-secondary leading-relaxed">
-              <strong>Como funciona:</strong> Liberar um curso é o <strong>primeiro passo</strong>. Cada lição só ficará disponível para o aluno quando houver um <strong>evento na Agenda</strong> vinculado a ela (dentro da janela de 10 dias úteis antes do encontro). Sem evento agendado, a lição permanece com "Aguardando programação".
+              <strong>Como funciona:</strong> Liberar um curso e o <strong>primeiro passo</strong>. Cada licao so ficara disponivel para o aluno quando houver um <strong>evento na Agenda</strong> vinculado a ela. Sem evento agendado, a licao permanece com "Aguardando programacao".
             </p>
           </div>
           <div className="space-y-2">
@@ -186,9 +200,9 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
                       }
                     </div>
                     <div className="min-w-0">
-                      <p className="font-montserrat font-bold text-foreground text-sm">Curso {c.order_num} — {c.title}</p>
+                      <p className="font-montserrat font-bold text-foreground text-sm">Curso {c.order_num} - {c.title}</p>
                       <p className="font-inter text-[10px] text-muted-foreground">
-                        {isUnlocked ? "✅ Liberado para a turma" : "🔒 Bloqueado"}
+                        {isUnlocked ? "Liberado para a turma" : "Bloqueado"}
                       </p>
                     </div>
                   </div>
@@ -213,9 +227,9 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
       {/* Summary */}
       <div className="grid grid-cols-3 gap-2">
         {[
-          { label: "🟢 Saudáveis", value: saudaveis.length, color: "text-brand-green", bg: "bg-brand-green/10", filter: "saudavel" as StatusFilter },
-          { label: "🟡 Atenção", value: participants.length - saudaveis.length - criticos.length, color: "text-accent-foreground", bg: "bg-accent/20", filter: "atencao" as StatusFilter },
-          { label: "🔴 Críticos", value: criticos.length, color: "text-destructive", bg: "bg-destructive/10", filter: "critico" as StatusFilter },
+          { label: "Saudaveis", value: saudaveis.length, color: "text-brand-green", bg: "bg-brand-green/10", filter: "saudavel" as StatusFilter },
+          { label: "Atencao", value: participants.length - saudaveis.length - criticos.length, color: "text-accent-foreground", bg: "bg-accent/20", filter: "atencao" as StatusFilter },
+          { label: "Criticos", value: criticos.length, color: "text-destructive", bg: "bg-destructive/10", filter: "critico" as StatusFilter },
         ].map(s => (
           <button key={s.label} onClick={() => setStatusFilter(prev => prev === s.filter ? "all" : s.filter)}
             className={`rounded-2xl p-3 text-center transition-all ${s.bg} ${statusFilter === s.filter ? "ring-2 ring-primary" : ""}`}>
@@ -232,14 +246,14 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
             <div className="bg-primary/10 rounded-2xl p-4 border border-primary/20">
               <div className="flex items-center gap-2 mb-2">
                 <AlertCircle className="w-4 h-4 text-primary" />
-                <p className="font-montserrat font-bold text-primary text-sm">🙏 Pediram conversa pastoral ({withPastor.length})</p>
+                <p className="font-montserrat font-bold text-primary text-sm">Pediram conversa pastoral ({withPastor.length})</p>
               </div>
               <div className="space-y-1">
                 {withPastor.map(p => (
                   <button key={p.user_id} onClick={() => setSelected(p)}
                     className="w-full text-left flex items-center gap-2 py-1.5 px-2 rounded-xl hover:bg-primary/10 transition-colors">
                     <span className="font-inter text-sm text-foreground">{p.full_name}</span>
-                    <span className="text-muted-foreground font-inter text-xs ml-auto">— {p.community} →</span>
+                    <span className="text-muted-foreground font-inter text-xs ml-auto">- {p.community} -></span>
                   </button>
                 ))}
               </div>
@@ -249,14 +263,14 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
             <div className="bg-accent/10 rounded-2xl p-4 border border-accent/20">
               <div className="flex items-center gap-2 mb-2">
                 <Star className="w-4 h-4 text-accent-foreground" />
-                <p className="font-montserrat font-bold text-accent-foreground text-sm">⭐ Prioridade pastoral ({priorities.length})</p>
+                <p className="font-montserrat font-bold text-accent-foreground text-sm">Prioridade pastoral ({priorities.length})</p>
               </div>
               <div className="space-y-1">
                 {priorities.map(p => (
                   <button key={p.user_id} onClick={() => setSelected(p)}
                     className="w-full text-left flex items-center gap-2 py-1.5 px-2 rounded-xl hover:bg-accent/10 transition-colors">
                     <span className="font-inter text-sm text-foreground">{p.full_name}</span>
-                    <span className="text-muted-foreground font-inter text-xs ml-auto">— {p.community} →</span>
+                    <span className="text-muted-foreground font-inter text-xs ml-auto">- {p.community} -></span>
                   </button>
                 ))}
               </div>
@@ -292,11 +306,11 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
             className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-foreground font-inter text-xs focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
           >
             <option value="all">Todos status</option>
-            <option value="saudavel">🟢 Saudáveis</option>
-            <option value="atencao">🟡 Atenção</option>
-            <option value="critico">🔴 Críticos</option>
-            <option value="pastor">🙏 Pediu conversa</option>
-            <option value="priority">⭐ Prioridade</option>
+            <option value="saudavel">Saudaveis</option>
+            <option value="atencao">Atencao</option>
+            <option value="critico">Criticos</option>
+            <option value="pastor">Pediu conversa</option>
+            <option value="priority">Prioridade</option>
           </select>
           <div className="flex bg-muted rounded-xl p-0.5">
             <button onClick={() => setViewMode("list")}
@@ -316,7 +330,7 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
         <Users className="w-4 h-4 text-muted-foreground" />
         <p className="font-inter text-xs text-muted-foreground">
           {filtered.length} de {participants.length} participantes
-          {search && ` · "${search}"`}
+          {search && ` - "${search}"`}
         </p>
       </div>
 
@@ -330,7 +344,7 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
                   <th className="text-left px-3 py-2.5 font-inter text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Nome</th>
                   <th className="text-left px-3 py-2.5 font-inter text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Comunidade</th>
                   <th className="text-center px-3 py-2.5 font-inter text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Progresso</th>
-                  <th className="text-center px-3 py-2.5 font-inter text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Presença</th>
+                  <th className="text-center px-3 py-2.5 font-inter text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Presenca</th>
                   <th className="text-center px-3 py-2.5 font-inter text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
@@ -373,7 +387,7 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
                         <span className={`font-inter text-[10px] font-medium ${
                           att ? (attPct >= 70 ? "text-brand-green" : attPct >= 40 ? "text-accent-foreground" : "text-destructive") : "text-muted-foreground"
                         }`}>
-                          {att ? `${attPct}%` : "—"}
+                          {att ? `${attPct}%` : "-"}
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-center">
@@ -413,8 +427,8 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
                       {planInfo?.is_priority && <Star className="w-3 h-3 text-accent flex-shrink-0" style={{ fill: "hsl(var(--accent))" }} />}
                     </div>
                     <p className="text-muted-foreground font-inter text-xs">
-                      {p.community} · {pct}% jornada
-                      {att ? ` · ${attPct}% presença` : ""}
+                      {p.community} - {pct}% jornada
+                      {att ? ` - ${attPct}% presenca` : ""}
                     </p>
                   </div>
                   <HealthBadge status={status} />
