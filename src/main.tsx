@@ -13,11 +13,12 @@ function hideSplash() {
 }
 
 // ─── PWA Update Strategy ─────────────────────────────
-// Check for updates once on startup and once when the user returns to the app.
-// When a new version is available, show a non-intrusive banner instead of
-// doing a silent reload that interrupts the user mid-interaction.
+// Check for updates without taking over the current session.
+// When a new version is available, show a banner and let the user choose when
+// to reload, instead of silently refreshing while they are using the app.
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour (not every 60s)
+const VISIBILITY_CHECK_COOLDOWN_MS = 5 * 60 * 1000; // avoid noisy checks when tab focus changes
 
 function showUpdateBanner(updateSWFn: () => void) {
   // Remove any existing banner
@@ -51,10 +52,12 @@ function showUpdateBanner(updateSWFn: () => void) {
 }
 
 const updateSW = registerSW({
-  immediate: true,
+  immediate: false,
 
   onRegisteredSW(_swUrl, registration) {
     if (!registration) return;
+
+    let lastVisibilityCheckAt = 0;
 
     // Check once on startup
     registration.update();
@@ -68,7 +71,9 @@ const updateSW = registerSW({
 
     // Check when user returns to the app after being away
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden && navigator.onLine) {
+      const now = Date.now();
+      if (!document.hidden && navigator.onLine && now - lastVisibilityCheckAt > VISIBILITY_CHECK_COOLDOWN_MS) {
+        lastVisibilityCheckAt = now;
         registration.update();
       }
     });
