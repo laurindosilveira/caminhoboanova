@@ -34,7 +34,7 @@ const EMPTY_FORM = {
   title: "", description: "", event_date: "", location: "", type: "encontro", area: "", community: "", linked_lesson_id: "",
 };
 
-const EMOJI_OPTIONS = ["📅","⛪","✝️","🏕️","📖","🎉","💬","🙏","🎶","🌿","🤝","⭐","🔔","🎯","🏠","🌟"];
+const EMOJI_OPTIONS = ["📅", "⛪", "✝️", "🏕️", "📖", "🎉", "💬", "🙏", "🎶", "🌿", "🤝", "⭐", "🔔", "🎯", "🏠", "🌟"];
 
 export default function AgendaTab() {
   const { profile } = useAuth();
@@ -55,7 +55,7 @@ export default function AgendaTab() {
   const [cascadePending, setCascadePending] = useState<{ eventId: string; oldLessonId: string | null; newLessonId: string } | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
 
-  // ── Create custom event type modal state ──
+  // Create custom event type modal state
   const [showCreateTypeModal, setShowCreateTypeModal] = useState(false);
   const [newTypeForm, setNewTypeForm] = useState({
     label: "",
@@ -69,16 +69,22 @@ export default function AgendaTab() {
 
   async function fetchEvents() {
     setLoading(true);
-    const { data } = await supabase.from("events").select("*").order("event_date");
+    const { data, error } = await supabase.from("events").select("*").order("event_date");
+    if (error) {
+      toast.error("Erro ao carregar eventos", { description: error.message });
+    }
     setEvents((data ?? []) as Event[]);
     setLoading(false);
   }
 
   async function fetchLessons() {
-    const [{ data: coursesData }, { data: lessonsData }] = await Promise.all([
+    const [{ data: coursesData, error: coursesError }, { data: lessonsData, error: lessonsError }] = await Promise.all([
       supabase.from("courses").select("id, title, order_num").order("order_num"),
       supabase.from("lessons").select("id, title, order_num, course_id").order("order_num"),
     ]);
+    if (coursesError || lessonsError) {
+      toast.error("Erro ao carregar estudos", { description: coursesError?.message ?? lessonsError?.message });
+    }
     const courses = coursesData ?? [];
     const lessonsList = lessonsData ?? [];
     const options: LessonOption[] = [];
@@ -156,11 +162,26 @@ export default function AgendaTab() {
         }
       }
 
-      await supabase.from("events").update(payload).eq("id", editingFullEventId);
+      const { error } = await supabase.from("events").update(payload).eq("id", editingFullEventId);
+      if (error) {
+        toast.error("Erro ao atualizar evento", { description: error.message });
+        setSaving(false);
+        return;
+      }
       toast.success("Evento atualizado!");
     } else {
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from("events").insert({ ...payload, created_by: user?.id });
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        toast.error("Erro ao identificar o lider", { description: userError.message });
+        setSaving(false);
+        return;
+      }
+      const { error } = await supabase.from("events").insert({ ...payload, created_by: user?.id });
+      if (error) {
+        toast.error("Erro ao criar evento", { description: error.message });
+        setSaving(false);
+        return;
+      }
       toast.success("Evento criado!");
     }
 
@@ -172,7 +193,11 @@ export default function AgendaTab() {
   }
 
   async function handleDelete(id: string) {
-    await supabase.from("events").delete().eq("id", id);
+    const { error } = await supabase.from("events").delete().eq("id", id);
+    if (error) {
+      toast.error("Erro ao excluir evento", { description: error.message });
+      return;
+    }
     fetchEvents();
   }
 
@@ -202,9 +227,13 @@ export default function AgendaTab() {
       }
     }
 
-    await supabase.from("events").update({ linked_lesson_id: newLessonId }).eq("id", eventId);
+    const { error } = await supabase.from("events").update({ linked_lesson_id: newLessonId }).eq("id", eventId);
+    if (error) {
+      toast.error("Erro ao atualizar licao", { description: error.message });
+      return;
+    }
     setEditingEventId(null);
-    toast.success("Lição atualizada!");
+    toast.success("Licao atualizada!");
     fetchEvents();
   }
 
@@ -214,7 +243,13 @@ export default function AgendaTab() {
     const event = events.find(e => e.id === eventId);
     if (!event) return;
 
-    await supabase.from("events").update({ linked_lesson_id: newLessonId }).eq("id", eventId);
+    const { error: baseUpdateError } = await supabase.from("events").update({ linked_lesson_id: newLessonId }).eq("id", eventId);
+    if (baseUpdateError) {
+      toast.error("Erro ao atualizar licao", { description: baseUpdateError.message });
+      setShowCascadeDialog(false);
+      setCascadePending(null);
+      return;
+    }
 
     if (doCascade) {
       const subsequent = events
@@ -234,17 +269,23 @@ export default function AgendaTab() {
             for (let i = 0; i < subsequent.length; i++) {
               const nextLessonIdx = newIdx + 1 + i;
               if (nextLessonIdx < allLessonsOrdered.length) {
-                await supabase.from("events")
+                const { error } = await supabase.from("events")
                   .update({ linked_lesson_id: allLessonsOrdered[nextLessonIdx].id })
                   .eq("id", subsequent[i].id);
+                if (error) {
+                  toast.error("Erro ao aplicar cascata", { description: error.message });
+                  setShowCascadeDialog(false);
+                  setCascadePending(null);
+                  return;
+                }
               }
             }
-            toast.success(`Lições atualizadas em ${subsequent.length + 1} eventos!`);
+            toast.success(`Licoes atualizadas em ${subsequent.length + 1} eventos!`);
           }
         }
       }
     } else {
-      toast.success("Lição atualizada (sem cascata)!");
+      toast.success("Licao atualizada (sem cascata)!");
     }
 
     setShowCascadeDialog(false);
@@ -293,8 +334,12 @@ export default function AgendaTab() {
   }
 
   async function handleDeleteCustomType(id: string, value: string) {
-    if (!confirm("Excluir este tipo de evento? Eventos existentes com este tipo não serão afetados.")) return;
-    await supabase.from("custom_event_types").delete().eq("id", id);
+    if (!confirm("Excluir este tipo de evento? Eventos existentes com este tipo nao serao afetados.")) return;
+    const { error } = await supabase.from("custom_event_types").delete().eq("id", id);
+    if (error) {
+      toast.error("Erro ao excluir tipo", { description: error.message });
+      return;
+    }
     // If the form currently uses this type, reset to "encontro"
     if (form.type === value) setForm(f => ({ ...f, type: "encontro" }));
     await refetchTypes();
@@ -305,7 +350,7 @@ export default function AgendaTab() {
     if (!lessonId) return null;
     const lesson = lessons.find(l => l.id === lessonId);
     if (!lesson) return null;
-    return `Curso ${lesson.course_order} — Lição ${lesson.order_num}: ${lesson.title}`;
+    return `Curso ${lesson.course_order} - Licao ${lesson.order_num}: ${lesson.title}`;
   };
 
   const filteredEvents = areaFilter === "all"
@@ -372,14 +417,14 @@ export default function AgendaTab() {
                   type="text"
                   value={newTypeForm.label}
                   onChange={e => setNewTypeForm(f => ({ ...f, label: e.target.value }))}
-                  placeholder="Ex: Visita Pastoral, Reunião de Líderes..."
+                  placeholder="Ex: Visita pastoral, reuniao de lideres..."
                   className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
 
               {/* Emoji picker */}
               <div>
-                <label className="font-inter text-xs font-semibold text-muted-foreground mb-1.5 block">Ícone</label>
+                <label className="font-inter text-xs font-semibold text-muted-foreground mb-1.5 block">Icone</label>
                 <div className="flex flex-wrap gap-2">
                   {EMOJI_OPTIONS.map(em => (
                     <button key={em}
@@ -407,9 +452,9 @@ export default function AgendaTab() {
               <div className="bg-muted/30 rounded-xl p-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="font-inter text-sm font-semibold text-foreground">Dá pontuação?</p>
+                    <p className="font-inter text-sm font-semibold text-foreground">Da pontuacao?</p>
                     <p className="font-inter text-[10px] text-muted-foreground mt-0.5">
-                      Participar deste evento somará pontos de fé
+                      Participar deste evento somara pontos de fe
                     </p>
                   </div>
                   <button
@@ -425,12 +470,12 @@ export default function AgendaTab() {
 
                 {newTypeForm.gives_points && (
                   <div className="flex items-center gap-3">
-                    <label className="font-inter text-xs text-muted-foreground whitespace-nowrap">Pontos por presença:</label>
+                    <label className="font-inter text-xs text-muted-foreground whitespace-nowrap">Pontos por presenca:</label>
                     <div className="flex items-center gap-2 flex-1">
                       <button
                         onClick={() => setNewTypeForm(f => ({ ...f, points: Math.max(1, f.points - 1) }))}
                         className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center font-bold text-foreground">
-                        −
+                        -
                       </button>
                       <input
                         type="number"
@@ -455,7 +500,7 @@ export default function AgendaTab() {
                 <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/10">
                   <MapPin className="w-3.5 h-3.5 text-primary flex-shrink-0" />
                   <p className="font-inter text-xs text-primary">
-                    Este tipo ficará visível apenas para <strong>{currentArea}</strong>
+                    Este tipo ficara visivel apenas para <strong>{currentArea}</strong>
                   </p>
                 </div>
               )}
@@ -488,12 +533,12 @@ export default function AgendaTab() {
               <span className="text-3xl">📅</span>
               <h3 className="font-montserrat font-bold text-foreground text-base mt-2">Prorrogar estudos?</h3>
               <p className="text-muted-foreground font-inter text-xs mt-2 leading-relaxed">
-                Você mudou a lição deste encontro. Deseja que as próximas datas sejam atualizadas automaticamente com as lições seguintes?
+                Voce mudou a licao deste encontro. Deseja que as proximas datas sejam atualizadas automaticamente com as licoes seguintes?
               </p>
             </div>
             <div className="flex gap-2">
               <button onClick={() => executeCascade(false)} className="flex-1 py-2.5 rounded-xl bg-muted text-foreground font-inter text-sm font-medium">
-                Só este evento
+                So este evento
               </button>
               <button onClick={() => executeCascade(true)} className="flex-1 py-2.5 rounded-xl text-primary-foreground font-inter text-sm font-medium" style={{ background: "var(--gradient-hero)" }}>
                 Prorrogar todos
@@ -507,13 +552,13 @@ export default function AgendaTab() {
       {showForm && (
         <div className="bg-card rounded-2xl border border-border p-4 space-y-3 shadow-sm">
           <p className="font-montserrat font-bold text-foreground text-sm">
-            {isEditing ? "✏️ Editar evento" : "Novo evento"}
+            {isEditing ? "Editar evento" : "Novo evento"}
           </p>
           <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-            placeholder="Título do evento *"
+            placeholder="Titulo do evento *"
             className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
           <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-            placeholder="Descrição (opcional)"
+            placeholder="Descricao (opcional)"
             className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
           <div className="grid grid-cols-2 gap-2">
             <input type="datetime-local" value={form.event_date} onChange={e => setForm(f => ({ ...f, event_date: e.target.value }))}
@@ -526,15 +571,15 @@ export default function AgendaTab() {
           {/* Area selector */}
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <label className="font-inter text-xs font-medium text-muted-foreground">📍 Área</label>
+              <label className="font-inter text-xs font-medium text-muted-foreground">Area</label>
               <select value={form.area} onChange={e => setForm(f => ({ ...f, area: e.target.value }))}
                 className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
-                <option value="">Todas as áreas</option>
+                <option value="">Todas as areas</option>
                 {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
             <div className="space-y-1">
-              <label className="font-inter text-xs font-medium text-muted-foreground">⛪ Comunidade</label>
+              <label className="font-inter text-xs font-medium text-muted-foreground">Comunidade</label>
               <select value={form.community} onChange={e => setForm(f => ({ ...f, community: e.target.value }))}
                 className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
                 <option value="">Todas</option>
@@ -543,7 +588,7 @@ export default function AgendaTab() {
             </div>
           </div>
 
-          {/* Type selector — shows all types + "criar novo" */}
+          {/* Type selector */}
           <div className="space-y-1">
             <label className="font-inter text-xs font-medium text-muted-foreground">Tipo de evento</label>
             <div className="flex gap-2">
@@ -563,7 +608,7 @@ export default function AgendaTab() {
                     {t.emoji} {t.label}
                   </option>
                 ))}
-                <option value="__create_new__">➕ Criar novo tipo...</option>
+                <option value="__create_new__">Criar novo tipo...</option>
               </select>
               <button
                 onClick={() => setShowCreateTypeModal(true)}
@@ -579,11 +624,11 @@ export default function AgendaTab() {
               if (!custom) return null;
               return (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-green/5 border border-brand-green/20">
-                  <span className="text-xs">⭐</span>
+                  <span className="text-xs">Pts</span>
                   <p className="font-inter text-[10px] text-brand-green font-medium">
                     {custom.gives_points
-                      ? `Tipo personalizado · ${custom.points} pts por presença`
-                      : "Tipo personalizado · sem pontuação"}
+                      ? `Tipo personalizado - ${custom.points} pts por presenca`
+                      : "Tipo personalizado - sem pontuacao"}
                   </p>
                 </div>
               );
@@ -591,16 +636,16 @@ export default function AgendaTab() {
           </div>
 
           <div className="space-y-1">
-            <label className="font-inter text-xs font-medium text-muted-foreground">📖 Vincular a um estudo (opcional)</label>
+            <label className="font-inter text-xs font-medium text-muted-foreground">Vincular a um estudo (opcional)</label>
             <select
               value={form.linked_lesson_id}
               onChange={e => setForm(f => ({ ...f, linked_lesson_id: e.target.value }))}
               className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
             >
-              <option value="">Sem vínculo</option>
+              <option value="">Sem vinculo</option>
               {lessons.map(l => (
                 <option key={l.id} value={l.id}>
-                  Curso {l.course_order} — Lição {l.order_num}: {l.title}
+                  Curso {l.course_order} - Licao {l.order_num}: {l.title}
                 </option>
               ))}
             </select>
@@ -610,7 +655,7 @@ export default function AgendaTab() {
             <button onClick={handleSave} disabled={saving || !form.title || !form.event_date}
               className="flex-1 py-2.5 rounded-xl text-sm font-inter font-medium text-primary-foreground disabled:opacity-50 transition-opacity"
               style={{ background: "var(--gradient-hero)" }}>
-              {saving ? "Salvando..." : isEditing ? "Salvar alterações" : "Salvar evento"}
+              {saving ? "Salvando..." : isEditing ? "Salvar alteracoes" : "Salvar evento"}
             </button>
             <button onClick={() => { setShowForm(false); setEditingFullEventId(null); }} className="px-4 py-2.5 rounded-xl bg-muted text-foreground font-inter text-sm">
               Cancelar
@@ -620,10 +665,10 @@ export default function AgendaTab() {
           {/* Manage custom types */}
           {customTypes.filter(t => !t.area || t.area === currentArea).length > 0 && (
             <div className="pt-2 border-t border-border space-y-2">
-              <p className="font-inter text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Tipos personalizados desta área</p>
+              <p className="font-inter text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Tipos personalizados desta area</p>
               {customTypes.filter(t => !t.area || t.area === currentArea).map(t => (
                 <div key={t.id} className="flex items-center justify-between px-3 py-2 rounded-xl bg-muted/30">
-                  <span className="font-inter text-xs text-foreground">{t.emoji} {t.label}{t.gives_points ? ` · ${t.points} pts` : ""}</span>
+                  <span className="font-inter text-xs text-foreground">{t.emoji} {t.label}{t.gives_points ? ` - ${t.points} pts` : ""}</span>
                   <button
                     onClick={() => handleDeleteCustomType(t.id, t.value)}
                     className="w-6 h-6 rounded-lg bg-destructive/10 flex items-center justify-center hover:bg-destructive/20 transition-colors">
@@ -661,7 +706,7 @@ export default function AgendaTab() {
                   <div className="flex-1 min-w-0">
                     <h3 className="font-montserrat font-bold text-foreground text-sm">{event.title}</h3>
                     <p className="text-muted-foreground font-inter text-xs mt-0.5">
-                      {format(dateObj, "EEEE, d 'de' MMMM 'às' HH:mm", { locale: ptBR })}
+                      {format(dateObj, "EEEE, d 'de' MMMM 'as' HH:mm", { locale: ptBR })}
                     </p>
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       <span className={`px-2 py-0.5 rounded-md text-[10px] font-inter font-medium ${getColor(event.type)}`}>
@@ -683,7 +728,7 @@ export default function AgendaTab() {
                         if (!ct || !ct.gives_points) return null;
                         return (
                           <span className="flex items-center gap-0.5 text-brand-green text-[10px] font-inter font-semibold">
-                            ⭐ {ct.points} pts
+                            {ct.points} pts
                           </span>
                         );
                       })()}
@@ -697,10 +742,10 @@ export default function AgendaTab() {
                           onChange={e => setEditLessonId(e.target.value)}
                           className="flex-1 px-2 py-1.5 rounded-lg border border-border bg-background text-foreground font-inter text-[10px] focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
                         >
-                          <option value="">Sem vínculo</option>
+                          <option value="">Sem vinculo</option>
                           {lessons.map(l => (
                             <option key={l.id} value={l.id}>
-                              C{l.course_order} — L{l.order_num}: {l.title}
+                              C{l.course_order} - L{l.order_num}: {l.title}
                             </option>
                           ))}
                         </select>
@@ -716,7 +761,7 @@ export default function AgendaTab() {
                         <div className="flex-1 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-secondary/10">
                           <BookOpen className="w-3.5 h-3.5 text-secondary flex-shrink-0" />
                           <p className="font-inter text-[10px] text-secondary font-medium truncate">
-                            📖 {lessonLabel}
+                            {lessonLabel}
                           </p>
                         </div>
                         <button onClick={() => startEditLesson(event)} className="w-7 h-7 rounded-lg bg-muted/50 flex items-center justify-center hover:bg-muted transition-colors">
@@ -726,7 +771,7 @@ export default function AgendaTab() {
                     ) : (
                       <button onClick={() => startEditLesson(event)} className="mt-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                         <BookOpen className="w-3 h-3 text-muted-foreground" />
-                        <span className="font-inter text-[10px] text-muted-foreground">+ Vincular lição</span>
+                        <span className="font-inter text-[10px] text-muted-foreground">+ Vincular licao</span>
                       </button>
                     )}
 
