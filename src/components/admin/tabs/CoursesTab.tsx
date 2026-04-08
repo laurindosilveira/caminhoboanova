@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { GraduationCap, ChevronDown, ChevronRight, BookOpen, Tag, Edit3, FileText } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { GraduationCap, ChevronDown, ChevronRight, BookOpen, Tag, Edit3, FileText, Pencil } from "lucide-react";
 import LessonContentEditor from "@/components/admin/tabs/LessonContentEditor";
 import LessonDevotionalEditor from "@/components/admin/tabs/LessonDevotionalEditor";
 import LeaderGuideEditor from "@/components/admin/tabs/LeaderGuideEditor";
+import LeaderLessonEditor from "@/components/admin/tabs/leader/LeaderLessonEditor";
 
 type Lesson = {
   id: string;
@@ -22,9 +24,11 @@ type Course = {
   lessons: Lesson[];
 };
 
-type EditMode = { lesson: Lesson; mode: "study" | "devotionals" | "leader-guide" } | null;
+type EditMode = { lesson: Lesson; mode: "study" | "devotionals" | "leader-guide" | "leader-customize" } | null;
 
 export default function CoursesTab() {
+  const { role } = useAuth();
+  const isLider = role === "lider";
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null);
@@ -81,6 +85,9 @@ export default function CoursesTab() {
     if (editMode.mode === "leader-guide") {
       return <LeaderGuideEditor lesson={editMode.lesson} onBack={() => { setEditMode(null); fetchCourses(); }} />;
     }
+    if (editMode.mode === "leader-customize") {
+      return <LeaderLessonEditor lesson={editMode.lesson} onBack={() => { setEditMode(null); fetchCourses(); }} />;
+    }
     return <LessonDevotionalEditor lesson={editMode.lesson} onBack={() => { setEditMode(null); fetchCourses(); }} />;
   }
 
@@ -94,7 +101,10 @@ export default function CoursesTab() {
             {courses.reduce((s, c) => s + c.lessons.length, 0)} lições em {courses.length} cursos cadastrados
           </p>
           <p className="text-muted-foreground font-inter text-[10px] mt-1">
-            ✅ = conteúdo publicado · 📝 = usando conteúdo padrão · 📖 = devocionais
+            {isLider
+              ? "✅ = publicado · Clique em \"Personalizar\" para adaptar uma lição para sua turma"
+              : "✅ = conteúdo publicado · 📝 = usando conteúdo padrão · 📖 = devocionais"
+            }
           </p>
         </div>
       </div>
@@ -167,33 +177,51 @@ export default function CoursesTab() {
                           )}
                         </div>
 
-                        {/* Action buttons: Estudo + Devocionais + Roteiro */}
+                        {/* Action buttons */}
                         <div className="flex gap-2 ml-10 flex-wrap">
-                          <button
-                            onClick={() => setEditMode({ lesson, mode: "study" })}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-secondary/10 text-secondary hover:bg-secondary/20 transition-colors flex-shrink-0"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                            <span className="font-inter text-xs font-medium">
-                              {publishedLessonIds.has(lesson.id) ? "Editar Estudo" : "Criar Estudo"}
-                            </span>
-                          </button>
-                          <button
-                            onClick={() => setEditMode({ lesson, mode: "devotionals" })}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-green/10 text-brand-green hover:bg-brand-green/20 transition-colors flex-shrink-0"
-                          >
-                            <BookOpen className="w-3.5 h-3.5" />
-                            <span className="font-inter text-xs font-medium">
-                              Devocionais {devCount > 0 && `(${devCount})`}
-                            </span>
-                          </button>
+                          {/* Admin-only buttons */}
+                          {!isLider && (
+                            <>
+                              <button
+                                onClick={() => setEditMode({ lesson, mode: "study" })}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-secondary/10 text-secondary hover:bg-secondary/20 transition-colors flex-shrink-0"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span className="font-inter text-xs font-medium">
+                                  {publishedLessonIds.has(lesson.id) ? "Editar Estudo" : "Criar Estudo"}
+                                </span>
+                              </button>
+                              <button
+                                onClick={() => setEditMode({ lesson, mode: "devotionals" })}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-green/10 text-brand-green hover:bg-brand-green/20 transition-colors flex-shrink-0"
+                              >
+                                <BookOpen className="w-3.5 h-3.5" />
+                                <span className="font-inter text-xs font-medium">
+                                  Devocionais {devCount > 0 && `(${devCount})`}
+                                </span>
+                              </button>
+                            </>
+                          )}
+
+                          {/* Roteiro Líder — visible to both */}
                           <button
                             onClick={() => setEditMode({ lesson, mode: "leader-guide" })}
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 transition-colors flex-shrink-0"
                           >
                             <FileText className="w-3.5 h-3.5" />
-                            <span className="font-inter text-xs font-medium">Roteiro Líder</span>
+                            <span className="font-inter text-xs font-medium">Roteiro</span>
                           </button>
+
+                          {/* Personalizar — leader only */}
+                          {isLider && (
+                            <button
+                              onClick={() => setEditMode({ lesson, mode: "leader-customize" })}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex-shrink-0"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              <span className="font-inter text-xs font-medium">Personalizar</span>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>

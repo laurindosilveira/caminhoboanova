@@ -30,7 +30,12 @@ const FINAL_PUSH_COPY = {
   reminderTitle: "Aviso pendente",
 };
 
-export default function MessagesTab() {
+type Props = {
+  /** When true, restricts sending options to only the leader's own area/turma */
+  leaderMode?: boolean;
+};
+
+export default function MessagesTab({ leaderMode = false }: Props) {
   const { profile } = useAuth();
   const { effectiveArea } = useAreaSwitch();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -40,9 +45,9 @@ export default function MessagesTab() {
   const [form, setForm] = useState({
     title: "",
     body: "",
-    target: "area" as "all" | "area" | "community" | "turma",
+    target: (leaderMode ? "turma" : "area") as "all" | "area" | "community" | "turma",
     community: "",
-    turmaId: "",
+    turmaId: leaderMode && profile?.turma_id ? profile.turma_id : "",
   });
   const [deleting, setDeleting] = useState<string | null>(null);
   const [turmas, setTurmas] = useState<Turma[]>([]);
@@ -366,12 +371,18 @@ export default function MessagesTab() {
           <div>
             <p className="font-inter text-xs text-muted-foreground mb-2">Enviar para:</p>
             <div className="grid grid-cols-2 gap-2">
-              {([
-                { value: "all" as const, label: "Todos", icon: Globe },
-                { value: "area" as const, label: effectiveArea || "Minha area", icon: MapPin },
-                { value: "community" as const, label: "Comunidade", icon: Users },
-                ...(turmas.length > 0 ? [{ value: "turma" as const, label: "Turma", icon: GraduationCap }] : []),
-              ] as const).map((option) => (
+              {(leaderMode
+                ? [
+                    ...(profile?.turma_id ? [{ value: "turma" as const, label: "Minha Turma", icon: GraduationCap }] : []),
+                    { value: "area" as const, label: effectiveArea || "Minha Área", icon: MapPin },
+                  ]
+                : [
+                    { value: "all" as const, label: "Todos", icon: Globe },
+                    { value: "area" as const, label: effectiveArea || "Minha area", icon: MapPin },
+                    { value: "community" as const, label: "Comunidade", icon: Users },
+                    ...(turmas.length > 0 ? [{ value: "turma" as const, label: "Turma", icon: GraduationCap }] : []),
+                  ]
+              ).map((option) => (
                 <button
                   key={option.value}
                   onClick={() => setForm((prev) => ({ ...prev, target: option.value as any }))}
@@ -402,18 +413,24 @@ export default function MessagesTab() {
           )}
 
           {form.target === "turma" && (
-            <select
-              value={form.turmaId}
-              onChange={(event) => setForm((prev) => ({ ...prev, turmaId: event.target.value }))}
-              className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
-            >
-              <option value="">Selecione a turma</option>
-              {turmas.map((turma) => (
-                <option key={turma.id} value={turma.id}>
-                  {turma.name}{turma.area ? ` (${turma.area})` : ""}
-                </option>
-              ))}
-            </select>
+            leaderMode ? (
+              <div className="px-3 py-2.5 rounded-xl border border-primary/30 bg-primary/5 text-foreground font-inter text-sm">
+                {turmas.find(t => t.id === profile?.turma_id)?.name ?? "Minha turma"}
+              </div>
+            ) : (
+              <select
+                value={form.turmaId}
+                onChange={(event) => setForm((prev) => ({ ...prev, turmaId: event.target.value }))}
+                className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
+              >
+                <option value="">Selecione a turma</option>
+                {turmas.map((turma) => (
+                  <option key={turma.id} value={turma.id}>
+                    {turma.name}{turma.area ? ` (${turma.area})` : ""}
+                  </option>
+                ))}
+              </select>
+            )
           )}
 
           <div className="flex gap-2">

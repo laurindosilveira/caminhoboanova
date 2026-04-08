@@ -15,6 +15,11 @@ const AdminPushTab = lazy(() => import("@/components/admin/tabs/AdminPushTab"));
 const AdminOverviewTab = lazy(() => import("@/components/admin/tabs/AdminOverviewTab"));
 const AdminAlertsTab = lazy(() => import("@/components/admin/tabs/AdminAlertsTab"));
 const AdminLeadersTab = lazy(() => import("@/components/admin/tabs/AdminLeadersTab"));
+const LeaderTurmaManagement = lazy(() => import("@/components/admin/tabs/leader/LeaderTurmaManagement"));
+const MessagesTab = lazy(() => import("@/components/admin/tabs/MessagesTab"));
+const AgendaTab = lazy(() => import("@/components/admin/tabs/AgendaTab"));
+const LeaderContactsTab = lazy(() => import("@/components/admin/tabs/leader/LeaderContactsTab"));
+const AdminAreasTab = lazy(() => import("@/components/admin/tabs/AdminAreasTab"));
 
 import { AREAS, AREA_COMMUNITIES, ALL_COMMUNITIES, getCommunitiesForArea } from "@/config/areas";
 
@@ -61,13 +66,26 @@ export default function AdminDashboard() {
     fetchData();
   }, [role]);
 
-  // For leaders, auto-select their turma
+  // For leaders, auto-select their turma (or use a placeholder if they have none yet)
   useEffect(() => {
-    if (role === "lider" && profile?.turma_id && turmas.length > 0 && !selectedTurma) {
-      const myTurma = turmas.find(t => t.id === profile.turma_id);
-      if (myTurma) setSelectedTurma(myTurma);
+    if (role !== "lider") return;
+    if (!loading && !selectedTurma) {
+      if (profile?.turma_id && turmas.length > 0) {
+        const myTurma = turmas.find(t => t.id === profile.turma_id);
+        if (myTurma) {
+          setSelectedTurma(myTurma);
+        } else {
+          // turma_id set but not found in active list — use placeholder so they can manage it
+          setSelectedTurma({ id: "", name: "Minha Área", area: profile.area ?? null, year: new Date().getFullYear(), is_active: true, description: null });
+          setActiveTab("turma");
+        }
+      } else if (!profile?.turma_id) {
+        // No turma yet — skip selector, go straight to turma management tab
+        setSelectedTurma({ id: "", name: "Minha Área", area: profile?.area ?? null, year: new Date().getFullYear(), is_active: true, description: null });
+        setActiveTab("turma");
+      }
     }
-  }, [role, profile, turmas, selectedTurma]);
+  }, [role, profile, turmas, selectedTurma, loading]);
 
   const fetchPlans = useCallback(async (ids: string[]) => {
     if (ids.length === 0) return;
@@ -251,13 +269,17 @@ export default function AdminDashboard() {
               <AdminAlertsTab participants={filteredParticipants} />
             )}
             {activeTab === "settings" && (
-              <AttendanceTab
-                participants={areaParticipants}
+              <AdminSettingsPanel
+                areaParticipants={areaParticipants}
                 activities={activities}
                 communities={communities}
                 adminArea={selectedTurma.area ?? profile?.area ?? ""}
               />
             )}
+            {activeTab === "turma" && <LeaderTurmaManagement />}
+            {activeTab === "avisos" && <MessagesTab leaderMode={role === "lider"} />}
+            {activeTab === "agenda" && <AgendaTab leaderMode={role === "lider"} />}
+            {activeTab === "contatos" && <LeaderContactsTab />}
             {activeTab === "courses" && <CoursesTab />}
             {activeTab === "leaders" && <AdminLeadersTab turmas={turmas} />}
             {activeTab === "push" && <AdminPushTab turmas={turmas} />}
@@ -267,6 +289,50 @@ export default function AdminDashboard() {
       </main>
 
       <AdminBottomNav active={activeTab} onChange={setActiveTab} userRole={role as "admin" | "lider" | null} />
+    </div>
+  );
+}
+
+// ===== Admin Settings Panel (areas + attendance toggle) =====
+function AdminSettingsPanel({
+  areaParticipants, activities, communities, adminArea,
+}: {
+  areaParticipants: Participant[];
+  activities: Activity[];
+  communities: string[];
+  adminArea: string;
+}) {
+  const [view, setView] = useState<"areas" | "attendance">("areas");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex bg-muted rounded-xl p-1 gap-1">
+        <button
+          onClick={() => setView("areas")}
+          className={`flex-1 h-8 rounded-lg font-inter text-xs font-medium transition-colors ${
+            view === "areas" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+          }`}
+        >
+          Áreas e Comunidades
+        </button>
+        <button
+          onClick={() => setView("attendance")}
+          className={`flex-1 h-8 rounded-lg font-inter text-xs font-medium transition-colors ${
+            view === "attendance" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+          }`}
+        >
+          Frequência
+        </button>
+      </div>
+      {view === "areas" && <AdminAreasTab />}
+      {view === "attendance" && (
+        <AttendanceTab
+          participants={areaParticipants}
+          activities={activities}
+          communities={communities}
+          adminArea={adminArea}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
-import { BarChart3, BookOpen, Shield, Megaphone, Settings, AlertTriangle, Crown } from "lucide-react";
+import { BarChart3, BookOpen, Shield, Megaphone, Settings, AlertTriangle, Crown, GraduationCap, MessageSquare, CalendarDays, Phone } from "lucide-react";
 
-export type AdminTab = "overview" | "alerts" | "courses" | "leaders" | "push" | "users" | "settings";
+export type AdminTab = "overview" | "alerts" | "courses" | "leaders" | "push" | "users" | "settings" | "turma" | "avisos" | "agenda" | "contatos";
 
 type TabDef = { id: AdminTab; label: string; icon: typeof BarChart3 };
 
@@ -14,12 +14,18 @@ const ALL_TABS: TabDef[] = [
   { id: "settings", label: "Config", icon: Settings },
 ];
 
-const LIDER_TABS: AdminTab[] = ["courses", "push", "users"];
+const LIDER_TAB_DEFS: TabDef[] = [
+  { id: "turma", label: "Turma", icon: GraduationCap },
+  { id: "avisos", label: "Avisos", icon: MessageSquare },
+  { id: "agenda", label: "Agenda", icon: CalendarDays },
+  { id: "contatos", label: "Contatos", icon: Phone },
+  { id: "courses", label: "Cursos", icon: BookOpen },
+];
 
 type Props = { active: AdminTab; onChange: (tab: AdminTab) => void; userRole?: "admin" | "lider" | null };
 
 export default function AdminBottomNav({ active, onChange, userRole }: Props) {
-  const tabs = userRole === "lider" ? ALL_TABS.filter(t => LIDER_TABS.includes(t.id)) : ALL_TABS;
+  const tabs = userRole === "lider" ? LIDER_TAB_DEFS : ALL_TABS;
 
   return (
     <nav

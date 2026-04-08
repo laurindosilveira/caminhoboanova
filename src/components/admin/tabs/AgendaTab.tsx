@@ -19,6 +19,8 @@ type Event = {
   community: string | null;
   type: string;
   linked_lesson_id: string | null;
+  turma_id: string | null;
+  created_by: string | null;
 };
 
 type LessonOption = {
@@ -32,11 +34,17 @@ type LessonOption = {
 
 const EMPTY_FORM = {
   title: "", description: "", event_date: "", location: "", type: "encontro", area: "", community: "", linked_lesson_id: "",
+  scope: "area" as "area" | "turma", turmaId: "",
 };
 
 const EMOJI_OPTIONS = ["📅", "⛪", "✝️", "🏕️", "📖", "🎉", "💬", "🙏", "🎶", "🌿", "🤝", "⭐", "🔔", "🎯", "🏠", "🌟"];
 
-export default function AgendaTab() {
+type Props = {
+  /** When true, restricts the leader to create events only for their area or turma */
+  leaderMode?: boolean;
+};
+
+export default function AgendaTab({ leaderMode = false }: Props) {
   const { profile } = useAuth();
   const { effectiveArea } = useAreaSwitch();
   const currentArea = effectiveArea || profile?.area || "";
@@ -98,7 +106,13 @@ export default function AgendaTab() {
 
   function openNewForm() {
     setEditingFullEventId(null);
-    setForm({ ...EMPTY_FORM, area: currentArea });
+    const defaultScope = leaderMode && profile?.turma_id ? "turma" : "area";
+    setForm({
+      ...EMPTY_FORM,
+      area: currentArea,
+      scope: defaultScope,
+      turmaId: leaderMode && profile?.turma_id ? profile.turma_id : "",
+    });
     setShowForm(true);
   }
 
@@ -114,6 +128,8 @@ export default function AgendaTab() {
       area: event.area ?? currentArea,
       community: event.community ?? "",
       linked_lesson_id: event.linked_lesson_id ?? "",
+      scope: event.turma_id ? "turma" : "area",
+      turmaId: event.turma_id ?? "",
     });
     setShowForm(true);
   }
@@ -134,9 +150,14 @@ export default function AgendaTab() {
       event_date: normalizedEventDate.toISOString(),
       location: form.location || null,
       type: form.type,
-      area: form.area || null,
-      community: form.community || null,
-      linked_lesson_id: form.linked_lesson_id || null,
+      area: leaderMode
+        ? (form.scope === "area" ? currentArea || null : null)
+        : (form.area || null),
+      community: leaderMode ? null : (form.community || null),
+      linked_lesson_id: leaderMode ? null : (form.linked_lesson_id || null),
+      turma_id: leaderMode
+        ? (form.scope === "turma" ? form.turmaId || null : null)
+        : null,
     };
 
     if (editingFullEventId) {
@@ -353,9 +374,14 @@ export default function AgendaTab() {
     return `Curso ${lesson.course_order} - Licao ${lesson.order_num}: ${lesson.title}`;
   };
 
-  const filteredEvents = areaFilter === "all"
-    ? events
-    : events.filter(e => !e.area || e.area === areaFilter);
+  const filteredEvents = leaderMode
+    ? events.filter(e =>
+        (e.area === currentArea) ||
+        (e.turma_id && e.turma_id === profile?.turma_id)
+      )
+    : areaFilter === "all"
+      ? events
+      : events.filter(e => !e.area || e.area === areaFilter);
 
   const isEditing = !!editingFullEventId;
 
@@ -372,22 +398,24 @@ export default function AgendaTab() {
         </button>
       </div>
 
-      {/* Area filter */}
-      <div className="flex gap-1.5 flex-wrap">
-        {["all", ...AREAS].map(val => (
-          <button
-            key={val}
-            onClick={() => setAreaFilter(val)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-inter font-medium transition-colors ${
-              areaFilter === val
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            }`}
-          >
-            {val === "all" ? "Todas" : val}
-          </button>
-        ))}
-      </div>
+      {/* Area filter — hidden in leaderMode */}
+      {!leaderMode && (
+        <div className="flex gap-1.5 flex-wrap">
+          {["all", ...AREAS].map(val => (
+            <button
+              key={val}
+              onClick={() => setAreaFilter(val)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-inter font-medium transition-colors ${
+                areaFilter === val
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              {val === "all" ? "Todas" : val}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Create custom event type modal ── */}
       {showCreateTypeModal && (
@@ -568,25 +596,50 @@ export default function AgendaTab() {
               className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
           </div>
 
-          {/* Area selector */}
-          <div className="grid grid-cols-2 gap-2">
+          {/* Scope selector */}
+          {leaderMode ? (
             <div className="space-y-1">
-              <label className="font-inter text-xs font-medium text-muted-foreground">Area</label>
-              <select value={form.area} onChange={e => setForm(f => ({ ...f, area: e.target.value }))}
-                className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
-                <option value="">Todas as areas</option>
-                {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
+              <label className="font-inter text-xs font-medium text-muted-foreground">Visível para</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  ...(profile?.turma_id ? [{ value: "turma" as const, label: "Minha Turma", icon: "🎓" }] : []),
+                  { value: "area" as const, label: currentArea || "Minha Área", icon: "📍" },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, scope: opt.value }))}
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-inter font-medium transition-colors ${
+                      form.scope === opt.value
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border bg-background text-muted-foreground"
+                    }`}
+                  >
+                    <span>{opt.icon}</span>{opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="space-y-1">
-              <label className="font-inter text-xs font-medium text-muted-foreground">Comunidade</label>
-              <select value={form.community} onChange={e => setForm(f => ({ ...f, community: e.target.value }))}
-                className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
-                <option value="">Todas</option>
-                {ALL_COMMUNITIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <label className="font-inter text-xs font-medium text-muted-foreground">Area</label>
+                <select value={form.area} onChange={e => setForm(f => ({ ...f, area: e.target.value }))}
+                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
+                  <option value="">Todas as areas</option>
+                  {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="font-inter text-xs font-medium text-muted-foreground">Comunidade</label>
+                <select value={form.community} onChange={e => setForm(f => ({ ...f, community: e.target.value }))}
+                  className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none">
+                  <option value="">Todas</option>
+                  {ALL_COMMUNITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Type selector */}
           <div className="space-y-1">
@@ -635,21 +688,23 @@ export default function AgendaTab() {
             })()}
           </div>
 
-          <div className="space-y-1">
-            <label className="font-inter text-xs font-medium text-muted-foreground">Vincular a um estudo (opcional)</label>
-            <select
-              value={form.linked_lesson_id}
-              onChange={e => setForm(f => ({ ...f, linked_lesson_id: e.target.value }))}
-              className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
-            >
-              <option value="">Sem vinculo</option>
-              {lessons.map(l => (
-                <option key={l.id} value={l.id}>
-                  Curso {l.course_order} - Licao {l.order_num}: {l.title}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!leaderMode && (
+            <div className="space-y-1">
+              <label className="font-inter text-xs font-medium text-muted-foreground">Vincular a um estudo (opcional)</label>
+              <select
+                value={form.linked_lesson_id}
+                onChange={e => setForm(f => ({ ...f, linked_lesson_id: e.target.value }))}
+                className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary appearance-none"
+              >
+                <option value="">Sem vinculo</option>
+                {lessons.map(l => (
+                  <option key={l.id} value={l.id}>
+                    Curso {l.course_order} - Licao {l.order_num}: {l.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="flex gap-2">
             <button onClick={handleSave} disabled={saving || !form.title || !form.event_date}
@@ -777,14 +832,16 @@ export default function AgendaTab() {
 
                     {event.description && <p className="text-muted-foreground font-inter text-xs mt-1.5">{event.description}</p>}
                   </div>
-                  <div className="flex flex-col gap-1.5 flex-shrink-0">
-                    <button onClick={() => openEditForm(event)} className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20 transition-colors">
-                      <Pencil className="w-3.5 h-3.5 text-primary" />
-                    </button>
-                    <button onClick={() => handleDelete(event.id)} className="w-7 h-7 rounded-lg bg-destructive/10 flex items-center justify-center hover:bg-destructive/20 transition-colors">
-                      <X className="w-3.5 h-3.5 text-destructive" />
-                    </button>
-                  </div>
+                  {(!leaderMode || event.created_by === profile?.user_id) && (
+                    <div className="flex flex-col gap-1.5 flex-shrink-0">
+                      <button onClick={() => openEditForm(event)} className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20 transition-colors">
+                        <Pencil className="w-3.5 h-3.5 text-primary" />
+                      </button>
+                      <button onClick={() => handleDelete(event.id)} className="w-7 h-7 rounded-lg bg-destructive/10 flex items-center justify-center hover:bg-destructive/20 transition-colors">
+                        <X className="w-3.5 h-3.5 text-destructive" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             );

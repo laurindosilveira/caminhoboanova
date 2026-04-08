@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
-import { GraduationCap, CheckCircle2, RefreshCw, Users, Archive, ChevronDown, ChevronUp, Download, RotateCcw } from "lucide-react";
+import { GraduationCap, CheckCircle2, RefreshCw, Archive, ChevronDown, ChevronUp, Download, Plus, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import TurmaReportPDF from "@/components/admin/TurmaReportPDF";
 
 type Turma = {
@@ -32,38 +33,115 @@ export default function LeaderTurmaManagement() {
   const [archivedPdfData, setArchivedPdfData] = useState<Record<string, { participants: any[]; activities: any[] }>>({});
   const [loadingPdf, setLoadingPdf] = useState<string | null>(null);
 
+  // Create turma state
+  const [showCreate, setShowCreate] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState({ name: "", description: "" });
+
+  // Edit turma state
+  const [showEdit, setShowEdit] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editForm, setEditForm] = useState({ name: "", description: "" });
+
   useEffect(() => {
     fetchTurma();
   }, [profile?.turma_id]);
 
   async function fetchTurma() {
-    if (!profile?.turma_id) {
-      setLoading(false);
-      return;
-    }
     setLoading(true);
 
-    const [{ data: turmaData }, { data: allTurmas }] = await Promise.all([
-      supabase.from("turmas").select("*").eq("id", profile.turma_id).single(),
-      supabase.from("turmas").select("*").eq("is_active", false).order("year", { ascending: false }),
-    ]);
+    if (profile?.turma_id) {
+      const [{ data: turmaData }, { data: allTurmas }] = await Promise.all([
+        supabase.from("turmas").select("*").eq("id", profile.turma_id).single(),
+        supabase.from("turmas").select("*").eq("is_active", false).order("year", { ascending: false }),
+      ]);
 
-    if (turmaData) {
-      const { data: profiles } = await supabase.from("profiles").select("turma_id").eq("turma_id", turmaData.id);
-      setTurma({ ...turmaData, member_count: profiles?.length ?? 0 });
+      if (turmaData) {
+        const { data: profiles } = await supabase.from("profiles").select("turma_id").eq("turma_id", turmaData.id);
+        setTurma({ ...turmaData, member_count: profiles?.length ?? 0 });
+      }
+
+      const myArea = effectiveArea || profile?.area;
+      const filtered = (allTurmas ?? []).filter(t => t.area === myArea);
+      const { data: allProfiles } = await supabase.from("profiles").select("turma_id");
+      const countMap: Record<string, number> = {};
+      (allProfiles ?? []).forEach(p => {
+        if (p.turma_id) countMap[p.turma_id] = (countMap[p.turma_id] ?? 0) + 1;
+      });
+      setArchivedTurmas(filtered.map(t => ({ ...t, member_count: countMap[t.id] ?? 0 })));
+    } else {
+      setTurma(null);
+      setArchivedTurmas([]);
     }
 
-    // Filter archived turmas by same area
-    const myArea = effectiveArea || profile?.area;
-    const filtered = (allTurmas ?? []).filter(t => t.area === myArea);
-    const { data: allProfiles } = await supabase.from("profiles").select("turma_id");
-    const countMap: Record<string, number> = {};
-    (allProfiles ?? []).forEach(p => {
-      if (p.turma_id) countMap[p.turma_id] = (countMap[p.turma_id] ?? 0) + 1;
-    });
-    setArchivedTurmas(filtered.map(t => ({ ...t, member_count: countMap[t.id] ?? 0 })));
-
     setLoading(false);
+  }
+
+  async function handleCreate() {
+    if (!createForm.name.trim()) return;
+    setCreating(true);
+
+    const { data: authUser } = await supabase.auth.getUser();
+    const myArea = effectiveArea || profile?.area || null;
+
+    const { data: newTurma, error } = await supabase
+      .from("turmas")
+      .insert({
+        name: createForm.name.trim(),
+        area: myArea,
+        year: new Date().getFullYear(),
+        description: createForm.description.trim() || null,
+        created_by: authUser.user?.id,
+      })
+      .select("id")
+      .single();
+
+    if (error || !newTurma) {
+      toast({ title: "Erro ao criar turma", description: error?.message ?? "Erro desconhecido", variant: "destructive" });
+      setCreating(false);
+      return;
+    }
+
+    // Link this leader to the newly created turma
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({ turma_id: newTurma.id } as any)
+      .eq("user_id", authUser.user?.id ?? "");
+
+    if (profileError) {
+      toast({ title: "Turma criada, mas erro ao vincular", description: profileError.message, variant: "destructive" });
+    } else {
+      toast({ title: "Turma criada!", description: `"${createForm.name}" foi criada e vinculada ao seu perfil.` });
+    }
+
+    setCreateForm({ name: "", description: "" });
+    setShowCreate(false);
+    setCreating(false);
+
+    // Reload profile so turma_id is updated
+    window.location.reload();
+  }
+
+  async function handleEdit() {
+    if (!turma || !editForm.name.trim()) return;
+    setSaving(true);
+
+    const { error } = await supabase
+      .from("turmas")
+      .update({
+        name: editForm.name.trim(),
+        description: editForm.description.trim() || null,
+      })
+      .eq("id", turma.id);
+
+    if (error) {
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Turma atualizada!" });
+      setShowEdit(false);
+      fetchTurma();
+    }
+    setSaving(false);
   }
 
   async function handleArchive() {
@@ -108,7 +186,7 @@ export default function LeaderTurmaManagement() {
 
     const firstYearCount = allProfiles.length - secondYearUsers.length;
     toast({
-      title: "📦 Grupo confirmado!",
+      title: "Grupo confirmado!",
       description: `"${archiveName}" criado com ${secondYearUsers.length} confirmando(s). ${firstYearCount} aluno(s) do 1º ano permanecem.`
     });
 
@@ -145,7 +223,7 @@ export default function LeaderTurmaManagement() {
     ]);
 
     toast({
-      title: "🔄 Jornada reiniciada!",
+      title: "Jornada reiniciada!",
       description: `Progresso de ${userIds.length} aluno(s) da turma "${turma.name}" foi zerado.`
     });
 
@@ -177,17 +255,94 @@ export default function LeaderTurmaManagement() {
     );
   }
 
+  // ── No turma yet: show create card ──────────────────────────────────────────
   if (!turma) {
     return (
-      <div className="text-center py-12">
-        <div className="w-14 h-14 mx-auto rounded-2xl bg-muted flex items-center justify-center mb-3">
-          <GraduationCap className="w-7 h-7 text-muted-foreground" />
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <GraduationCap className="w-5 h-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="font-montserrat font-black text-foreground text-base">Minha Turma</h2>
+            <p className="text-muted-foreground text-xs font-inter">Você ainda não tem uma turma vinculada</p>
+          </div>
         </div>
-        <p className="text-muted-foreground font-inter text-sm">Você não está vinculado a nenhuma turma.</p>
+
+        <div className="bg-card border-2 border-dashed border-primary/30 rounded-2xl p-6 text-center">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-primary/10 flex items-center justify-center mb-3">
+            <GraduationCap className="w-7 h-7 text-primary/60" />
+          </div>
+          <p className="text-foreground font-montserrat font-bold text-sm mb-1">Nenhuma turma vinculada</p>
+          <p className="text-muted-foreground font-inter text-xs mb-4 leading-relaxed">
+            Crie sua turma para começar a gerenciar participantes, marcar presenças e acompanhar o progresso.
+          </p>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 mx-auto px-5 py-2.5 rounded-xl text-sm font-montserrat font-bold text-primary-foreground transition-all active:scale-95"
+            style={{ background: "var(--gradient-hero)" }}
+          >
+            <Plus className="w-4 h-4" />
+            Criar minha turma
+          </button>
+        </div>
+
+        {/* Create dialog */}
+        <Dialog open={showCreate} onOpenChange={setShowCreate}>
+          <DialogContent className="max-w-sm rounded-2xl">
+            <DialogHeader>
+              <DialogTitle className="font-montserrat font-bold text-foreground text-base">Criar minha turma</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="bg-muted/50 rounded-xl px-3 py-2">
+                <p className="text-muted-foreground font-inter text-xs">
+                  Área: <span className="font-medium text-foreground">{effectiveArea || profile?.area || "—"}</span>
+                  {" · "}Ano: <span className="font-medium text-foreground">{new Date().getFullYear()}</span>
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-inter font-medium text-muted-foreground mb-1 block">Nome da turma</label>
+                <Input
+                  value={createForm.name}
+                  onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="Ex: Confirmatório 2026"
+                  className="rounded-xl"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="text-xs font-inter font-medium text-muted-foreground mb-1 block">Descrição (opcional)</label>
+                <Input
+                  value={createForm.description}
+                  onChange={e => setCreateForm(f => ({ ...f, description: e.target.value }))}
+                  placeholder="Breve descrição..."
+                  className="rounded-xl"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setShowCreate(false)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-montserrat font-bold bg-muted text-muted-foreground border border-border"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreate}
+                  disabled={creating || !createForm.name.trim()}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-montserrat font-bold text-primary-foreground disabled:opacity-50"
+                  style={{ background: "var(--gradient-hero)" }}
+                >
+                  {creating ? "Criando..." : "Criar turma"}
+                </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
 
+  // ── Has turma: show full management ─────────────────────────────────────────
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -196,7 +351,7 @@ export default function LeaderTurmaManagement() {
           <GraduationCap className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <h2 className="font-montserrat font-black text-foreground text-base">Gerência da Turma</h2>
+          <h2 className="font-montserrat font-black text-foreground text-base">Minha Turma</h2>
           <p className="text-muted-foreground text-xs font-inter">Confirmação e reinício de jornada</p>
         </div>
       </div>
@@ -216,6 +371,14 @@ export default function LeaderTurmaManagement() {
               <p className="text-muted-foreground text-xs font-inter mt-0.5 truncate">{turma.description}</p>
             )}
           </div>
+          {/* Edit button */}
+          <button
+            onClick={() => { setEditForm({ name: turma.name, description: turma.description || "" }); setShowEdit(true); }}
+            className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center hover:bg-primary/20 flex-shrink-0 transition-colors"
+            title="Editar turma"
+          >
+            <Pencil className="w-4 h-4 text-primary" />
+          </button>
         </div>
 
         {/* Action buttons */}
@@ -237,6 +400,57 @@ export default function LeaderTurmaManagement() {
           </button>
         </div>
       </div>
+
+      {/* Edit dialog */}
+      <Dialog open={showEdit} onOpenChange={setShowEdit}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="font-montserrat font-bold text-foreground text-base">Editar turma</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="bg-muted/50 rounded-xl px-3 py-2">
+              <p className="text-muted-foreground font-inter text-xs">
+                Área: <span className="font-medium text-foreground">{turma.area || "—"}</span>
+                {" · "}Ano: <span className="font-medium text-foreground">{turma.year}</span>
+              </p>
+            </div>
+            <div>
+              <label className="text-xs font-inter font-medium text-muted-foreground mb-1 block">Nome da turma</label>
+              <Input
+                value={editForm.name}
+                onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                className="rounded-xl"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="text-xs font-inter font-medium text-muted-foreground mb-1 block">Descrição (opcional)</label>
+              <Input
+                value={editForm.description}
+                onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Breve descrição..."
+                className="rounded-xl"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setShowEdit(false)}
+                className="flex-1 py-2.5 rounded-xl text-sm font-montserrat font-bold bg-muted text-muted-foreground border border-border"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEdit}
+                disabled={saving || !editForm.name.trim()}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-montserrat font-bold text-primary-foreground disabled:opacity-50"
+                style={{ background: "var(--gradient-hero)" }}
+              >
+                {saving ? "Salvando..." : "Salvar"}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirm archive dialog */}
       <Dialog open={confirmArchive} onOpenChange={setConfirmArchive}>
