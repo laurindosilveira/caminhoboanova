@@ -42,10 +42,12 @@ export default function AdminAreasTab() {
 
   async function fetchData() {
     setLoading(true);
-    const [{ data: areasData }, { data: commData }] = await Promise.all([
+    const [{ data: areasData, error: areasErr }, { data: commData, error: commErr }] = await Promise.all([
       supabase.from("areas").select("id, name, description").order("name"),
       supabase.from("communities").select("id, name, area_id").order("name"),
     ]);
+    if (areasErr) setError(`Erro ao carregar áreas: ${areasErr.message}`);
+    if (commErr) setError(`Erro ao carregar comunidades: ${commErr.message}`);
     setAreas(areasData ?? []);
     setCommunities(commData ?? []);
     if (areasData && areasData.length > 0 && !expandedArea) {
