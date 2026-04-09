@@ -43,16 +43,13 @@ export default function AdminAreasTab() {
   async function fetchData() {
     setLoading(true);
     const [{ data: areasData, error: areasErr }, { data: commData, error: commErr }] = await Promise.all([
-      supabase.rpc("get_all_areas"),
-      supabase.rpc("get_all_communities"),
+      supabase.from("areas").select("id, name, description").order("name"),
+      supabase.from("communities").select("id, name, area_id").order("name"),
     ]);
     if (areasErr) setError(`Erro ao carregar áreas: ${areasErr.message}`);
     if (commErr) setError(`Erro ao carregar comunidades: ${commErr.message}`);
-    // Functions now return jsonb scalar — parse accordingly
-    const areasList: AreaRow[] = Array.isArray(areasData) ? areasData : (areasData ? JSON.parse(areasData as unknown as string) : []);
-    const commsList: CommunityRow[] = Array.isArray(commData) ? commData : (commData ? JSON.parse(commData as unknown as string) : []);
-    setAreas(areasList);
-    setCommunities(commsList);
+    setAreas((areasData ?? []) as AreaRow[]);
+    setCommunities((commData ?? []) as CommunityRow[]);
     if (areasData && areasData.length > 0 && !expandedArea) {
       setExpandedArea(areasData[0].id);
     }
@@ -79,11 +76,9 @@ export default function AdminAreasTab() {
     if (!areaForm.name.trim()) { setError("Nome da área é obrigatório."); return; }
     setSavingArea(true);
     setError(null);
-    const { error: e } = await supabase.rpc("upsert_area", {
-      p_id: editingAreaId ?? null,
-      p_name: areaForm.name.trim(),
-      p_description: areaForm.description.trim() || null,
-    });
+    const { error: e } = editingAreaId
+      ? await supabase.from("areas").update({ name: areaForm.name.trim(), description: areaForm.description.trim() || null }).eq("id", editingAreaId)
+      : await supabase.from("areas").insert({ name: areaForm.name.trim(), description: areaForm.description.trim() || null });
     if (e) { setError(e.message); setSavingArea(false); return; }
     setSavingArea(false);
     setShowAreaForm(false);
@@ -97,7 +92,7 @@ export default function AdminAreasTab() {
       setError(`Não é possível excluir: esta área possui ${commCount} comunidade${commCount > 1 ? "s" : ""}. Remova-as primeiro.`);
       return;
     }
-    const { error: e } = await supabase.rpc("delete_area", { p_id: id });
+    const { error: e } = await supabase.from("areas").delete().eq("id", id);
     if (e) { setError(e.message); return; }
     fetchData();
   }
@@ -127,11 +122,9 @@ export default function AdminAreasTab() {
     if (!communityForm.name.trim()) { setError("Nome da comunidade é obrigatório."); return; }
     setSavingCommunity(true);
     setError(null);
-    const { error: e } = await supabase.rpc("upsert_community", {
-      p_id: editingCommunityId ?? null,
-      p_name: communityForm.name.trim(),
-      p_area_id: communityForm.area_id,
-    });
+    const { error: e } = editingCommunityId
+      ? await supabase.from("communities").update({ name: communityForm.name.trim(), area_id: communityForm.area_id }).eq("id", editingCommunityId)
+      : await supabase.from("communities").insert({ name: communityForm.name.trim(), area_id: communityForm.area_id });
     if (e) { setError(e.message); setSavingCommunity(false); return; }
     setSavingCommunity(false);
     setShowCommunityFormFor(null);
@@ -140,7 +133,7 @@ export default function AdminAreasTab() {
   }
 
   async function deleteCommunity(id: string) {
-    const { error: e } = await supabase.rpc("delete_community", { p_id: id });
+    const { error: e } = await supabase.from("communities").delete().eq("id", id);
     if (e) { setError(e.message); return; }
     fetchData();
   }
