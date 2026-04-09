@@ -48,8 +48,11 @@ export default function AdminAreasTab() {
     ]);
     if (areasErr) setError(`Erro ao carregar áreas: ${areasErr.message}`);
     if (commErr) setError(`Erro ao carregar comunidades: ${commErr.message}`);
-    setAreas(areasData ?? []);
-    setCommunities(commData ?? []);
+    // Functions now return jsonb scalar — parse accordingly
+    const areasList: AreaRow[] = Array.isArray(areasData) ? areasData : (areasData ? JSON.parse(areasData as unknown as string) : []);
+    const commsList: CommunityRow[] = Array.isArray(commData) ? commData : (commData ? JSON.parse(commData as unknown as string) : []);
+    setAreas(areasList);
+    setCommunities(commsList);
     if (areasData && areasData.length > 0 && !expandedArea) {
       setExpandedArea(areasData[0].id);
     }
