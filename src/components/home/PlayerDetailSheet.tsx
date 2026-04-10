@@ -5,7 +5,6 @@ import { X, Trash2, ChevronRight, ChevronDown, ChevronUp, BookOpen, Calendar, Ch
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface Props {
   userId: string;
@@ -457,7 +456,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={onClose}>
       <div
-        className="bg-card rounded-t-2xl w-full max-w-md max-h-[85vh] flex flex-col shadow-xl animate-in slide-in-from-bottom"
+        className="bg-card rounded-t-2xl w-full max-w-md max-h-[85vh] flex flex-col shadow-xl animate-in slide-in-from-bottom relative"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
@@ -615,96 +614,103 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         )}
       </div>
 
-      <Dialog open={!!categoryModal} onOpenChange={(open) => { if (!open) setCategoryModal(null); }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="font-montserrat text-lg flex items-center gap-2">
-              {categoryModal && typeIcon(categoryModal)}
-              {categoryModal ? typeLabel(categoryModal) : ""}
-              <span className="text-muted-foreground font-inter text-sm font-normal ml-1">
-                {categoryItems.length} {categoryItems.length === 1 ? "item" : "itens"}
-              </span>
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-2 mt-2">
-            {categoryItems.length === 0 ? (
-              <p className="text-center text-muted-foreground font-inter text-sm py-8">Nenhuma atividade nesta categoria.</p>
-            ) : (
-              categoryItems.map((item) => {
-                const canOpenDetails = item.type === "lesson" || item.type === "devotional";
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => { if (canOpenDetails) handleOpenDetails(item); }}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-left ${
-                      canOpenDetails ? "bg-muted/30 hover:bg-muted/50 cursor-pointer" : "bg-muted/20 cursor-default"
-                    }`}
-                  >
-                    <div className="flex-shrink-0">{typeIcon(item.type)}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-inter text-sm text-foreground font-medium truncate">{item.title}</p>
-                      {item.subtitle && <p className="text-muted-foreground text-[10px] font-inter">{item.subtitle}</p>}
-                      <p className="text-muted-foreground text-[10px] font-inter">
-                        {item.date ? format(new Date(item.date), "d/MM/yy HH:mm") : ""}
-                      </p>
-                      {canOpenDetails && (
-                        <p className="text-primary text-[10px] font-inter font-semibold mt-0.5">Toque para ver as respostas</p>
-                      )}
-                    </div>
-                    <span className="font-montserrat font-bold text-primary text-xs flex-shrink-0">+{item.points}</span>
-                    {canDelete && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(item);
-                          setCategoryModal(null);
-                        }}
-                        disabled={deleting === item.id}
-                        className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
-                        title="Remover atividade"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    {canOpenDetails && <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!detailModal} onOpenChange={(open) => {
-        if (!open) {
-          setDetailModal(null);
-          if (previousCategoryModal) {
-            setCategoryModal(previousCategoryModal);
-            setPreviousCategoryModal(null);
-          }
-        }
-      }}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex items-center gap-2">
-              {previousCategoryModal && (
-                <button
-                  onClick={() => {
-                    setDetailModal(null);
-                    setCategoryModal(previousCategoryModal);
-                    setPreviousCategoryModal(null);
-                  }}
-                  className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
-                >
-                  ←
-                </button>
-              )}
-              <DialogTitle className="font-montserrat text-lg">
-                {detailModal?.type === "lesson" ? "🎓 Respostas da lição" : "📖 Respostas do devocional"}
-              </DialogTitle>
+      {/* Category modal — inline overlay, no portal, so clicks don't leak to backdrop */}
+      {categoryModal && (
+        <div
+          className="absolute inset-0 z-10 bg-black/50 rounded-t-2xl flex flex-col justify-end"
+          onClick={(e) => { e.stopPropagation(); setCategoryModal(null); }}
+        >
+          <div
+            className="bg-card rounded-t-2xl max-h-[80%] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
+              <div className="flex items-center gap-2 font-montserrat text-lg font-bold text-foreground">
+                {typeIcon(categoryModal)}
+                {typeLabel(categoryModal)}
+                <span className="text-muted-foreground font-inter text-sm font-normal ml-1">
+                  {categoryItems.length} {categoryItems.length === 1 ? "item" : "itens"}
+                </span>
+              </div>
+              <button onClick={() => setCategoryModal(null)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors">
+                <X className="w-5 h-5" />
+              </button>
             </div>
-          </DialogHeader>
+            <div className="overflow-y-auto p-4 space-y-2">
+              {categoryItems.length === 0 ? (
+                <p className="text-center text-muted-foreground font-inter text-sm py-8">Nenhuma atividade nesta categoria.</p>
+              ) : (
+                categoryItems.map((item) => {
+                  const canOpenDetails = item.type === "lesson" || item.type === "devotional";
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => { if (canOpenDetails) handleOpenDetails(item); }}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-left ${
+                        canOpenDetails ? "bg-muted/30 hover:bg-muted/50 cursor-pointer" : "bg-muted/20 cursor-default"
+                      }`}
+                    >
+                      <div className="flex-shrink-0">{typeIcon(item.type)}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-inter text-sm text-foreground font-medium truncate">{item.title}</p>
+                        {item.subtitle && <p className="text-muted-foreground text-[10px] font-inter">{item.subtitle}</p>}
+                        <p className="text-muted-foreground text-[10px] font-inter">
+                          {item.date ? format(new Date(item.date), "d/MM/yy HH:mm") : ""}
+                        </p>
+                        {canOpenDetails && (
+                          <p className="text-primary text-[10px] font-inter font-semibold mt-0.5">Toque para ver as respostas</p>
+                        )}
+                      </div>
+                      <span className="font-montserrat font-bold text-primary text-xs flex-shrink-0">+{item.points}</span>
+                      {canDelete && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDelete(item); setCategoryModal(null); }}
+                          disabled={deleting === item.id}
+                          className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors flex-shrink-0 disabled:opacity-50"
+                          title="Remover atividade"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {canOpenDetails && <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detail modal — inline overlay, no portal */}
+      {detailModal && (
+        <div
+          className="absolute inset-0 z-20 bg-black/50 rounded-t-2xl flex flex-col justify-end"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="bg-card rounded-t-2xl max-h-[85%] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
+              <div className="flex items-center gap-2">
+                {previousCategoryModal && (
+                  <button
+                    onClick={() => { setDetailModal(null); setCategoryModal(previousCategoryModal); setPreviousCategoryModal(null); }}
+                    className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+                  >
+                    ←
+                  </button>
+                )}
+                <p className="font-montserrat text-base font-bold text-foreground">
+                  {detailModal.type === "lesson" ? "🎓 Respostas da lição" : "📖 Respostas do devocional"}
+                </p>
+              </div>
+              <button
+                onClick={() => { setDetailModal(null); if (previousCategoryModal) { setCategoryModal(previousCategoryModal); setPreviousCategoryModal(null); } }}
+                className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4 space-y-4">
 
           <div className="space-y-4">
             <div className="rounded-2xl border border-border bg-muted/20 p-4">
@@ -792,8 +798,9 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
               <p className="text-sm font-inter text-muted-foreground">Nenhuma resposta encontrada para este devocional.</p>
             )}
           </div>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
