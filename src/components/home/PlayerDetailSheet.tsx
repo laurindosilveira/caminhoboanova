@@ -245,6 +245,9 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
   async function handleOpenDetails(item: ActivityItem) {
     if ((item.type !== "lesson" && item.type !== "devotional") || !item.tableId) return;
 
+    // Close category modal first to avoid nested Dialog conflicts
+    setPreviousCategoryModal(categoryModal);
+    setCategoryModal(null);
     setLoadingDetail(true);
 
     if (item.type === "lesson") {
@@ -448,6 +451,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
   const selectedDetailItem = detailModal ? items.find((item) => item.id === detailModal.itemId) ?? null : null;
 
   const [categoryModal, setCategoryModal] = useState<string | null>(null);
+  const [previousCategoryModal, setPreviousCategoryModal] = useState<string | null>(null);
   const categoryItems = categoryModal ? items.filter(i => i.type === categoryModal) : [];
 
   return (
@@ -672,12 +676,34 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!detailModal} onOpenChange={(open) => { if (!open) setDetailModal(null); }}>
+      <Dialog open={!!detailModal} onOpenChange={(open) => {
+        if (!open) {
+          setDetailModal(null);
+          if (previousCategoryModal) {
+            setCategoryModal(previousCategoryModal);
+            setPreviousCategoryModal(null);
+          }
+        }
+      }}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-montserrat text-lg">
-              {detailModal?.type === "lesson" ? "🎓 Respostas da lição" : "📖 Respostas do devocional"}
-            </DialogTitle>
+            <div className="flex items-center gap-2">
+              {previousCategoryModal && (
+                <button
+                  onClick={() => {
+                    setDetailModal(null);
+                    setCategoryModal(previousCategoryModal);
+                    setPreviousCategoryModal(null);
+                  }}
+                  className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+                >
+                  ←
+                </button>
+              )}
+              <DialogTitle className="font-montserrat text-lg">
+                {detailModal?.type === "lesson" ? "🎓 Respostas da lição" : "📖 Respostas do devocional"}
+              </DialogTitle>
+            </div>
           </DialogHeader>
 
           <div className="space-y-4">
