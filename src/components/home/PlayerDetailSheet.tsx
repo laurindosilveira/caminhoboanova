@@ -244,10 +244,13 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
   async function handleOpenDetails(item: ActivityItem) {
     if ((item.type !== "lesson" && item.type !== "devotional") || !item.tableId) return;
 
-    // Close category modal first to avoid nested Dialog conflicts
+    // Open detail overlay immediately (synchronously) so no gap exists between
+    // closing the category overlay and showing the detail overlay — otherwise the
+    // pointerup ghost-click reaches the outer backdrop and closes the sheet.
     setPreviousCategoryModal(categoryModal);
     setCategoryModal(null);
     setLoadingDetail(true);
+    setDetailModal({ itemId: item.id, type: item.type as "lesson" | "devotional", title: item.title, content: null });
 
     if (item.type === "lesson") {
       const [{ data: lessonContent }, { data: responses }] = await Promise.all([
