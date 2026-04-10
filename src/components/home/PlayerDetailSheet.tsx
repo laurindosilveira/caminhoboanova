@@ -711,8 +711,6 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
               </button>
             </div>
             <div className="overflow-y-auto p-4 space-y-4">
-
-          <div className="space-y-4">
             <div className="rounded-2xl border border-border bg-muted/20 p-4">
               <p className="font-montserrat font-bold text-foreground text-sm">{detailModal?.title}</p>
               <p className="text-muted-foreground font-inter text-xs mt-1">
