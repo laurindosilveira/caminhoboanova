@@ -130,9 +130,9 @@ export default function CourseTrailSection({
                     if (eventDay) eventDay.setHours(0, 0, 0, 0);
                     const todayZero = new Date(); todayZero.setHours(0, 0, 0, 0);
                     const isLateAccess = !isLeaderOrAdmin && agendaSchedule.lateAccessLessonIds.has(lesson.id) && !isFullyDone;
-                    const isAccessible = isLeaderOrAdmin || isStudyOpen || isLateAccess || isFullyDone || hasManualOverride;
+                    const isAccessible = isLeaderOrAdmin || isStudyOpen || isLateAccess || isFullyDone || isDone || hasManualOverride;
                     const isLocked = !isLeaderOrAdmin && agendaSchedule.hasScheduledEvents && !isAccessible && !isFullyDone;
-                    const isNotScheduled = !isLeaderOrAdmin && agendaSchedule.hasScheduledEvents && !isScheduled && !isFullyDone && !hasManualOverride;
+                    const isNotScheduled = !isLeaderOrAdmin && agendaSchedule.hasScheduledEvents && !isScheduled && !isFullyDone && !isDone && !hasManualOverride;
 
                     let lockMessage = "";
                     if (isNotScheduled) {
