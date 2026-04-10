@@ -1086,14 +1086,29 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
         </div>
       )}
 
-      {/* Quick action buttons */}
-      <button
-        onClick={() => setActiveSection("liberacoes")}
-        className="w-full flex items-center justify-center gap-2 p-3 rounded-2xl border border-primary/20 bg-primary/10 hover:bg-primary/15 transition-colors text-primary"
-      >
-        <BookOpen className="w-4 h-4" />
-        <span className="font-inter text-sm font-bold">Liberar devocional para este participante</span>
-      </button>
+      {/* Quick action buttons — release lesson or devotional */}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => {
+            setManualReleaseSelection((prev) => ({ ...prev, content_kind: "lesson" }));
+            setActiveSection("liberacoes");
+          }}
+          className="flex items-center justify-center gap-2 p-3 rounded-2xl border border-primary/20 bg-primary/10 hover:bg-primary/15 transition-colors text-primary"
+        >
+          <BookOpen className="w-4 h-4 flex-shrink-0" />
+          <span className="font-inter text-sm font-bold">Liberar lição</span>
+        </button>
+        <button
+          onClick={() => {
+            setManualReleaseSelection((prev) => ({ ...prev, content_kind: "devotional" }));
+            setActiveSection("liberacoes");
+          }}
+          className="flex items-center justify-center gap-2 p-3 rounded-2xl border border-secondary/20 bg-secondary/10 hover:bg-secondary/15 transition-colors text-secondary-foreground"
+        >
+          <BookOpen className="w-4 h-4 flex-shrink-0" />
+          <span className="font-inter text-sm font-bold">Liberar devocional</span>
+        </button>
+      </div>
 
       {/* Quick action buttons */}
       <div className="grid grid-cols-2 gap-2">
