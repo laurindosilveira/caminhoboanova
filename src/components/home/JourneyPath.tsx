@@ -43,7 +43,11 @@ function ProgressRing({ pct, color, size = 56 }: { pct: number; color: string; s
   );
 }
 
-export default function JourneyPath() {
+type Props = {
+  onSelectLesson?: (lessonId: string) => void;
+};
+
+export default function JourneyPath({ onSelectLesson }: Props = {}) {
   const { profile } = useAuth();
   const { effectiveArea } = useAreaSwitch();
   const currentArea = effectiveArea || profile?.area || "";
@@ -343,14 +347,22 @@ export default function JourneyPath() {
                         const isDone = completedLessonIds.has(lesson.id);
                         const isFullyDone = fullyCompletedLessonIds.has(lesson.id);
                         const prevLesson = lessonIndex > 0 ? course.lessons[lessonIndex - 1] : null;
-                        const isLocked = prevLesson ? !fullyCompletedLessonIds.has(prevLesson.id) : false;
+                        // A lesson the user already started/completed is never locked for viewing
+                        const isLocked = !isDone && !isFullyDone && (prevLesson ? !fullyCompletedLessonIds.has(prevLesson.id) : false);
 
+                        const isClickable = !isLocked && !!onSelectLesson;
                         return (
                           <div
                             key={lesson.id}
+                            role={isClickable ? "button" : undefined}
+                            tabIndex={isClickable ? 0 : undefined}
+                            onClick={isClickable ? () => onSelectLesson(lesson.id) : undefined}
+                            onKeyDown={isClickable ? (e) => { if (e.key === "Enter" || e.key === " ") onSelectLesson(lesson.id); } : undefined}
                             className={`flex items-center gap-3 px-4 py-3 border-b border-border last:border-b-0 ${
                               isLocked ? "opacity-50" : ""
-                            } ${isFullyDone ? "bg-brand-green/5" : isDone ? "bg-secondary/5" : ""}`}
+                            } ${isFullyDone ? "bg-brand-green/5" : isDone ? "bg-secondary/5" : ""} ${
+                              isClickable ? "cursor-pointer active:bg-muted/60 transition-colors" : ""
+                            }`}
                           >
                             <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
                               isFullyDone ? "bg-brand-green/15" : isLocked ? "bg-muted" : "bg-secondary/10"

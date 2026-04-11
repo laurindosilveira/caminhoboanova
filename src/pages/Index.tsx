@@ -132,7 +132,11 @@ export default function Index() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: 0.25, ease: "easeOut" }}
             >
-              <JourneyPath />
+              <JourneyPath onSelectLesson={(lessonId) => {
+                setTargetLessonId(lessonId);
+                setTargetLessonMode("choice");
+                setActiveTab("discipulado");
+              }} />
             </motion.div>
 
             {/* Próxima etapa do curso ativo */}
@@ -255,7 +259,11 @@ export default function Index() {
             {profileSubTab === "minha-jornada" && (
               <>
                 <NextCourseActivityCard onNavigateToDiscipulado={() => setActiveTab("discipulado")} />
-                <JourneyPath />
+                <JourneyPath onSelectLesson={(lessonId) => {
+                  setTargetLessonId(lessonId);
+                  setTargetLessonMode("choice");
+                  setActiveTab("discipulado");
+                }} />
               </>
             )}
 
