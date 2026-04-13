@@ -213,11 +213,10 @@ export default function UserAgendaTab() {
       const all = (eventsData ?? []) as Event[];
       const isManager = role === "admin" || role === "lider";
       const filtered = all.filter(e => {
-        const isLessonEvent = e.type === "confirmatorio" && !!e.linked_lesson_id;
         // Personal events: only show to target user
         if ((e as any).target_user_id && (e as any).target_user_id !== user?.id) return false;
-        // Lesson-linked confirmatory events are shared for discipleship flow
-        if (!isLessonEvent && e.area && e.area !== currentArea) return false;
+        // Filter all events by area
+        if (e.area && e.area !== currentArea) return false;
         // If community is set: admins/leaders managing a different area bypass this filter
         if (e.community && !isManager && e.community !== profile?.community) return false;
         return true;
@@ -267,9 +266,8 @@ export default function UserAgendaTab() {
             const all = (eventsData ?? []) as Event[];
             const isManager = role === "admin" || role === "lider";
             const filtered = all.filter(e => {
-              const isLessonEvent = e.type === "confirmatorio" && !!e.linked_lesson_id;
               if ((e as any).target_user_id && (e as any).target_user_id !== currentUser?.id) return false;
-              if (!isLessonEvent && e.area && e.area !== currentArea) return false;
+              if (e.area && e.area !== currentArea) return false;
               if (e.community && !isManager && e.community !== profile?.community) return false;
               return true;
             });

@@ -71,18 +71,18 @@ export function useAgendaSchedule() {
 
     let eventsResult = await supabase
       .from("events")
-      .select("id, event_date, linked_lesson_id, title, type, area, turma_id, released_devotional_days")
+      .select("id, event_date, linked_lesson_id, title, type, area, released_devotional_days")
       .eq("type", "confirmatorio")
       .not("linked_lesson_id", "is", null)
-      .order("event_date");
+      .order("event_date") as any;
 
     if (eventsResult.error && /released_devotional_days/i.test(eventsResult.error.message)) {
       eventsResult = await supabase
         .from("events")
-        .select("id, event_date, linked_lesson_id, title, type, area, turma_id")
+        .select("id, event_date, linked_lesson_id, title, type, area")
         .eq("type", "confirmatorio")
         .not("linked_lesson_id", "is", null)
-        .order("event_date");
+        .order("event_date") as any;
     }
 
     let lessonsResult = await supabase
@@ -126,14 +126,7 @@ export function useAgendaSchedule() {
     const entries: ScheduleEntry[] = [];
     for (const event of events ?? []) {
       if (!event.linked_lesson_id) continue;
-      // If the event is assigned to a specific turma, only include it for members of that turma.
-      // Otherwise fall back to area filter (same logic as UserAgendaTab for non-turma events).
-      const eventTurmaId = (event as any).turma_id ?? null;
-      if (eventTurmaId) {
-        if (eventTurmaId !== profile?.turma_id) continue;
-      } else {
-        if (event.area && currentArea && event.area !== currentArea) continue;
-      }
+      if (event.area && currentArea && event.area !== currentArea) continue;
 
       const lesson = lessonMap.get(event.linked_lesson_id);
       if (!lesson) continue;
