@@ -126,7 +126,8 @@ export function useAgendaSchedule() {
     const entries: ScheduleEntry[] = [];
     for (const event of events ?? []) {
       if (!event.linked_lesson_id) continue;
-      if (event.area && currentArea && event.area !== currentArea) continue;
+      // Lesson-linked confirmatory events are shown cross-area (same logic as UserAgendaTab)
+      // so we intentionally skip the area filter here.
 
       const lesson = lessonMap.get(event.linked_lesson_id);
       if (!lesson) continue;
