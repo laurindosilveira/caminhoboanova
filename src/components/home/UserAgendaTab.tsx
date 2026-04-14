@@ -217,8 +217,9 @@ export default function UserAgendaTab() {
         if ((e as any).target_user_id && (e as any).target_user_id !== user?.id) return false;
         // Filter all events by area
         if (e.area && e.area !== currentArea) return false;
-        // If community is set: admins/leaders managing a different area bypass this filter
-        if (e.community && !isManager && e.community !== profile?.community) return false;
+        // Community filter: skip for confirmatorio (area-wide) and for managers
+        const isConfirmatorio = e.type === "confirmatorio";
+        if (e.community && !isManager && !isConfirmatorio && e.community !== profile?.community) return false;
         return true;
       });
       setEvents(filtered);
@@ -268,7 +269,8 @@ export default function UserAgendaTab() {
             const filtered = all.filter(e => {
               if ((e as any).target_user_id && (e as any).target_user_id !== currentUser?.id) return false;
               if (e.area && e.area !== currentArea) return false;
-              if (e.community && !isManager && e.community !== profile?.community) return false;
+              const isConfirmatorio = e.type === "confirmatorio";
+              if (e.community && !isManager && !isConfirmatorio && e.community !== profile?.community) return false;
               return true;
             });
             setEvents(filtered);
@@ -659,8 +661,9 @@ export default function UserAgendaTab() {
       </div>
 
       {/* ── CONFIRMAÇÃO DE PRESENÇA EM EVENTOS ──── */}
+      {/* Pass all area events (not filtered by type) so the modal always shows every event */}
       <WorshipConfirmation
-        events={filteredEvents}
+        events={events}
         attendanceRecords={attendanceRecords}
         onCheckIn={handleCheckIn}
       />
