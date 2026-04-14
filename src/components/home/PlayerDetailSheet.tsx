@@ -90,7 +90,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     ] = await Promise.all([
       supabase.from("lesson_responses").select("id, lesson_id, question_key, response, created_at").eq("user_id", userId),
       supabase.from("devotional_progress").select("id, devotional_id, completed_at").eq("user_id", userId),
-      supabase.from("attendance").select("id, event_id, status, created_at").eq("user_id", userId).eq("status", "presente"),
+      supabase.from("attendance").select("id, event_id, status, created_at").eq("user_id", userId).in("status", ["presente", "justificou"]),
       supabase.from("worship_attendance").select("id, worship_date, preacher_name, worship_time, status, created_at").eq("user_id", userId).eq("status", "aprovado"),
       supabase.from("achievement_unlocks").select("id, achievement_key, bonus_points, unlocked_at").eq("user_id", userId),
       supabase.from("user_progress").select("id, activity_id, completed_at").eq("user_id", userId),
@@ -156,12 +156,15 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
 
     (attendance ?? []).forEach((presence) => {
       const event = eventMap.get(presence.event_id);
+      const isJustified = presence.status === "justificou";
       allItems.push({
         id: `att-${presence.id}`,
         type: "attendance",
         title: event?.title ?? "Encontro",
-        subtitle: event?.event_date ? format(new Date(event.event_date), "d 'de' MMM", { locale: ptBR }) : "",
-        points: attPts,
+        subtitle: isJustified
+          ? `Falta justificada · ${event?.event_date ? format(new Date(event.event_date), "d 'de' MMM", { locale: ptBR }) : ""}`
+          : event?.event_date ? format(new Date(event.event_date), "d 'de' MMM", { locale: ptBR }) : "",
+        points: isJustified ? 0 : attPts,
         date: presence.created_at,
         deletable: true,
         tableId: presence.id,

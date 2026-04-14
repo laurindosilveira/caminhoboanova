@@ -77,10 +77,11 @@ export default function WorshipConfirmation({ events, attendanceRecords, onCheck
 
   const now = new Date();
 
-  // Events within check-in window: up to 7 days before and 2 days after
+  // Only show events that have already happened (up to 14 days back).
+  // Event stays visible until user confirms or justifies — status badge shown after action.
   const checkInEvents = events.filter(e => {
     const diffHours = (now.getTime() - new Date(e.event_date).getTime()) / 3600000;
-    return diffHours >= -168 && diffHours <= 48;
+    return diffHours >= 0 && diffHours <= 336; // 0h to 14 days after event
   });
 
   async function openModal() {
