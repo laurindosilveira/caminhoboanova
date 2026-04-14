@@ -22,6 +22,8 @@ interface ActivityItem {
   date: string;
   deletable: boolean;
   tableId?: string;
+  /** For attendance items: the event type (encontro, confirmatorio, culto, etc.) */
+  eventType?: string;
 }
 
 type LessonExpandedContent = {
@@ -94,7 +96,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       supabase.from("user_progress").select("id, activity_id, completed_at").eq("user_id", userId),
       supabase.from("lessons").select("id, title, course_id"),
       supabase.from("devotional_content").select("id, title, day_number, lesson_id"),
-      supabase.from("events").select("id, title, event_date"),
+      supabase.from("events").select("id, title, event_date, type"),
       supabase.from("activities").select("id, title, points, type"),
       supabase.rpc("get_game_config" as any),
       supabase.from("achievement_definitions" as any).select("key, icon, title"),
@@ -163,6 +165,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         date: presence.created_at,
         deletable: true,
         tableId: presence.id,
+        eventType: (event as any)?.type ?? "encontro",
       });
     });
 
@@ -421,14 +424,30 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     setDeleting(null);
   }
 
+  // Labels and icons for each event type (attendance sub-types)
+  const EVENT_TYPE_META: Record<string, { label: string; icon: React.ReactNode }> = {
+    encontro:      { label: "Encontro",           icon: <Calendar className="w-4 h-4 text-brand-green" /> },
+    confirmatorio: { label: "Ens. Confirmatório", icon: <Calendar className="w-4 h-4 text-primary" /> },
+    culto:         { label: "Culto",              icon: <Church className="w-4 h-4 text-accent" /> },
+    jemiac:        { label: "JEMIAC",             icon: <Calendar className="w-4 h-4 text-secondary" /> },
+    retiro:        { label: "Retiro",             icon: <Calendar className="w-4 h-4 text-amber-500" /> },
+    evento:        { label: "Evento",             icon: <Calendar className="w-4 h-4 text-muted-foreground" /> },
+  };
+
   const typeIcon = (type: string) => {
     switch (type) {
       case "lesson": return <BookOpen className="w-4 h-4 text-primary" />;
       case "devotional": return <BookOpen className="w-4 h-4 text-secondary" />;
-      case "attendance": return <Calendar className="w-4 h-4 text-brand-green" />;
-      case "worship": return <Church className="w-4 h-4 text-accent" />;
       case "achievement": return <Trophy className="w-4 h-4 text-amber-500" />;
-      default: return <Star className="w-4 h-4 text-muted-foreground" />;
+      case "worship": return <Church className="w-4 h-4 text-accent" />;
+      case "activity": return <Star className="w-4 h-4 text-muted-foreground" />;
+      default:
+        // attendance sub-types keyed as "att_<eventType>"
+        if (type.startsWith("att_")) {
+          const evType = type.slice(4);
+          return EVENT_TYPE_META[evType]?.icon ?? <Calendar className="w-4 h-4 text-brand-green" />;
+        }
+        return <Star className="w-4 h-4 text-muted-foreground" />;
     }
   };
 
@@ -436,17 +455,24 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     switch (type) {
       case "lesson": return "Lição";
       case "devotional": return "Devocional";
-      case "attendance": return "Presença";
-      case "worship": return "Culto";
       case "achievement": return "Conquista";
-      default: return "Atividade";
+      case "worship": return "Culto";
+      case "activity": return "Atividade";
+      default:
+        if (type.startsWith("att_")) {
+          const evType = type.slice(4);
+          return EVENT_TYPE_META[evType]?.label ?? "Presença";
+        }
+        return "Presença";
     }
   };
 
+  // Group items: attendance items are split by eventType (att_encontro, att_confirmatorio, etc.)
   const grouped = items.reduce((acc, item) => {
-    if (!acc[item.type]) acc[item.type] = { count: 0, points: 0 };
-    acc[item.type].count++;
-    acc[item.type].points += item.points;
+    const key = item.type === "attendance" ? `att_${item.eventType ?? "encontro"}` : item.type;
+    if (!acc[key]) acc[key] = { count: 0, points: 0 };
+    acc[key].count++;
+    acc[key].points += item.points;
     return acc;
   }, {} as Record<string, { count: number; points: number }>);
 
@@ -454,7 +480,12 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
 
   const [categoryModal, setCategoryModal] = useState<string | null>(null);
   const [previousCategoryModal, setPreviousCategoryModal] = useState<string | null>(null);
-  const categoryItems = categoryModal ? items.filter(i => i.type === categoryModal) : [];
+  // For attendance sub-types, filter by eventType; otherwise filter by type
+  const categoryItems = categoryModal
+    ? categoryModal.startsWith("att_")
+      ? items.filter(i => i.type === "attendance" && `att_${i.eventType ?? "encontro"}` === categoryModal)
+      : items.filter(i => i.type === categoryModal)
+    : [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={onClose}>
