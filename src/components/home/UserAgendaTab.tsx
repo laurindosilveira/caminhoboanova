@@ -659,7 +659,11 @@ export default function UserAgendaTab() {
       </div>
 
       {/* ── CONFIRMAÇÃO DE PRESENÇA EM EVENTOS ──── */}
-      <WorshipConfirmation />
+      <WorshipConfirmation
+        events={filteredEvents}
+        attendanceRecords={attendanceRecords}
+        onCheckIn={handleCheckIn}
+      />
 
       {/* ── FILTROS DE TIPO ──── */}
       <div className="flex flex-wrap gap-1.5">
@@ -795,7 +799,6 @@ export default function UserAgendaTab() {
                     linkedLesson={linkedLesson}
                     lessonContent={lessonContent}
                     attendanceRecords={attendanceRecords}
-                    onCheckIn={handleCheckIn}
                     onNavigateToLesson={setActiveTab}
                     canManage={canManage}
                     onEdit={openEditForm}
@@ -820,7 +823,6 @@ export default function UserAgendaTab() {
                     past
                     linkedLesson={linkedLesson}
                     attendanceRecords={attendanceRecords}
-                    onCheckIn={handleCheckIn}
                     canManage={canManage}
                     onEdit={openEditForm}
                     onDelete={handleDeleteEvent}
@@ -1178,15 +1180,13 @@ export default function UserAgendaTab() {
   );
 }
 
-function EventCard({ event, past = false, linkedLesson, lessonContent, attendanceRecords = [], onCheckIn, onNavigateToLesson, canManage, onEdit, onDelete, typeEmoji, typeLabel, typeColor }: {
+function EventCard({ event, past = false, linkedLesson, lessonContent, attendanceRecords = [], onNavigateToLesson, canManage, onEdit, onDelete, typeEmoji, typeLabel, typeColor }: {
   event: Event; past?: boolean; linkedLesson?: LessonInfo; lessonContent?: LessonContentInfo;
-  attendanceRecords?: AttendanceRecord[]; onCheckIn?: (eventId: string, status: "pendente_presente" | "pendente_falta", justification?: string) => void;
+  attendanceRecords?: AttendanceRecord[];
   onNavigateToLesson?: (tab: string) => void;
   canManage?: boolean; onEdit?: (event: Event) => void; onDelete?: (eventId: string) => void;
   typeEmoji?: string; typeLabel?: string; typeColor?: string;
 }) {
-  const [showJustification, setShowJustification] = useState(false);
-  const [justificationText, setJustificationText] = useState("");
   const [showPrep, setShowPrep] = useState(false);
   const fallback = STATIC_EVENT_TYPES[event.type] ?? STATIC_EVENT_TYPES.evento;
   const typeInfo = { emoji: typeEmoji ?? fallback.emoji, label: typeLabel ?? fallback.label, color: typeColor ?? fallback.color };
@@ -1437,58 +1437,15 @@ function EventCard({ event, past = false, linkedLesson, lessonContent, attendanc
             <p className="text-muted-foreground font-inter text-xs mt-1.5 leading-relaxed">{event.description}</p>
           )}
 
-          {/* Attendance buttons */}
-          {isCheckInWindow && onCheckIn && (
+          {/* Attendance status badge (read-only — check-in is done via the "Confirmar Presença" section) */}
+          {isCheckInWindow && existingRecord && (
             <div className="mt-2.5">
-              {existingRecord ? (
-                <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${getStatusDisplay(existingRecord.status).cls}`}>
-                  <span className="text-sm">{getStatusDisplay(existingRecord.status).icon}</span>
-                  <p className={`font-inter text-xs font-semibold`}>
-                    {getStatusDisplay(existingRecord.status).label}
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => onCheckIn(event.id, "pendente_presente")}
-                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-brand-green/10 text-brand-green hover:bg-brand-green/20 transition-colors"
-                    >
-                      <span className="text-sm">✅</span>
-                      <span className="font-inter text-xs font-semibold">Confirmar Presença</span>
-                    </button>
-                    <button
-                      onClick={() => setShowJustification(prev => !prev)}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl transition-colors ${showJustification ? "bg-accent/30 text-accent-foreground" : "bg-accent/10 text-accent-foreground hover:bg-accent/20"}`}
-                    >
-                      <span className="text-sm">📝</span>
-                      <span className="font-inter text-xs font-semibold">Justificar Falta</span>
-                    </button>
-                  </div>
-                  {showJustification && (
-                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
-                      <textarea
-                        value={justificationText}
-                        onChange={e => setJustificationText(e.target.value)}
-                        placeholder="Motivo da ausência..."
-                        className="w-full rounded-xl border border-border bg-muted/30 px-3 py-2 text-xs font-inter text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-                        rows={2}
-                        maxLength={300}
-                      />
-                      <button
-                        onClick={() => {
-                          onCheckIn(event.id, "pendente_falta", justificationText || undefined);
-                          setShowJustification(false);
-                        }}
-                        disabled={!justificationText.trim()}
-                        className="w-full py-2 rounded-xl bg-accent/15 text-accent-foreground hover:bg-accent/25 transition-colors font-inter text-xs font-semibold disabled:opacity-50"
-                      >
-                        Enviar justificativa
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${getStatusDisplay(existingRecord.status).cls}`}>
+                <span className="text-sm">{getStatusDisplay(existingRecord.status).icon}</span>
+                <p className="font-inter text-xs font-semibold">
+                  {getStatusDisplay(existingRecord.status).label}
+                </p>
+              </div>
             </div>
           )}
         </div>
