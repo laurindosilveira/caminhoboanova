@@ -4,7 +4,10 @@ import { CalendarDays, Send, CheckCircle2, XCircle, Clock as ClockIcon, ChevronR
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { getEventEmoji, getEventLabel } from "@/config/eventTypes";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { EVENT_TYPES, getEventEmoji, getEventLabel } from "@/config/eventTypes";
 import { useToast } from "@/hooks/use-toast";
 
 type EventItem = {
@@ -63,9 +66,9 @@ export default function WorshipConfirmation({ events, attendanceRecords, onCheck
 
   // Manual form (if event not in list)
   const [showManual, setShowManual] = useState(false);
-  const [manualName, setManualName] = useState("");
+  const [manualType, setManualType] = useState("");
+  const [manualDate, setManualDate] = useState<Date | undefined>();
   const [manualTime, setManualTime] = useState("");
-  const [manualType, setManualType] = useState("encontro");
   const [submittingManual, setSubmittingManual] = useState(false);
 
   // Past worship_attendance records (manual)
@@ -124,8 +127,8 @@ export default function WorshipConfirmation({ events, attendanceRecords, onCheck
   }
 
   async function handleManualSubmit() {
-    if (!manualName.trim() || !manualTime) {
-      toast({ title: "Preencha o nome do evento e o horário", variant: "destructive" });
+    if (!manualType || !manualDate || !manualTime) {
+      toast({ title: "Selecione o tipo de evento, a data e o horário", variant: "destructive" });
       return;
     }
     setSubmittingManual(true);
@@ -134,9 +137,9 @@ export default function WorshipConfirmation({ events, attendanceRecords, onCheck
 
     const { error } = await supabase.from("worship_attendance").insert({
       user_id: user.id,
-      worship_date: format(now, "yyyy-MM-dd"),
+      worship_date: format(manualDate, "yyyy-MM-dd"),
       worship_time: manualTime,
-      preacher_name: manualName.trim(),
+      preacher_name: getEventLabel(manualType),
       event_type: manualType,
     });
 
@@ -156,9 +159,9 @@ export default function WorshipConfirmation({ events, attendanceRecords, onCheck
     setShowJustification(false);
     setJustificationText("");
     setShowManual(false);
-    setManualName("");
+    setManualType("");
+    setManualDate(undefined);
     setManualTime("");
-    setManualType("encontro");
   }
 
   const selectedEvent = checkInEvents.find(e => e.id === selectedEventId);
@@ -319,17 +322,55 @@ export default function WorshipConfirmation({ events, attendanceRecords, onCheck
               </button>
 
               {showManual && (
-                <div className="space-y-3 mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="space-y-4 mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                  {/* Event type */}
                   <div>
-                    <label className="font-inter text-xs font-medium text-foreground mb-1 block">Nome do evento *</label>
-                    <input
-                      value={manualName}
-                      onChange={e => setManualName(e.target.value)}
-                      placeholder="Ex: Culto da manhã"
-                      maxLength={100}
-                      className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
+                    <label className="font-inter text-xs font-medium text-foreground mb-1.5 block">Tipo de evento *</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {EVENT_TYPES.map(t => (
+                        <button
+                          key={t.value}
+                          onClick={() => setManualType(t.value)}
+                          className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-inter font-medium border transition-all ${
+                            manualType === t.value
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "border-border bg-background text-foreground hover:border-primary/50"
+                          }`}
+                        >
+                          {t.emoji} {t.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
+
+                  {/* Date picker */}
+                  <div>
+                    <label className="font-inter text-xs font-medium text-foreground mb-1.5 block">Data do evento *</label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button className={cn(
+                          "w-full text-left px-3 py-2.5 rounded-xl border border-border bg-background font-inter text-sm transition-colors hover:border-primary/50",
+                          !manualDate && "text-muted-foreground"
+                        )}>
+                          {manualDate
+                            ? format(manualDate, "d 'de' MMMM yyyy", { locale: ptBR })
+                            : "Selecione a data"}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <CalendarPicker
+                          mode="single"
+                          selected={manualDate}
+                          onSelect={setManualDate}
+                          disabled={(d) => d > new Date()}
+                          className={cn("p-3 pointer-events-auto")}
+                          locale={ptBR}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  {/* Time */}
                   <div>
                     <label className="font-inter text-xs font-medium text-foreground mb-1.5 block">Horário *</label>
                     <div className="flex flex-wrap gap-1.5">
@@ -348,9 +389,10 @@ export default function WorshipConfirmation({ events, attendanceRecords, onCheck
                       ))}
                     </div>
                   </div>
+
                   <button
                     onClick={handleManualSubmit}
-                    disabled={submittingManual || !manualName.trim() || !manualTime}
+                    disabled={submittingManual || !manualType || !manualDate || !manualTime}
                     className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl font-montserrat font-bold text-sm text-primary-foreground disabled:opacity-50 transition-all active:scale-95"
                     style={{ background: "var(--gradient-hero)" }}
                   >
