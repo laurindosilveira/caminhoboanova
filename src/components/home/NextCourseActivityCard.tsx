@@ -81,11 +81,14 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const actionableEntries = agendaSchedule.schedule.filter(
+      (entry) => today >= entry.windowStart && now < entry.eventDate
+    );
 
-    // Iterate through schedule entries to find next action
-    for (const entry of agendaSchedule.schedule) {
-      // Skip entries whose window hasn't opened yet
-      if (today < entry.windowStart) continue;
+    // Iterate through currently active schedule entries only.
+    // Past events should not override the next upcoming teaching in this card.
+    for (const entry of actionableEntries) {
 
       const lessonId = entry.lessonId;
 
