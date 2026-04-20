@@ -105,7 +105,6 @@ export default function LessonDevotionalEditor({ lesson, onBack }: Props) {
       .from("events")
       .select("id, event_date, area, released_devotional_days")
       .eq("linked_lesson_id", lesson.id)
-      .eq("type", "confirmatorio")
       .order("event_date");
 
     if (!data) { setEventReleases([]); return; }

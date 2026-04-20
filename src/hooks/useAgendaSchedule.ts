@@ -42,7 +42,7 @@ export function getBusinessDaysBefore(date: Date, count: number): Date[] {
 }
 
 export function useAgendaSchedule() {
-  const { profile } = useAuth();
+  const { profile, role, user } = useAuth();
   const { effectiveArea } = useAreaSwitch();
   const currentArea = effectiveArea || profile?.area || "";
   const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
@@ -71,16 +71,14 @@ export function useAgendaSchedule() {
 
     let eventsResult = await supabase
       .from("events")
-      .select("id, event_date, linked_lesson_id, title, type, area, released_devotional_days")
-      .eq("type", "confirmatorio")
+      .select("id, event_date, linked_lesson_id, title, type, area, community, turma_id, target_user_id, released_devotional_days")
       .not("linked_lesson_id", "is", null)
       .order("event_date") as any;
 
     if (eventsResult.error && /released_devotional_days/i.test(eventsResult.error.message)) {
       eventsResult = await supabase
         .from("events")
-        .select("id, event_date, linked_lesson_id, title, type, area")
-        .eq("type", "confirmatorio")
+        .select("id, event_date, linked_lesson_id, title, type, area, community, turma_id, target_user_id")
         .not("linked_lesson_id", "is", null)
         .order("event_date") as any;
     }
@@ -124,9 +122,16 @@ export function useAgendaSchedule() {
     const courseMap = new Map((courses ?? []).map((c) => [c.id, c]));
 
     const entries: ScheduleEntry[] = [];
+    const isManager = role === "admin" || role === "lider";
+
     for (const event of events ?? []) {
       if (!event.linked_lesson_id) continue;
+      if ((event as any).target_user_id && (event as any).target_user_id !== user?.id) continue;
       if (event.area && currentArea && event.area !== currentArea) continue;
+      if ((event as any).turma_id && profile?.turma_id && (event as any).turma_id !== profile.turma_id) continue;
+      if ((event as any).turma_id && !profile?.turma_id) continue;
+      const isConfirmatorio = event.type === "confirmatorio";
+      if (event.community && !isManager && !isConfirmatorio && event.community !== profile?.community) continue;
 
       const lesson = lessonMap.get(event.linked_lesson_id);
       if (!lesson) continue;
