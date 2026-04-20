@@ -69,18 +69,36 @@ export function useAgendaSchedule() {
   async function fetchSchedule() {
     setLoading(true);
 
-    let eventsResult = await supabase
-      .from("events")
-      .select("id, event_date, linked_lesson_id, title, type, area, community, turma_id, target_user_id, released_devotional_days")
-      .not("linked_lesson_id", "is", null)
-      .order("event_date") as any;
+    const eventSelectFallbacks = [
+      "id, event_date, linked_lesson_id, title, type, area, community, turma_id, target_user_id, released_devotional_days",
+      "id, event_date, linked_lesson_id, title, type, area, community, turma_id, released_devotional_days",
+      "id, event_date, linked_lesson_id, title, type, area, community, released_devotional_days",
+      "id, event_date, linked_lesson_id, title, type, area, released_devotional_days",
+      "id, event_date, linked_lesson_id, title, type, area, community, turma_id, target_user_id",
+      "id, event_date, linked_lesson_id, title, type, area, community, turma_id",
+      "id, event_date, linked_lesson_id, title, type, area, community",
+      "id, event_date, linked_lesson_id, title, type, area",
+    ];
 
-    if (eventsResult.error && /released_devotional_days/i.test(eventsResult.error.message)) {
-      eventsResult = await supabase
+    let eventsResult: any = null;
+    for (const selectClause of eventSelectFallbacks) {
+      const result = await supabase
         .from("events")
-        .select("id, event_date, linked_lesson_id, title, type, area, community, turma_id, target_user_id")
+        .select(selectClause)
         .not("linked_lesson_id", "is", null)
         .order("event_date") as any;
+
+      if (!result.error) {
+        eventsResult = result;
+        break;
+      }
+    }
+
+    if (!eventsResult) {
+      eventsResult = {
+        data: null,
+        error: { message: "useAgendaSchedule: failed to load events with all fallbacks" },
+      };
     }
 
     let lessonsResult = await supabase
