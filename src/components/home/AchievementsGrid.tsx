@@ -784,6 +784,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
         <PlayerDetailSheet
           userId={selectedPlayer.userId}
           fullName={selectedPlayer.fullName}
+          currentArea={currentArea}
           onClose={() => setSelectedPlayer(null)}
           onPointsChanged={async () => {
             await fetchAreaRanking();

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCustomEventTypes } from "@/hooks/useCustomEventTypes";
 import { X, Trash2, ChevronRight, ChevronDown, ChevronUp, BookOpen, Calendar, Church, Trophy, Star, AlertTriangle, Gift, Plus } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -9,6 +10,7 @@ import { toast } from "sonner";
 interface Props {
   userId: string;
   fullName: string;
+  currentArea?: string;
   onClose: () => void;
   onPointsChanged?: () => void;
 }
@@ -16,6 +18,7 @@ interface Props {
 interface ActivityItem {
   id: string;
   type: "lesson" | "devotional" | "attendance" | "worship" | "achievement" | "activity";
+  source?: "native" | "manual_bonus";
   title: string;
   subtitle?: string;
   points: number;
@@ -51,9 +54,58 @@ type DetailModalState =
   | { itemId: string; type: "lesson"; title: string; content: LessonExpandedContent | null }
   | { itemId: string; type: "devotional"; title: string; content: DevotionalExpandedContent | null };
 
-export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsChanged }: Props) {
+type BonusCategory = "conquista" | "lesson" | "devotional" | "worship" | string;
+
+type BonusOption = {
+  value: BonusCategory;
+  label: string;
+  type: ActivityItem["type"];
+  points?: number;
+};
+
+function parseManualBonusKey(rawKey: string) {
+  if (!rawKey.startsWith("bonus_lider|")) return null;
+
+  const parts = rawKey.split("|");
+  if (parts.length >= 3) {
+    const category = parts[1] || "conquista";
+    const justification = decodeURIComponent(parts.slice(2).join("|"));
+    return { category, justification };
+  }
+
+  return {
+    category: "conquista",
+    justification: rawKey.slice("bonus_lider|".length),
+  };
+}
+
+function buildManualBonusKey(category: string, justification: string) {
+  return `bonus_lider|${category}|${encodeURIComponent(justification)}`;
+}
+
+function getManualBonusPresentation(category: string, eventTypeMeta: Record<string, { label: string; icon: React.ReactNode }>) {
+  switch (category) {
+    case "conquista":
+      return { type: "achievement" as const, title: "Bonus do Lider", subtitlePrefix: "" };
+    case "lesson":
+      return { type: "lesson" as const, title: "Bonus de Licao", subtitlePrefix: "" };
+    case "devotional":
+      return { type: "devotional" as const, title: "Bonus de Devocional", subtitlePrefix: "" };
+    case "worship":
+      return { type: "worship" as const, title: "Bonus de Culto", subtitlePrefix: "" };
+    default:
+      return {
+        type: "attendance" as const,
+        title: `Bonus em ${eventTypeMeta[category]?.label ?? category}`,
+        subtitlePrefix: eventTypeMeta[category]?.label ?? category,
+      };
+  }
+}
+
+export default function PlayerDetailSheet({ userId, fullName, currentArea, onClose, onPointsChanged }: Props) {
   const { role } = useAuth();
   const canDelete = role === "admin" || role === "lider";
+  const { customTypes } = useCustomEventTypes(currentArea);
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -63,14 +115,26 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
   const [gaps, setGaps] = useState<{ missingLessons: { id: string; title: string }[]; missingDevotionals: { id: string; title: string; day_number: number | null }[] } | null>(null);
   const [showGaps, setShowGaps] = useState(false);
   const [showBonusForm, setShowBonusForm] = useState(false);
+  const [bonusCategory, setBonusCategory] = useState<BonusCategory>("conquista");
   const [bonusPoints, setBonusPoints] = useState("");
   const [bonusJustification, setBonusJustification] = useState("");
   const [grantingBonus, setGrantingBonus] = useState(false);
   const [achievementLabels, setAchievementLabels] = useState<Map<string, AchievementLabel>>(new Map());
+  const [bonusOptions, setBonusOptions] = useState<BonusOption[]>([]);
 
   useEffect(() => {
     fetchActivities();
-  }, [userId]);
+  }, [userId, currentArea, customTypes]);
+
+  useEffect(() => {
+    const selectedOption = bonusOptions.find((option) => option.value === bonusCategory);
+    if (!selectedOption) return;
+    if (bonusCategory === "conquista") {
+      setBonusPoints("");
+      return;
+    }
+    setBonusPoints(String(selectedOption.points ?? 0));
+  }, [bonusCategory, bonusOptions]);
 
   async function fetchActivities() {
     setLoading(true);
@@ -87,6 +151,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       { data: activities },
       { data: gameConfig },
       { data: achDefs },
+      { data: customEventTypesData },
     ] = await Promise.all([
       supabase.from("lesson_responses").select("id, lesson_id, question_key, response, created_at").eq("user_id", userId),
       supabase.from("devotional_progress").select("id, devotional_id, completed_at").eq("user_id", userId),
@@ -100,6 +165,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       supabase.from("activities").select("id, title, points, type"),
       supabase.rpc("get_game_config" as any),
       supabase.from("achievement_definitions" as any).select("key, icon, title"),
+      supabase.from("custom_event_types").select("value, label, gives_points, points, area"),
     ]);
 
     // Carrega pontuações dinâmicas do game_config
@@ -109,6 +175,43 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     const devWkPts     = cfgMap.get("devotional_weekend_points") ?? 2;
     const attPts       = cfgMap.get("attendance_points")         ?? 10;
     const worshipPts   = cfgMap.get("worship_points")            ?? 5;
+
+    const customTypeMap = new Map<string, { label: string; gives_points: boolean; points: number; area: string | null }>(
+      (customEventTypesData ?? []).map((type: any) => [
+        type.value,
+        {
+          label: type.label,
+          gives_points: !!type.gives_points,
+          points: Number(type.points ?? 0),
+          area: type.area ?? null,
+        },
+      ])
+    );
+
+    const nextBonusOptions: BonusOption[] = [
+      { value: "conquista", label: "Conquista", type: "achievement" },
+      { value: "lesson", label: "Licao", type: "lesson", points: lessonPts },
+      { value: "devotional", label: "Devocional", type: "devotional", points: devPts },
+      { value: "worship", label: "Culto", type: "worship", points: worshipPts },
+      { value: "encontro", label: "Encontro", type: "attendance", points: customTypeMap.get("encontro")?.gives_points ? customTypeMap.get("encontro")!.points : attPts },
+      { value: "confirmatorio", label: "Ens. Confirmatorio", type: "attendance", points: customTypeMap.get("confirmatorio")?.gives_points ? customTypeMap.get("confirmatorio")!.points : attPts },
+      { value: "culto", label: "Culto (Agenda)", type: "attendance", points: customTypeMap.get("culto")?.gives_points ? customTypeMap.get("culto")!.points : attPts },
+      { value: "jemiac", label: "JEMIAC", type: "attendance", points: customTypeMap.get("jemiac")?.gives_points ? customTypeMap.get("jemiac")!.points : attPts },
+      { value: "retiro", label: "Retiro", type: "attendance", points: customTypeMap.get("retiro")?.gives_points ? customTypeMap.get("retiro")!.points : attPts },
+      { value: "evento", label: "Evento", type: "attendance", points: customTypeMap.get("evento")?.gives_points ? customTypeMap.get("evento")!.points : attPts },
+    ];
+
+    customTypes.forEach((type) => {
+      if (nextBonusOptions.some((option) => option.value === type.value)) return;
+      nextBonusOptions.push({
+        value: type.value,
+        label: type.label,
+        type: "attendance",
+        points: type.gives_points ? type.points : attPts,
+      });
+    });
+
+    setBonusOptions(nextBonusOptions);
 
     const labelMap = new Map<string, AchievementLabel>(
       (achDefs ?? []).map((d: any) => [d.key, { icon: d.icon, title: d.title }])
@@ -129,6 +232,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       allItems.push({
         id: `lesson-${lessonId}`,
         type: "lesson",
+        source: "native",
         title: lesson?.title ?? "Lição",
         subtitle: "Estudo de lição",
         points: lessonPts,
@@ -145,6 +249,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       allItems.push({
         id: `dev-${progress.id}`,
         type: "devotional",
+        source: "native",
         title: devotional?.title || `Devocional dia ${devotional?.day_number ?? "?"}`,
         subtitle: dayOfWeek === 0 || dayOfWeek === 6 ? "Recuperado no fim de semana" : "Devocional diário",
         points,
@@ -160,6 +265,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       allItems.push({
         id: `att-${presence.id}`,
         type: "attendance",
+        source: "native",
         title: event?.title ?? "Encontro",
         subtitle: isJustified
           ? `Falta justificada · ${event?.event_date ? format(new Date(event.event_date), "d 'de' MMM", { locale: ptBR }) : ""}`
@@ -176,6 +282,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       allItems.push({
         id: `wor-${service.id}`,
         type: "worship",
+        source: "native",
         title: `Culto - ${service.preacher_name}`,
         subtitle: `${format(new Date(service.worship_date), "d/MM/yyyy")} às ${service.worship_time}`,
         points: worshipPts,
@@ -186,11 +293,14 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     });
 
     (achievements ?? []).forEach((achievement) => {
-      const isManualBonus = achievement.achievement_key.startsWith("bonus_lider|");
+      const manualBonus = parseManualBonusKey(achievement.achievement_key);
+      const isManualBonus = !!manualBonus;
       const label = labelMap.get(achievement.achievement_key);
+      const presentation = manualBonus ? getManualBonusPresentation(manualBonus.category, EVENT_TYPE_META) : null;
       allItems.push({
         id: `ach-${achievement.id}`,
-        type: "achievement",
+        type: presentation?.type ?? "achievement",
+        source: isManualBonus ? "manual_bonus" : "native",
         title: isManualBonus
           ? "🌟 Bônus do Líder"
           : label ? `${label.icon} ${label.title}` : `🏆 ${achievement.achievement_key}`,
@@ -202,6 +312,15 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         deletable: true,
         tableId: achievement.id,
       });
+
+      if (isManualBonus && manualBonus) {
+        const currentItem = allItems[allItems.length - 1];
+        currentItem.type = presentation?.type ?? "achievement";
+        currentItem.source = "manual_bonus";
+        currentItem.title = presentation?.title ?? "Bonus do Lider";
+        currentItem.subtitle = manualBonus.justification;
+        currentItem.eventType = presentation?.type === "attendance" ? manualBonus.category : undefined;
+      }
     });
 
     (userProgress ?? []).forEach((progress) => {
@@ -210,6 +329,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         allItems.push({
           id: `act-${progress.id}`,
           type: "activity",
+          source: "native",
           title: activity.title,
           subtitle: "Atividade extra",
           points: activity.points ?? 0,
@@ -336,7 +456,15 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     setLoadingDetail(false);
   }
 
+  function resetBonusForm() {
+    setBonusCategory("conquista");
+    setBonusPoints("");
+    setBonusJustification("");
+    setShowBonusForm(false);
+  }
+
   async function handleGrantBonus() {
+    const selectedOption = bonusOptions.find((option) => option.value === bonusCategory);
     const pts = parseInt(bonusPoints, 10);
     if (!pts || pts <= 0) { toast.error("Informe uma quantidade de pontos válida."); return; }
     if (pts > 500) { toast.error("O bônus não pode ultrapassar 500 pontos por vez."); return; }
@@ -346,7 +474,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     setGrantingBonus(true);
     const { data: { user } } = await supabase.auth.getUser();
     try {
-      const key = `bonus_lider|${bonusJustification.trim()}`;
+      const key = buildManualBonusKey(bonusCategory, bonusJustification.trim());
       const { data, error } = await supabase.from("achievement_unlocks").insert({
         user_id: userId,
         achievement_key: key,
@@ -363,21 +491,22 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
         points_granted: pts,
       });
 
+      const presentation = getManualBonusPresentation(bonusCategory, EVENT_TYPE_META);
       setItems(prev => [{
         id: `ach-${data.id}`,
-        type: "achievement",
-        title: "🌟 Bônus do Líder",
+        type: presentation.type,
+        source: "manual_bonus",
+        title: presentation.title,
         subtitle: bonusJustification.trim(),
         points: pts,
         date: data.unlocked_at,
         deletable: true,
         tableId: data.id,
+        eventType: presentation.type === "attendance" ? bonusCategory : undefined,
       }, ...prev]);
       setTotalPoints(prev => prev + pts);
-      setBonusPoints("");
-      setBonusJustification("");
-      setShowBonusForm(false);
-      toast.success(`+${pts} pontos concedidos a ${fullName}`);
+      resetBonusForm();
+      toast.success(`+${pts} pontos concedidos a ${fullName}${selectedOption ? ` em ${selectedOption.label}` : ""}`);
       onPointsChanged?.();
     } catch (err: any) {
       toast.error("Erro ao conceder bônus: " + (err.message ?? ""));
@@ -392,7 +521,9 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     const { data: { user } } = await supabase.auth.getUser();
 
     try {
-      if (item.type === "lesson" && item.tableId) {
+      if (item.source === "manual_bonus" && item.tableId) {
+        await supabase.from("achievement_unlocks").delete().eq("id", item.tableId);
+      } else if (item.type === "lesson" && item.tableId) {
         await supabase.from("lesson_responses").delete().eq("user_id", userId).eq("lesson_id", item.tableId);
       } else if (item.type === "devotional" && item.tableId) {
         await supabase.from("devotional_progress").delete().eq("id", item.tableId);
@@ -409,7 +540,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       await supabase.from("activity_removal_log").insert({
         removed_by: user?.id ?? "",
         target_user_id: userId,
-        activity_type: item.type,
+        activity_type: item.source === "manual_bonus" ? "achievement" : item.type,
         activity_id: item.tableId ?? item.id,
         activity_title: item.title,
         points_removed: item.points,
@@ -435,6 +566,12 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
     jemiac:        { label: "JEMIAC",             icon: <Calendar className="w-4 h-4 text-secondary" /> },
     retiro:        { label: "Retiro",             icon: <Calendar className="w-4 h-4 text-amber-500" /> },
     evento:        { label: "Evento",             icon: <Calendar className="w-4 h-4 text-muted-foreground" /> },
+    ...Object.fromEntries(
+      customTypes.map((type) => [
+        type.value,
+        { label: type.label, icon: <Calendar className="w-4 h-4 text-brand-green" /> },
+      ])
+    ),
   };
 
   const typeIcon = (type: string) => {
@@ -489,6 +626,8 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
       ? items.filter(i => i.type === "attendance" && `att_${i.eventType ?? "encontro"}` === categoryModal)
       : items.filter(i => i.type === categoryModal)
     : [];
+  const selectedBonusOption = bonusOptions.find((option) => option.value === bonusCategory);
+  const isManualConquistaBonus = bonusCategory === "conquista";
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={onClose}>
@@ -523,6 +662,17 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
               <Gift className="w-4 h-4 text-primary flex-shrink-0" />
               <p className="font-montserrat font-bold text-foreground text-sm">Conceder pontos extras</p>
             </div>
+            <select
+              value={bonusCategory}
+              onChange={e => setBonusCategory(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              {bonusOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
             <div className="flex gap-2">
               <input
                 type="number"
@@ -531,7 +681,8 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
                 placeholder="Pts"
                 value={bonusPoints}
                 onChange={e => setBonusPoints(e.target.value)}
-                className="w-20 px-3 py-2 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                disabled={!isManualConquistaBonus}
+                className="w-20 px-3 py-2 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
               />
               <input
                 type="text"
@@ -541,6 +692,11 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
                 className="flex-1 px-3 py-2 rounded-xl border border-border bg-background text-foreground font-inter text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
+            {!isManualConquistaBonus && selectedBonusOption && (
+              <p className="text-xs font-inter text-muted-foreground">
+                Pontuacao automatica para {selectedBonusOption.label}: +{selectedBonusOption.points ?? 0}
+              </p>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={handleGrantBonus}
@@ -551,7 +707,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
                 {grantingBonus ? "Concedendo..." : "Confirmar bônus"}
               </button>
               <button
-                onClick={() => { setShowBonusForm(false); setBonusPoints(""); setBonusJustification(""); }}
+                onClick={resetBonusForm}
                 className="px-4 py-2 rounded-xl bg-muted text-foreground font-inter text-sm"
               >
                 Cancelar
@@ -678,7 +834,7 @@ export default function PlayerDetailSheet({ userId, fullName, onClose, onPointsC
                 <p className="text-center text-muted-foreground font-inter text-sm py-8">Nenhuma atividade nesta categoria.</p>
               ) : (
                 categoryItems.map((item) => {
-                  const canOpenDetails = item.type === "lesson" || item.type === "devotional";
+                  const canOpenDetails = item.source !== "manual_bonus" && (item.type === "lesson" || item.type === "devotional");
                   return (
                     <div
                       key={item.id}
