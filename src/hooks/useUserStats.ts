@@ -92,7 +92,7 @@ export function useUserStats(currentArea?: string): UserStats {
         supabase.from("lessons").select("id, course_id"),
         supabase.from("challenge_participants").select("id, completed").eq("user_id", user.id).eq("completed", true),
         supabase.rpc("get_game_config" as any),
-        supabase.from("custom_event_types").select("value, gives_points, points"),
+        supabase.from("custom_event_types").select("value, gives_points, points, area"),
       ]);
 
       // Carrega configuração dinâmica com fallback nos defaults
@@ -137,9 +137,19 @@ export function useUserStats(currentArea?: string): UserStats {
       }, 0);
 
       // Map custom event type value → points
-      const customTypeMap = new Map<string, { gives_points: boolean; points: number }>(
-        (customEventTypesData ?? []).map((t: any) => [t.value, { gives_points: t.gives_points, points: t.points }])
+      const relevantCustomTypes = (customEventTypesData ?? []).filter((t: any) =>
+        !t.area || !currentArea || t.area === currentArea
       );
+      const customTypeMap = new Map<string, { gives_points: boolean; points: number }>();
+      relevantCustomTypes.forEach((t: any) => {
+        const existing = customTypeMap.get(t.value);
+        if (!existing || t.area === currentArea) {
+          customTypeMap.set(t.value, {
+            gives_points: !!t.gives_points,
+            points: Number(t.points ?? 0),
+          });
+        }
+      });
 
       // Fetch event types for attended events so we can apply per-type custom points
       const presentAttendance = (attendance ?? []).filter(a => a.status === "presente");
