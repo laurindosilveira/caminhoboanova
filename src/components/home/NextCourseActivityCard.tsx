@@ -23,7 +23,7 @@ type NextItem = {
 };
 
 export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { onNavigateToDiscipulado: () => void }) {
-  const { profile } = useAuth();
+  const { profile, role, user } = useAuth();
   const { effectiveArea } = useAreaSwitch();
   const currentArea = effectiveArea || profile?.area || "";
   const [nextItem, setNextItem] = useState<NextItem | null>(null);
@@ -52,8 +52,91 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
     fetchNext();
   }, [currentArea, agendaSchedule.loading, agendaSchedule.schedule]);
 
+  async function loadScheduleFallback() {
+    const eventSelectFallbacks = [
+      "id, event_date, linked_lesson_id, title, type, area, community, turma_id, target_user_id",
+      "id, event_date, linked_lesson_id, title, type, area, community, turma_id",
+      "id, event_date, linked_lesson_id, title, type, area, community",
+      "id, event_date, linked_lesson_id, title, type, area",
+    ];
+
+    let events: any[] = [];
+    for (const selectClause of eventSelectFallbacks) {
+      const result = await supabase
+        .from("events")
+        .select(selectClause)
+        .not("linked_lesson_id", "is", null)
+        .order("event_date");
+      if (!result.error) {
+        events = result.data ?? [];
+        break;
+      }
+    }
+
+    if (events.length === 0) return [];
+
+    const [{ data: lessons }, { data: courses }] = await Promise.all([
+      supabase.from("lessons").select("id, title, order_num, course_id"),
+      supabase.from("courses").select("id, title, order_num"),
+    ]);
+
+    const lessonMap = new Map((lessons ?? []).map((lesson: any) => [lesson.id, lesson]));
+    const courseMap = new Map((courses ?? []).map((course: any) => [course.id, course]));
+    const isManager = role === "admin" || role === "lider";
+
+    return events
+      .filter((event: any) => {
+        if (!event.linked_lesson_id) return false;
+        if (event.target_user_id && event.target_user_id !== user?.id) return false;
+        if (event.area && currentArea && event.area !== currentArea) return false;
+        if (event.turma_id && profile?.turma_id && event.turma_id !== profile.turma_id) return false;
+        if (event.turma_id && !profile?.turma_id) return false;
+        const isConfirmatorio = event.type === "confirmatorio";
+        if (event.community && !isManager && !isConfirmatorio && event.community !== profile?.community) return false;
+        return true;
+      })
+      .map((event: any) => {
+        const lesson = lessonMap.get(event.linked_lesson_id);
+        if (!lesson) return null;
+        const course = courseMap.get(lesson.course_id);
+        if (!course) return null;
+        const eventDate = new Date(event.event_date);
+        const devotionalDates = [];
+        const current = new Date(eventDate);
+        current.setHours(0, 0, 0, 0);
+        current.setDate(current.getDate() - 1);
+        while (devotionalDates.length < 10) {
+          if (current.getDay() !== 0 && current.getDay() !== 6) {
+            devotionalDates.unshift(new Date(current));
+          }
+          current.setDate(current.getDate() - 1);
+        }
+        return {
+          eventId: event.id,
+          eventDate,
+          eventTitle: event.title,
+          lessonId: lesson.id,
+          lessonTitle: lesson.title,
+          lessonOrder: lesson.order_num,
+          courseId: course.id,
+          courseTitle: course.title,
+          courseOrder: course.order_num,
+          windowStart: devotionalDates[0],
+          devotionalDates,
+          releasedDayNumbers: null,
+          autoLimited: false,
+          devotionalMode: "10_days" as const,
+        };
+      })
+      .filter(Boolean);
+  }
+
   async function fetchNext() {
-    if (!agendaSchedule.hasScheduledEvents) {
+    const effectiveSchedule = agendaSchedule.schedule.length > 0
+      ? agendaSchedule.schedule
+      : await loadScheduleFallback();
+
+    if (effectiveSchedule.length === 0) {
       setNoSchedule(true);
       setLoading(false);
       return;
@@ -82,7 +165,7 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const now = new Date();
-    const actionableEntries = agendaSchedule.schedule.filter(
+    const actionableEntries = effectiveSchedule.filter(
       (entry) => today >= entry.windowStart && now < entry.eventDate
     );
 
@@ -211,7 +294,7 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
     }
 
     // Check for future scheduled events
-    const futureEntry = agendaSchedule.schedule.find(e => today < e.windowStart);
+    const futureEntry = effectiveSchedule.find(e => today < e.windowStart);
     if (futureEntry) {
       setNextItem(null);
       setNoSchedule(false);
