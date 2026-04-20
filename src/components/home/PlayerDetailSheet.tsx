@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCustomEventTypes } from "@/hooks/useCustomEventTypes";
-import { X, Trash2, ChevronRight, ChevronDown, ChevronUp, BookOpen, Calendar, Church, Trophy, Star, AlertTriangle, Gift, Plus } from "lucide-react";
+import { X, Trash2, ChevronRight, ChevronDown, ChevronUp, BookOpen, Calendar, Church, Trophy, Star, AlertTriangle, Gift, Plus, MessageCircle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
@@ -102,6 +102,13 @@ function getManualBonusPresentation(category: string, eventTypeMeta: Record<stri
   }
 }
 
+function buildWhatsAppLink(phone?: string | null) {
+  const digits = (phone ?? "").replace(/\D/g, "");
+  if (!digits) return null;
+  const normalized = digits.startsWith("55") ? digits : `55${digits}`;
+  return `https://wa.me/${normalized}`;
+}
+
 export default function PlayerDetailSheet({ userId, fullName, currentArea, onClose, onPointsChanged }: Props) {
   const { role } = useAuth();
   const canDelete = role === "admin" || role === "lider";
@@ -121,6 +128,7 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
   const [grantingBonus, setGrantingBonus] = useState(false);
   const [achievementLabels, setAchievementLabels] = useState<Map<string, AchievementLabel>>(new Map());
   const [bonusOptions, setBonusOptions] = useState<BonusOption[]>([]);
+  const [phone, setPhone] = useState<string | null>(null);
 
   useEffect(() => {
     fetchActivities();
@@ -152,6 +160,7 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
       { data: gameConfig },
       { data: achDefs },
       { data: customEventTypesData },
+      { data: profileData },
     ] = await Promise.all([
       supabase.from("lesson_responses").select("id, lesson_id, question_key, response, created_at").eq("user_id", userId),
       supabase.from("devotional_progress").select("id, devotional_id, completed_at").eq("user_id", userId),
@@ -166,6 +175,7 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
       supabase.rpc("get_game_config" as any),
       supabase.from("achievement_definitions" as any).select("key, icon, title"),
       supabase.from("custom_event_types").select("value, label, gives_points, points, area"),
+      supabase.from("profiles").select("phone").eq("user_id", userId).maybeSingle(),
     ]);
 
     // Carrega pontuações dinâmicas do game_config
@@ -212,6 +222,7 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
     });
 
     setBonusOptions(nextBonusOptions);
+    setPhone(profileData?.phone ?? null);
 
     const labelMap = new Map<string, AchievementLabel>(
       (achDefs ?? []).map((d: any) => [d.key, { icon: d.icon, title: d.title }])
@@ -628,6 +639,7 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
     : [];
   const selectedBonusOption = bonusOptions.find((option) => option.value === bonusCategory);
   const isManualConquistaBonus = bonusCategory === "conquista";
+  const whatsappLink = buildWhatsAppLink(phone);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50" onClick={onClose}>
@@ -639,6 +651,17 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
           <div>
             <p className="font-montserrat font-bold text-foreground text-base">{fullName}</p>
             <p className="text-muted-foreground font-inter text-xs">{totalPoints} pontos · {items.length} atividades</p>
+            {whatsappLink && (
+              <a
+                href={whatsappLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-flex items-center gap-1.5 text-xs font-inter font-semibold text-primary hover:underline"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                Conversar no WhatsApp
+              </a>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {canDelete && (
