@@ -105,6 +105,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
   const [prayerCount, setPrayerCount] = useState(0);
   const [isApto, setIsApto] = useState(false);
   const [unlockedKeys, setUnlockedKeys] = useState<Set<string>>(new Set());
+  const [unlocksLoaded, setUnlocksLoaded] = useState(false);
   const [totalLessons, setTotalLessons] = useState(0);
   const [totalDevotionals, setTotalDevotionals] = useState(0);
   const [totalEvents, setTotalEvents] = useState(0);
@@ -124,6 +125,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
     setLoadingMembers(true);
     setCelebrationFired(false);
     setSelectedPlayer(null);
+    setUnlocksLoaded(false);
   }, [currentArea]);
 
   // Load achievement definitions from DB (refreshable by config dialog)
@@ -159,24 +161,150 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
           const { data, error } = await supabase.rpc("get_community_ranking", {
             _community: community as any,
           });
-
-          if (error) {
-            throw error;
-          }
-
-          return (data ?? []) as RankingMember[];
+          return { community, data: (data ?? []) as any[], error };
         })
       );
 
       const dedupedMembers = new Map<string, RankingMember>();
-      rankingResponses.flat().forEach((member) => {
-        dedupedMembers.set(member.user_id, {
-          user_id: member.user_id,
-          full_name: getSafeName(member.full_name),
-          completed_count: Number(member.completed_count ?? 0),
-          faith_points: Number(member.faith_points ?? 0),
+      const failedCommunities = rankingResponses.filter((response) => response.error).map((response) => response.community);
+
+      rankingResponses
+        .filter((response) => !response.error)
+        .flatMap((response) => response.data)
+        .forEach((member: any) => {
+          dedupedMembers.set(member.user_id, {
+            user_id: member.user_id,
+            full_name: getSafeName(member.full_name),
+            completed_count: Number(member.completed_count ?? 0),
+            faith_points: Number(member.faith_points ?? member.points ?? 0),
+          });
         });
-      });
+
+      if (failedCommunities.length > 0) {
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("user_id, full_name, community, area")
+          .in("community", failedCommunities as any);
+
+        const scopedProfiles = (profilesData ?? []).filter((profile: any) => profile.community && failedCommunities.includes(profile.community));
+        const userIds = scopedProfiles.map((profile: any) => profile.user_id);
+
+        if (userIds.length > 0) {
+          const [
+            { data: progressData },
+            { data: lessonResponsesData },
+            { data: devotionalProgressData },
+            { data: attendanceData },
+            { data: worshipData },
+            { data: achievementUnlocksData },
+            { data: lessonsData },
+            { data: coursesData },
+            { data: challengeData },
+            { data: gameConfig },
+            { data: customEventTypesData },
+          ] = await Promise.all([
+            supabase.from("user_progress").select("user_id, activity_id").in("user_id", userIds),
+            supabase.from("lesson_responses").select("user_id, lesson_id").in("user_id", userIds),
+            supabase.from("devotional_progress").select("user_id, completed_at, is_recovery, awarded_points").in("user_id", userIds),
+            supabase.from("attendance").select("user_id, event_id, status").in("user_id", userIds).eq("status", "presente"),
+            supabase.from("worship_attendance").select("user_id").in("user_id", userIds).eq("status", "aprovado"),
+            supabase.from("achievement_unlocks").select("user_id, bonus_points").in("user_id", userIds),
+            supabase.from("lessons").select("id, course_id"),
+            supabase.from("courses").select("id"),
+            supabase.from("challenge_participants").select("user_id").in("user_id", userIds).eq("completed", true),
+            supabase.rpc("get_game_config" as any),
+            supabase.from("custom_event_types").select("value, gives_points, points, area"),
+          ]);
+
+          const cfgMap = new Map<string, number>((gameConfig ?? []).map((row: any) => [row.key, Number(row.value)]));
+          const cfg = {
+            lessonPoints: cfgMap.get("lesson_points") ?? 20,
+            devotionalPoints: cfgMap.get("devotional_points") ?? 5,
+            devotionalWeekendPts: cfgMap.get("devotional_weekend_points") ?? 2,
+            devotionalRecoveryPts: cfgMap.get("devotional_recovery_points") ?? 2,
+            attendancePoints: cfgMap.get("attendance_points") ?? 10,
+            worshipPoints: cfgMap.get("worship_points") ?? 5,
+            courseBonus: cfgMap.get("course_completion_bonus") ?? 100,
+            challengePoints: cfgMap.get("challenge_points") ?? 15,
+          };
+
+          const attendedEventIds = [...new Set((attendanceData ?? []).map((row: any) => row.event_id).filter(Boolean))];
+          const { data: eventsData } = attendedEventIds.length > 0
+            ? await supabase.from("events").select("id, type").in("id", attendedEventIds)
+            : { data: [] as any[] };
+          const eventTypeById = new Map<string, string>((eventsData ?? []).map((event: any) => [event.id, event.type]));
+
+          scopedProfiles.forEach((profile: any) => {
+            const relevantCustomTypes = (customEventTypesData ?? []).filter((type: any) =>
+              !type.area || !profile.area || type.area === profile.area
+            );
+            const customTypeMap = new Map<string, { gives_points: boolean; points: number }>();
+            relevantCustomTypes.forEach((type: any) => {
+              const existing = customTypeMap.get(type.value);
+              if (!existing || type.area === profile.area) {
+                customTypeMap.set(type.value, {
+                  gives_points: !!type.gives_points,
+                  points: Number(type.points ?? 0),
+                });
+              }
+            });
+
+            const completedActivityIds = new Set(
+              (progressData ?? [])
+                .filter((row: any) => row.user_id === profile.user_id)
+                .map((row: any) => row.activity_id)
+            );
+            const completedLessonIds = new Set(
+              (lessonResponsesData ?? [])
+                .filter((row: any) => row.user_id === profile.user_id)
+                .map((row: any) => row.lesson_id)
+            );
+            const devotionals = (devotionalProgressData ?? []).filter((row: any) => row.user_id === profile.user_id);
+            const presentAttendance = (attendanceData ?? []).filter((row: any) => row.user_id === profile.user_id);
+            const worshipCount = (worshipData ?? []).filter((row: any) => row.user_id === profile.user_id).length;
+            const achievementBonus = (achievementUnlocksData ?? [])
+              .filter((row: any) => row.user_id === profile.user_id)
+              .reduce((sum: number, row: any) => sum + Number(row.bonus_points ?? 0), 0);
+            const challengeCount = (challengeData ?? []).filter((row: any) => row.user_id === profile.user_id).length;
+
+            const devotionalPoints = devotionals.reduce((sum: number, row: any) => {
+              if (typeof row.awarded_points === "number") return sum + row.awarded_points;
+              if (row.is_recovery) return sum + cfg.devotionalRecoveryPts;
+              const dow = new Date(row.completed_at).getDay();
+              return sum + (dow === 0 || dow === 6 ? cfg.devotionalWeekendPts : cfg.devotionalPoints);
+            }, 0);
+
+            const attendancePoints = presentAttendance.reduce((sum: number, row: any) => {
+              const eventType = eventTypeById.get(row.event_id);
+              const custom = eventType ? customTypeMap.get(eventType) : undefined;
+              if (custom && custom.gives_points) return sum + custom.points;
+              return sum + cfg.attendancePoints;
+            }, 0);
+
+            let courseBonus = 0;
+            (coursesData ?? []).forEach((course: any) => {
+              const courseLessons = (lessonsData ?? []).filter((lesson: any) => lesson.course_id === course.id);
+              if (courseLessons.length > 0 && courseLessons.every((lesson: any) => completedLessonIds.has(lesson.id))) {
+                courseBonus += cfg.courseBonus;
+              }
+            });
+
+            dedupedMembers.set(profile.user_id, {
+              user_id: profile.user_id,
+              full_name: getSafeName(profile.full_name),
+              completed_count: completedActivityIds.size,
+              faith_points:
+                completedLessonIds.size * cfg.lessonPoints +
+                devotionalPoints +
+                attendancePoints +
+                worshipCount * cfg.worshipPoints +
+                achievementBonus +
+                courseBonus +
+                challengeCount * cfg.challengePoints,
+            });
+          });
+        }
+      }
 
       const combined = [...dedupedMembers.values()].sort((a, b) => {
         if (b.faith_points !== a.faith_points) {
@@ -189,6 +317,9 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
       });
 
       setMembers(combined);
+      if (failedCommunities.length > 0) {
+        toast.error("Parte do ranking oficial falhou; foi usado um calculo local de contingencia.");
+      }
     } catch (error: any) {
       console.error("Erro ao carregar ranking da area:", error);
       setMembers([]);
@@ -276,6 +407,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
       setPrayerCount(prayerC ?? 0);
       setIsApto(planData?.[0]?.aptidao === "apto");
       setUnlockedKeys(new Set((existingUnlocks ?? []).map(u => u.achievement_key)));
+      setUnlocksLoaded(true);
       setTotalLessons(totalLessonsCount);
       setTotalDevotionals(totalDevsCount);
       setTotalEvents(totalEventsC ?? 0);
@@ -362,7 +494,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
   useEffect(() => {
     async function saveNewUnlocks() {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user || unlockedKeys.size === 0 && achievements.every(a => !a.unlocked)) return;
+      if (!user || !unlocksLoaded) return;
 
       const newlyUnlocked = achievements.filter(a => a.unlocked && !unlockedKeys.has(a.key));
       if (newlyUnlocked.length === 0) return;
@@ -398,7 +530,7 @@ export default function AchievementsGrid({ faithPoints, streakDays, completedCou
     }
     saveNewUnlocks();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [faithPoints, streakDays, completedCount, devCount, worshipCount, attendanceCount, chatCount, prayerCount, isApto]);
+  }, [faithPoints, streakDays, completedCount, devCount, worshipCount, attendanceCount, chatCount, prayerCount, isApto, unlocksLoaded]);
 
   const unlockedCount = achievements.filter(a => a.unlocked).length;
 
