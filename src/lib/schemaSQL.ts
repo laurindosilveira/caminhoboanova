@@ -922,6 +922,7 @@ CREATE POLICY "Authenticated users can view course unlocks" ON public.course_unl
 CREATE POLICY "Users can view own achievement unlocks" ON public.achievement_unlocks FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own achievement unlocks" ON public.achievement_unlocks FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Admins can view all achievement unlocks" ON public.achievement_unlocks FOR SELECT USING (has_role(auth.uid(), 'admin'));
+CREATE POLICY "Liders can view achievement unlocks in their area" ON public.achievement_unlocks FOR SELECT USING (has_role(auth.uid(), 'lider') AND EXISTS (SELECT 1 FROM public.profiles p WHERE p.user_id = achievement_unlocks.user_id AND p.area = get_my_area()));
 
 -- notification_preferences
 CREATE POLICY "Users can view their own notification preferences" ON public.notification_preferences FOR SELECT USING (auth.uid() = user_id);
