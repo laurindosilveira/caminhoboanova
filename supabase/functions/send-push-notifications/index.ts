@@ -146,34 +146,6 @@ Deno.serve(async (req) => {
 
       const notifications: Array<{ title: string; body: string; tag: string }> = [];
 
-      // ── 3a. Devotional reminder (pending in ACTIVE LESSON only) ────────────
-      const devocionalOn = prefs ? prefs.devocional : true;
-      const devCfg = getAutom("devotional_reminder", "📖 Hora do Devocional!", "Você tem {N} devocional(is) da semana pendente(s). Cada dia conta!");
-      if (devocionalOn && devCfg.enabled) {
-        const ud = userDevData.get(sub.user_id);
-        const activeLessonId = ud?.mostRecentDevId ? devToLesson.get(ud.mostRecentDevId) : null;
-
-        if (activeLessonId) {
-          const lessonDevIds   = lessonToDevs.get(activeLessonId) ?? new Set<string>();
-          const completedInLesson = [...lessonDevIds].filter(id => ud!.completedIds.has(id)).length;
-          const pendingCount   = lessonDevIds.size - completedInLesson;
-          if (pendingCount > 0) {
-            notifications.push({
-              title: devCfg.title,
-              body:  devCfg.body.replace("{N}", String(pendingCount)),
-              tag:   "daily-devotional",
-            });
-          }
-        } else if (!ud || ud.completedIds.size === 0) {
-          // Never started any devotional
-          notifications.push({
-            title: devCfg.title,
-            body:  "Comece o seu primeiro devocional hoje. Cada passo importa!",
-            tag:   "daily-devotional",
-          });
-        }
-      }
-
       // ── 3b. Upcoming events ────────────────────────────────────────────────
       const eventosOn = prefs ? prefs.eventos : true;
       if (eventosOn && upcomingEvents && profile) {

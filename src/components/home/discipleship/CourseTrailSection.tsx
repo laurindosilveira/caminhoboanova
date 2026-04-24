@@ -186,12 +186,14 @@ export default function CourseTrailSection({
                           {lockMessage && (
                             <p className="font-inter text-[10px] text-muted-foreground mt-0.5">{lockMessage}</p>
                           )}
-                          {isDone && !isFullyDone && !(isLocked || isNotScheduled) && (
+                          {isDone && !isFullyDone && !isLateAccess && !(isLocked || isNotScheduled) && (
                             <p className="font-inter text-[10px] text-secondary mt-0.5">⏳ Faltam devocionais ou estudo</p>
                           )}
                         </div>
                         {isFullyDone
                           ? <span className="text-[10px] font-inter font-bold flex-shrink-0 bg-brand-green/15 text-brand-green px-2 py-0.5 rounded-full">✓ Completa</span>
+                          : isLateAccess
+                          ? <span className="text-[10px] font-inter font-bold flex-shrink-0 bg-muted text-muted-foreground px-2 py-0.5 rounded-full">Prazo encerrado</span>
                           : isDone && !(isLocked || isNotScheduled)
                           ? <span className="text-[10px] font-inter font-bold flex-shrink-0 bg-secondary/15 text-secondary px-2 py-0.5 rounded-full">Em andamento</span>
                           : (isLocked || isNotScheduled)

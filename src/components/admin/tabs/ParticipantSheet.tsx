@@ -174,7 +174,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
     content_kind: "devotional" as "lesson" | "devotional",
   });
   const [manualReleaseForm, setManualReleaseForm] = useState({
-    devotional_id: "",
+    devotional_ids: [] as string[],
     custom_points: 5,
     available_from: "",
     available_until: "",
@@ -589,7 +589,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
       content_kind: "devotional",
     });
     setManualReleaseForm({
-      devotional_id: "",
+      devotional_ids: [],
       custom_points: 5,
       available_from: "",
       available_until: "",
@@ -613,7 +613,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   }
 
   async function handleAddManualReleaseDraft() {
-    if (manualReleaseSelection.content_kind === "devotional" && !manualReleaseForm.devotional_id) return;
+    if (manualReleaseSelection.content_kind === "devotional" && manualReleaseForm.devotional_ids.length === 0) return;
     if (manualReleaseSelection.content_kind === "lesson" && !manualReleaseSelection.lesson_id) return;
     if (
       manualReleaseForm.available_from &&
@@ -631,90 +631,115 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
       ? Math.max(0, Number(manualReleaseForm.custom_points))
       : 0;
 
-    const draft: ManualReleaseDraft = {
-      id: crypto.randomUUID(),
-      content_kind: manualReleaseSelection.content_kind,
-      lesson_id: manualReleaseSelection.content_kind === "lesson" ? manualReleaseSelection.lesson_id : null,
-      devotional_id: manualReleaseSelection.content_kind === "devotional" ? manualReleaseForm.devotional_id : null,
-      custom_points: customPoints,
-      available_from: manualReleaseForm.available_from,
-      available_until: manualReleaseForm.available_until,
-      notes: manualReleaseForm.notes.trim(),
-      is_unlocked: manualReleaseForm.is_unlocked,
-      created_at: new Date().toISOString(),
-    };
-
     setSavingManualRelease(true);
     const { data: authData } = await supabase.auth.getUser();
     const leaderId = authData.user?.id ?? null;
     const isLessonRelease = manualReleaseSelection.content_kind === "lesson";
-    const payload = isLessonRelease
-      ? {
-          user_id: p.user_id,
-          lesson_id: manualReleaseSelection.lesson_id,
-          custom_points: customPoints,
-          available_from: manualReleaseForm.available_from || null,
-          available_until: manualReleaseForm.available_until || null,
-          notes: manualReleaseForm.notes.trim() || null,
-          is_unlocked: manualReleaseForm.is_unlocked,
-          granted_by: leaderId,
-        }
-      : {
-          user_id: p.user_id,
-          devotional_id: manualReleaseForm.devotional_id,
-          custom_points: customPoints,
-          available_from: manualReleaseForm.available_from || null,
-          available_until: manualReleaseForm.available_until || null,
-          notes: manualReleaseForm.notes.trim() || null,
-          is_unlocked: manualReleaseForm.is_unlocked,
-          granted_by: leaderId,
-        };
 
-    const { error } = await supabase
-      .from((isLessonRelease ? "user_lesson_overrides" : "user_devotional_overrides") as any)
-      .upsert(payload, { onConflict: isLessonRelease ? "user_id,lesson_id" : "user_id,devotional_id" })
-      .select(isLessonRelease
-        ? "id, user_id, lesson_id, custom_points, available_from, available_until, notes, is_unlocked, created_at, granted_by"
-        : "id, user_id, devotional_id, custom_points, available_from, available_until, notes, is_unlocked, created_at, granted_by");
+    if (isLessonRelease) {
+      const draft: ManualReleaseDraft = {
+        id: crypto.randomUUID(),
+        content_kind: "lesson",
+        lesson_id: manualReleaseSelection.lesson_id,
+        devotional_id: null,
+        custom_points: customPoints,
+        available_from: manualReleaseForm.available_from,
+        available_until: manualReleaseForm.available_until,
+        notes: manualReleaseForm.notes.trim(),
+        is_unlocked: manualReleaseForm.is_unlocked,
+        created_at: new Date().toISOString(),
+      };
+      const payload = {
+        user_id: p.user_id,
+        lesson_id: manualReleaseSelection.lesson_id,
+        custom_points: customPoints,
+        available_from: manualReleaseForm.available_from || null,
+        available_until: manualReleaseForm.available_until || null,
+        notes: manualReleaseForm.notes.trim() || null,
+        is_unlocked: manualReleaseForm.is_unlocked,
+        granted_by: leaderId,
+      };
+      const { error } = await supabase
+        .from("user_lesson_overrides" as any)
+        .upsert(payload, { onConflict: "user_id,lesson_id" })
+        .select("id, user_id, lesson_id, custom_points, available_from, available_until, notes, is_unlocked, created_at, granted_by");
 
-    if (error && isMissingManualReleaseStorage(error)) {
-      const storageKey = `manual-content-release-drafts:${p.user_id}`;
-      const next = [
-        draft,
-        ...manualReleaseDrafts.filter((item) => (
-          draft.content_kind === "lesson"
-            ? !(item.content_kind === "lesson" && item.lesson_id === draft.lesson_id)
-            : !(item.content_kind === "devotional" && item.devotional_id === draft.devotional_id)
-        )),
-      ];
-      setManualReleaseDrafts(next);
-      window.localStorage.setItem(storageKey, JSON.stringify(next));
+      if (error && isMissingManualReleaseStorage(error)) {
+        const storageKey = `manual-content-release-drafts:${p.user_id}`;
+        const next = [draft, ...manualReleaseDrafts.filter((item) => !(item.content_kind === "lesson" && item.lesson_id === draft.lesson_id))];
+        setManualReleaseDrafts(next);
+        window.localStorage.setItem(storageKey, JSON.stringify(next));
+        toast({ title: "Rascunho salvo localmente", description: "A tabela ainda nao existe no Supabase. Rode o SQL da parte 2 para persistir de verdade." });
+        resetManualReleaseForm();
+        setSavingManualRelease(false);
+        setActiveSection("liberacoes");
+        return;
+      }
+      if (error) {
+        toast({ title: "Falha ao salvar liberacao", description: error.message });
+        setSavingManualRelease(false);
+        return;
+      }
+      await fetchManualReleaseDrafts();
+      toast({ title: "Liberacao manual salva", description: "O override desta licao ja esta registrado no banco." });
+    } else {
+      // devotional — one upsert per selected devotional
+      const devIds = manualReleaseForm.devotional_ids;
+      const drafts: ManualReleaseDraft[] = devIds.map((devId) => ({
+        id: crypto.randomUUID(),
+        content_kind: "devotional" as const,
+        lesson_id: null,
+        devotional_id: devId,
+        custom_points: customPoints,
+        available_from: manualReleaseForm.available_from,
+        available_until: manualReleaseForm.available_until,
+        notes: manualReleaseForm.notes.trim(),
+        is_unlocked: manualReleaseForm.is_unlocked,
+        created_at: new Date().toISOString(),
+      }));
+
+      const payloads = devIds.map((devId) => ({
+        user_id: p.user_id,
+        devotional_id: devId,
+        custom_points: customPoints,
+        available_from: manualReleaseForm.available_from || null,
+        available_until: manualReleaseForm.available_until || null,
+        notes: manualReleaseForm.notes.trim() || null,
+        is_unlocked: manualReleaseForm.is_unlocked,
+        granted_by: leaderId,
+      }));
+
+      const { error } = await supabase
+        .from("user_devotional_overrides" as any)
+        .upsert(payloads, { onConflict: "user_id,devotional_id" })
+        .select("id, user_id, devotional_id, custom_points, available_from, available_until, notes, is_unlocked, created_at, granted_by");
+
+      if (error && isMissingManualReleaseStorage(error)) {
+        const storageKey = `manual-content-release-drafts:${p.user_id}`;
+        const existingIds = new Set(drafts.map((d) => d.devotional_id));
+        const next = [...drafts, ...manualReleaseDrafts.filter((item) => !(item.content_kind === "devotional" && existingIds.has(item.devotional_id)))];
+        setManualReleaseDrafts(next);
+        window.localStorage.setItem(storageKey, JSON.stringify(next));
+        toast({ title: "Rascunhos salvos localmente", description: `${devIds.length} devocional(is) preparado(s). A tabela ainda nao existe no Supabase.` });
+        resetManualReleaseForm();
+        setSavingManualRelease(false);
+        setActiveSection("liberacoes");
+        return;
+      }
+      if (error) {
+        toast({ title: "Falha ao salvar liberacao", description: error.message });
+        setSavingManualRelease(false);
+        return;
+      }
+      await fetchManualReleaseDrafts();
       toast({
-        title: "Rascunho salvo localmente",
-        description: "A tabela ainda nao existe no Supabase. Rode o SQL da parte 2 para persistir de verdade.",
+        title: "Liberacoes salvas",
+        description: devIds.length === 1
+          ? "O override deste devocional ja esta registrado no banco."
+          : `${devIds.length} devocionais liberados e registrados no banco.`,
       });
-      resetManualReleaseForm();
-      setSavingManualRelease(false);
-      setActiveSection("liberacoes");
-      return;
     }
 
-    if (error) {
-      toast({
-        title: "Falha ao salvar liberacao",
-        description: error.message,
-      });
-      setSavingManualRelease(false);
-      return;
-    }
-
-    await fetchManualReleaseDrafts();
-    toast({
-      title: "Liberacao manual salva",
-      description: isLessonRelease
-        ? "O override desta licao ja esta registrado no banco."
-        : "O override deste devocional ja esta registrado no banco.",
-    });
     resetManualReleaseForm();
     setSavingManualRelease(false);
     setActiveSection("liberacoes");
@@ -779,7 +804,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
   ));
   const selectedManualLesson = lessons.find((lesson) => lesson.id === manualReleaseSelection.lesson_id) ?? null;
   const completedDevotionalIds = new Set(devotionalCompletions.map((completion) => completion.devotional_id));
-  const selectedManualDevotional = devotionalCatalog.find((devotional) => devotional.id === manualReleaseForm.devotional_id) ?? null;
+  const selectedManualDevotionals = devotionalCatalog.filter((d) => manualReleaseForm.devotional_ids.includes(d.id));
 
   // Attendance stats
   const totalEvents = attendanceRecords.length;
@@ -1768,7 +1793,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                       course_id: nextCourseId,
                       lesson_id: "",
                     }));
-                    setManualReleaseForm((prev) => ({ ...prev, devotional_id: "" }));
+                    setManualReleaseForm((prev) => ({ ...prev, devotional_ids: [] }));
                   }}
                   className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
@@ -1791,7 +1816,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                       ...prev,
                       lesson_id: nextLessonId,
                     }));
-                    setManualReleaseForm((prev) => ({ ...prev, devotional_id: "" }));
+                    setManualReleaseForm((prev) => ({ ...prev, devotional_ids: [] }));
                   }}
                   disabled={!manualReleaseSelection.course_id}
                   className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -1813,7 +1838,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                   type="button"
                   onClick={() => {
                     setManualReleaseSelection((prev) => ({ ...prev, content_kind: "lesson" }));
-                    setManualReleaseForm((prev) => ({ ...prev, devotional_id: "" }));
+                    setManualReleaseForm((prev) => ({ ...prev, devotional_ids: [] }));
                   }}
                   disabled={!manualReleaseSelection.lesson_id}
                   className={`rounded-xl border px-3 py-3 text-left transition-colors ${
@@ -1856,39 +1881,66 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
 
             {manualReleaseSelection.content_kind === "devotional" && (
               <div className="space-y-2">
-                <label className="block text-[11px] font-inter font-bold text-foreground">Devocional</label>
-                <select
-                  value={manualReleaseForm.devotional_id}
-                  onChange={(e) => setManualReleaseForm((prev) => ({ ...prev, devotional_id: e.target.value }))}
-                  disabled={!manualReleaseSelection.lesson_id}
-                  className="w-full h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="">
-                    {manualReleaseSelection.lesson_id ? "Selecione um devocional da licao" : "Escolha primeiro o curso e a licao"}
-                  </option>
-                  {manualReleaseLessonDevotionals.map((devotional) => (
-                    <option key={devotional.id} value={devotional.id}>
-                      Dia {devotional.day_number} - {devotional.title}
-                    </option>
-                  ))}
-                </select>
-                {selectedManualDevotional && (
-                  <div className="rounded-xl bg-muted/40 border border-border p-3">
-                    <p className="font-inter text-xs text-foreground font-medium">
-                      {selectedManualDevotional.lesson_title} - Dia {selectedManualDevotional.day_number}
-                    </p>
-                    <p className="font-inter text-[11px] text-muted-foreground mt-0.5">{selectedManualDevotional.title}</p>
-                    <div className="flex items-center gap-2 mt-2 flex-wrap">
-                      <span className="px-2 py-1 rounded-lg bg-background border border-border text-[10px] font-inter text-muted-foreground">
-                        {selectedManualDevotional.course_title}
-                      </span>
-                      {completedDevotionalIds.has(selectedManualDevotional.id) && (
-                        <span className="px-2 py-1 rounded-lg bg-brand-green/10 text-brand-green text-[10px] font-inter font-semibold">
-                          Ja concluido por este usuario
-                        </span>
-                      )}
-                    </div>
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-inter font-bold text-foreground">Devocionais</label>
+                  {manualReleaseLessonDevotionals.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allIds = manualReleaseLessonDevotionals.map((d) => d.id);
+                        const allSelected = allIds.every((id) => manualReleaseForm.devotional_ids.includes(id));
+                        setManualReleaseForm((prev) => ({ ...prev, devotional_ids: allSelected ? [] : allIds }));
+                      }}
+                      className="text-[10px] font-inter text-primary underline underline-offset-2"
+                    >
+                      {manualReleaseLessonDevotionals.every((d) => manualReleaseForm.devotional_ids.includes(d.id))
+                        ? "Desmarcar todos"
+                        : "Selecionar todos"}
+                    </button>
+                  )}
+                </div>
+                {!manualReleaseSelection.lesson_id ? (
+                  <p className="text-[11px] font-inter text-muted-foreground px-1">Escolha primeiro o curso e a licao.</p>
+                ) : (
+                  <div className="rounded-xl border border-input bg-background divide-y divide-border max-h-56 overflow-y-auto">
+                    {manualReleaseLessonDevotionals.map((devotional) => {
+                      const isChecked = manualReleaseForm.devotional_ids.includes(devotional.id);
+                      const isDone = completedDevotionalIds.has(devotional.id);
+                      return (
+                        <label
+                          key={devotional.id}
+                          className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${isChecked ? "bg-primary/5" : "hover:bg-muted/40"}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              setManualReleaseForm((prev) => ({
+                                ...prev,
+                                devotional_ids: e.target.checked
+                                  ? [...prev.devotional_ids, devotional.id]
+                                  : prev.devotional_ids.filter((id) => id !== devotional.id),
+                              }));
+                            }}
+                            className="w-4 h-4 accent-primary flex-shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-inter text-sm text-foreground">
+                              Dia {devotional.day_number} — {devotional.title}
+                            </p>
+                          </div>
+                          {isDone && (
+                            <span className="text-[10px] font-inter text-brand-green font-semibold flex-shrink-0">✓ Feito</span>
+                          )}
+                        </label>
+                      );
+                    })}
                   </div>
+                )}
+                {selectedManualDevotionals.length > 0 && (
+                  <p className="font-inter text-[11px] text-secondary font-semibold px-1">
+                    {selectedManualDevotionals.length} devocional(is) selecionado(s)
+                  </p>
                 )}
               </div>
             )}
@@ -1953,7 +2005,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
             <div className="flex gap-2">
               <button
                 onClick={handleAddManualReleaseDraft}
-                disabled={savingManualRelease || (manualReleaseSelection.content_kind === "devotional" && !manualReleaseForm.devotional_id) || (manualReleaseSelection.content_kind === "lesson" && !manualReleaseSelection.lesson_id)}
+                disabled={savingManualRelease || (manualReleaseSelection.content_kind === "devotional" && manualReleaseForm.devotional_ids.length === 0) || (manualReleaseSelection.content_kind === "lesson" && !manualReleaseSelection.lesson_id)}
                 className="flex-1 h-11 rounded-xl font-inter text-sm font-bold text-primary-foreground disabled:opacity-60"
                 style={{ background: "var(--gradient-hero)" }}
               >
