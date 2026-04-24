@@ -95,9 +95,12 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
 
   useEffect(() => { fetchAll(); }, [currentArea]);
 
-  // Auto-open lesson when navigating from agenda
+  // Auto-open lesson when navigating from agenda.
+  // Wait for agendaSchedule to finish loading so scheduledDevotionalDates
+  // are available before the lesson view mounts (prevents the fallback path
+  // from auto-opening the wrong devotional due to a race condition).
   useEffect(() => {
-    if (targetLessonId && !loading && courses.length > 0) {
+    if (targetLessonId && !loading && !agendaSchedule.loading && courses.length > 0) {
       const lesson = courses.flatMap(c => c.lessons).find(l => l.id === targetLessonId);
       if (lesson) {
         setSelectedLesson(lesson);
@@ -109,7 +112,7 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
       }
       onTargetLessonConsumed?.();
     }
-  }, [targetLessonId, targetLessonMode, loading, courses, onTargetLessonConsumed]);
+  }, [targetLessonId, targetLessonMode, loading, agendaSchedule.loading, courses, onTargetLessonConsumed]);
 
   async function fetchAll() {
     setLoading(true);
