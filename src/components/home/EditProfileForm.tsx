@@ -6,6 +6,8 @@ import { Pencil, Save, X, User, Phone, Calendar, MapPin, ChevronDown, Home, User
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import WhatsAppPhoneInput from "@/components/ui/WhatsAppPhoneInput";
+import { validateBRPhone, type PhoneValidation } from "@/lib/phoneValidation";
 
 import { ALL_COMMUNITIES, getAreaForCommunity } from "@/config/areas";
 const COMMUNITIES = ALL_COMMUNITIES as unknown as readonly [string, ...string[]];
@@ -19,6 +21,7 @@ const CONFIRMATION_YEARS = [
 const profileSchema = z.object({
   full_name: z.string().trim().min(3, "Nome deve ter ao menos 3 caracteres").max(100, "Máximo 100 caracteres"),
   phone: z.string().trim().min(8, "Telefone inválido").max(20, "Máximo 20 caracteres"),
+  whatsapp_number: z.string().max(20).optional(),
   birth_date: z.string().min(1, "Data de nascimento é obrigatória"),
   community: z.enum(COMMUNITIES, { required_error: "Selecione uma comunidade" }),
   father_name: z.string().max(100).optional(),
@@ -59,6 +62,14 @@ export default function EditProfileForm() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Validação em tempo real do WhatsApp (fora do react-hook-form para maior controle)
+  const [phoneValidation, setPhoneValidation] = useState<PhoneValidation>(
+    () => validateBRPhone((profile as any)?.phone ?? "")
+  );
+  const [waValidation, setWaValidation] = useState<PhoneValidation>(
+    () => validateBRPhone((profile as any)?.whatsapp_number ?? "")
+  );
+
   const {
     register,
     handleSubmit,
@@ -71,6 +82,7 @@ export default function EditProfileForm() {
     defaultValues: {
       full_name: profile?.full_name ?? "",
       phone: profile?.phone ?? "",
+      whatsapp_number: (profile as any)?.whatsapp_number ?? "",
       birth_date: profile?.birth_date ?? "",
       community: (profile?.community as (typeof COMMUNITIES)[number]) ?? undefined,
       father_name: profile?.father_name ?? "",
@@ -89,6 +101,7 @@ export default function EditProfileForm() {
     reset({
       full_name: profile?.full_name ?? "",
       phone: profile?.phone ?? "",
+      whatsapp_number: (profile as any)?.whatsapp_number ?? "",
       birth_date: profile?.birth_date ?? "",
       community: (profile?.community as (typeof COMMUNITIES)[number]) ?? undefined,
       father_name: profile?.father_name ?? "",
@@ -98,6 +111,8 @@ export default function EditProfileForm() {
       address: profile?.address ?? "",
       confirmation_year: profile?.confirmation_year ? String(profile.confirmation_year) : "",
     });
+    setPhoneValidation(validateBRPhone(profile?.phone ?? ""));
+    setWaValidation(validateBRPhone((profile as any)?.whatsapp_number ?? ""));
     setIsEditing(false);
   }
 
@@ -143,6 +158,10 @@ export default function EditProfileForm() {
     try {
       const areaVal = getAreaForCommunity(values.community);
 
+      // Marca status de validação do WhatsApp ao salvar
+      const waNum = values.whatsapp_number?.trim() ?? "";
+      const waValid = waNum ? validateBRPhone(waNum) : null;
+
       const { error } = await supabase
         .from("profiles")
         .upsert(
@@ -150,6 +169,14 @@ export default function EditProfileForm() {
             user_id: user.id,
             full_name: values.full_name,
             phone: values.phone,
+            whatsapp_number: waNum || null,
+            whatsapp_validation_status: waNum
+              ? (waValid?.valid ? "valid" : "invalid")
+              : null,
+            whatsapp_last_blocked_reason: waNum && !waValid?.valid
+              ? (waValid?.hint ?? "Formato inválido")
+              : null,
+            whatsapp_last_blocked_at: waNum && !waValid?.valid ? new Date().toISOString() : null,
             birth_date: values.birth_date,
             community: values.community,
             area: areaVal as "Área 1" | "Área 2",
@@ -308,19 +335,55 @@ export default function EditProfileForm() {
               />
             </div>
 
-            {/* Telefone */}
+            {/* Telefone principal com máscara */}
             <div className="space-y-1">
-              <label className="text-xs font-inter font-medium text-muted-foreground">Telefone / WhatsApp *</label>
-              <input
-                {...register("phone")}
+              <label className="text-xs font-inter font-medium text-muted-foreground">
+                Telefone / WhatsApp *
+              </label>
+              <WhatsAppPhoneInput
+                value={watchedValues.phone ?? ""}
+                onChange={(formatted, validation) => {
+                  // Atualiza o campo do form e o estado de validação
+                  const syntheticEvent = {
+                    target: { value: formatted, name: "phone" },
+                  } as React.ChangeEvent<HTMLInputElement>;
+                  register("phone").onChange(syntheticEvent);
+                  setPhoneValidation(validation);
+                }}
+                showValidationAlways={!!dirtyFields.phone}
+              />
+              {errors.phone && (
+                <div className="flex items-center gap-1 mt-1">
+                  <AlertCircle className="w-3 h-3 text-destructive" />
+                  <p className="text-[11px] text-destructive font-inter">{errors.phone.message}</p>
+                </div>
+              )}
+            </div>
+
+            {/* WhatsApp exclusivo (opcional — quando diferente do phone) */}
+            <div className="space-y-1">
+              <label className="text-xs font-inter font-medium text-muted-foreground flex items-center gap-1.5">
+                Número do WhatsApp
+                <span className="text-[10px] text-muted-foreground/60 font-normal">(opcional — se diferente do telefone)</span>
+              </label>
+              <WhatsAppPhoneInput
+                value={watchedValues.whatsapp_number ?? ""}
+                onChange={(formatted, validation) => {
+                  const syntheticEvent = {
+                    target: { value: formatted, name: "whatsapp_number" },
+                  } as React.ChangeEvent<HTMLInputElement>;
+                  register("whatsapp_number").onChange(syntheticEvent);
+                  setWaValidation(validation);
+                }}
+                showValidationAlways={!!dirtyFields.whatsapp_number}
                 placeholder="(00) 00000-0000"
-                className={inputClass("phone")}
               />
-              <FieldStatus
-                error={errors.phone?.message}
-                isDirty={!!dirtyFields.phone}
-                isValid={!!dirtyFields.phone && !errors.phone}
-              />
+              {/* Indicação visual quando o número exclusivo substitui o principal */}
+              {waValidation.valid && watchedValues.whatsapp_number && (
+                <p className="text-[10px] font-inter text-brand-green px-1">
+                  ✓ Os lembretes automáticos usarão este número
+                </p>
+              )}
             </div>
 
             {/* Data de nascimento */}

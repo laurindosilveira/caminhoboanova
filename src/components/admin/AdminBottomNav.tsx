@@ -1,6 +1,6 @@
-import { BarChart3, BookOpen, Shield, Megaphone, Settings, AlertTriangle, Crown, GraduationCap, MessageSquare, CalendarDays, Phone } from "lucide-react";
+import { BarChart3, BookOpen, Shield, Megaphone, Settings, AlertTriangle, Crown, GraduationCap, MessageSquare, CalendarDays, Phone, MessageCircle } from "lucide-react";
 
-export type AdminTab = "overview" | "alerts" | "courses" | "leaders" | "push" | "users" | "settings" | "turma" | "avisos" | "agenda" | "contatos";
+export type AdminTab = "overview" | "alerts" | "courses" | "leaders" | "push" | "users" | "settings" | "turma" | "avisos" | "agenda" | "contatos" | "whatsapp";
 
 type TabDef = { id: AdminTab; label: string; icon: typeof BarChart3 };
 
@@ -11,6 +11,7 @@ const ALL_TABS: TabDef[] = [
   { id: "leaders", label: "Líderes", icon: Crown },
   { id: "push", label: "Push", icon: Megaphone },
   { id: "users", label: "Usuários", icon: Shield },
+  { id: "whatsapp", label: "WhatsApp", icon: MessageCircle },
   { id: "settings", label: "Config", icon: Settings },
 ];
 

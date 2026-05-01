@@ -44,10 +44,10 @@ export const AUTOMATED_SYSTEM_UPDATES: AutomatedSystemUpdate[] = [
   },
   {
     id: "2026-03-30-admin-password",
-    title: "Protecao por senha no admin do sistema",
-    summary: "O acesso a /admin-sistema foi simplificado para autenticacao por senha dentro da sessao atual do navegador.",
+    title: "Protecao por autorizacao no admin do sistema",
+    summary: "O acesso a /admin-sistema e validado por permissao registrada no Supabase, sem senha fixa no frontend.",
     details:
-      "A area administrativa do sistema continua exigindo login no app, mas a liberacao adicional agora depende apenas da senha configurada para essa rota, sem depender de cadastro extra no banco.",
+      "A area administrativa do sistema continua exigindo login no app, mas a liberacao adicional agora depende da lista segura de administradores autorizados no banco.",
     version: null,
     updateType: "correcao",
     createdAt: "2026-03-30T11:30:00.000Z",
@@ -55,11 +55,11 @@ export const AUTOMATED_SYSTEM_UPDATES: AutomatedSystemUpdate[] = [
     codeChanges: [
       {
         area: "src/components/auth/AdminSistemaPasswordGate.tsx",
-        description: "Removeu a validacao por e-mail autorizado e manteve somente a senha da area admin do sistema.",
+        description: "Removeu a senha fixa e passou a validar autorizacao real no Supabase.",
       },
       {
         area: "src/pages/AdminSistema.tsx",
-        description: "Eliminou o bloqueio interno dependente do banco para permitir acesso apenas com login + senha da rota.",
+        description: "Reforcou o bloqueio interno para buscar dados apenas apos confirmar permissao de admin do sistema.",
       },
     ],
   },

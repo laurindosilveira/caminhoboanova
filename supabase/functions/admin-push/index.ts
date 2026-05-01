@@ -20,7 +20,11 @@ Deno.serve(async (req) => {
     // Verify caller is admin/lider
     const authHeader = req.headers.get("Authorization");
     const supabaseUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!);
-    if (authHeader) {
+    let callerId: string | null = null;
+
+    if (authHeader === `Bearer ${SERVICE_ROLE_KEY}`) {
+      callerId = null;
+    } else if (authHeader) {
       const token = authHeader.replace("Bearer ", "");
       const { data: { user } } = await supabaseUser.auth.getUser(token);
       if (!user) {
@@ -29,6 +33,7 @@ Deno.serve(async (req) => {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
+      callerId = user.id;
 
       // Check role using service role client
       const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
@@ -181,7 +186,7 @@ Deno.serve(async (req) => {
       target_value: targetValue || null,
       sent_count: sent,
       failed_count: failed,
-      sent_by: (await supabaseUser.auth.getUser(authHeader!.replace("Bearer ", ""))).data.user?.id || null,
+      sent_by: callerId,
     });
 
     return new Response(

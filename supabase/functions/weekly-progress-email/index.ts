@@ -13,6 +13,14 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+    if (req.headers.get("Authorization") !== `Bearer ${serviceRoleKey}`) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // Fetch all users with profiles
@@ -94,7 +102,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         message: `Weekly summaries generated for ${results.length} users`,
-        summaries: results.map(r => ({ email: r.email, name: r.name })),
+        count: results.length,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

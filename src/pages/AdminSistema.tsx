@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { AUTOMATED_SYSTEM_UPDATES } from "@/data/systemUpdates";
+import { isAuthorizedSystemAdmin } from "@/lib/systemAdminAccess";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -68,6 +69,8 @@ export default function AdminSistema() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedUpdateId, setSelectedUpdateId] = useState<string | null>(null);
+  const [isSystemAdmin, setIsSystemAdmin] = useState(false);
+  const [systemAdminChecked, setSystemAdminChecked] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -76,10 +79,36 @@ export default function AdminSistema() {
   }, [authLoading, navigate, user]);
 
   useEffect(() => {
-    if (user) {
-      fetchChurches();
+    let isMounted = true;
+
+    async function checkSystemAdmin() {
+      if (!user?.email) {
+        setIsSystemAdmin(false);
+        setSystemAdminChecked(true);
+        setChurchesLoading(false);
+        return;
+      }
+
+      setSystemAdminChecked(false);
+      const allowed = await isAuthorizedSystemAdmin();
+      if (!isMounted) return;
+
+      setIsSystemAdmin(allowed);
+      setSystemAdminChecked(true);
+      if (allowed) {
+        fetchChurches();
+      } else {
+        setChurches([]);
+        setChurchesLoading(false);
+      }
     }
-  }, [user]);
+
+    if (!authLoading) checkSystemAdmin();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [authLoading, user?.email]);
 
   async function fetchChurches() {
     setChurchesLoading(true);
@@ -133,6 +162,22 @@ export default function AdminSistema() {
   const selectedUpdate = AUTOMATED_SYSTEM_UPDATES.find((item) => item.id === selectedUpdateId) ?? null;
 
   if (authLoading) return null;
+  if (!systemAdminChecked) return null;
+  if (!isSystemAdmin) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <Card className="w-full max-w-md border-border">
+          <CardHeader className="text-center">
+            <CardTitle className="font-montserrat text-xl font-black text-foreground">Acesso restrito</CardTitle>
+            <CardDescription>Seu usuario nao esta autorizado a acessar esta area.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="w-full rounded-xl" onClick={() => navigate("/")}>Voltar para o app</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

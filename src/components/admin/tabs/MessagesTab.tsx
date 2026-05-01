@@ -307,31 +307,28 @@ export default function MessagesTab({ leaderMode = false }: Props) {
         return;
       }
 
-      const { data: subscriptions, error: subscriptionsError } = await supabase
-        .from("push_subscriptions")
-        .select("user_id, endpoint, p256dh, auth")
-        .in("user_id", nonViewers);
-      if (subscriptionsError) throw subscriptionsError;
+      let sent = 0;
+      let failed = 0;
 
-      if (!subscriptions || subscriptions.length === 0) {
-        toast.info(`${nonViewers.length} pessoa(s) ainda nao visualizaram, mas nenhuma tem push ativado.`);
-        setSendingPush(null);
-        return;
+      for (const userId of nonViewers) {
+        const { data, error: pushError } = await supabase.functions.invoke("admin-push", {
+          body: {
+            title: FINAL_PUSH_COPY.reminderTitle,
+            body: `Voce ainda nao viu: "${message.title}". Abra o app para conferir.`,
+            target: "user",
+            targetValue: userId,
+          },
+        });
+        if (pushError) throw pushError;
+        sent += data?.sent ?? 0;
+        failed += data?.failed ?? 0;
       }
 
-      const { error: pushError } = await supabase.functions.invoke("send-push-notifications", {
-        body: {
-          subscriptions: subscriptions.map((subscription) => ({
-            endpoint: subscription.endpoint,
-            keys: { p256dh: subscription.p256dh, auth: subscription.auth },
-          })),
-          title: FINAL_PUSH_COPY.reminderTitle,
-          body: `Voce ainda nao viu: "${message.title}". Abra o app para conferir.`,
-        },
-      });
-      if (pushError) throw pushError;
-
-      toast.success(`Push enviado para ${subscriptions.length} pessoa(s).`);
+      if (sent === 0) {
+        toast.info(`${nonViewers.length} pessoa(s) ainda nao visualizaram, mas nenhuma recebeu push.`);
+      } else {
+        toast.success(`Push enviado para ${sent} dispositivo(s).${failed ? ` ${failed} falha(s).` : ""}`);
+      }
     } catch (error: any) {
       toast.error(`Erro ao enviar push de lembrete: ${error.message}`);
     }

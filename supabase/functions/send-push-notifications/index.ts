@@ -26,6 +26,13 @@ Deno.serve(async (req) => {
     const VAPID_PUBLIC_KEY   = (Deno.env.get("VAPID_PUBLIC_KEY")  ?? "").replace(/["\s,]/g, "");
     const VAPID_PRIVATE_KEY  = (Deno.env.get("VAPID_PRIVATE_KEY") ?? "").replace(/["\s,]/g, "");
 
+    if (req.headers.get("Authorization") !== `Bearer ${SERVICE_ROLE_KEY}`) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
     // ── 1. Fetch all push subscriptions ──────────────────────────────────────
@@ -245,6 +252,7 @@ Deno.serve(async (req) => {
     for (const sched of pendingScheduled ?? []) {
       try {
         const { data: sendResult } = await supabase.functions.invoke("admin-push", {
+          headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` },
           body: {
             title:       sched.title,
             body:        sched.body,

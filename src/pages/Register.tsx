@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Eye, EyeOff, Mail, Lock, User, Phone, ChevronLeft, ChevronDown, MessageCircle, Camera } from "lucide-react";
 import { z } from "zod";
 import AvatarCropper from "@/components/home/AvatarCropper";
+import WhatsAppPhoneInput from "@/components/ui/WhatsAppPhoneInput";
+import { type PhoneValidation, validateBRPhone } from "@/lib/phoneValidation";
 
 // Dynamic imports for less-used icons
 const Calendar = lazy(() => import("lucide-react").then(m => ({ default: m.Calendar })));
@@ -49,6 +51,7 @@ export default function Register() {
   const [fullName, setFullName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [phone, setPhone] = useState("");
+  const [phoneValidation, setPhoneValidation] = useState<PhoneValidation>(() => validateBRPhone(""));
   const [fatherName, setFatherName] = useState("");
   const [motherName, setMotherName] = useState("");
   const [fatherPhone, setFatherPhone] = useState("");
@@ -135,8 +138,8 @@ export default function Register() {
       setError("Informe sua data de nascimento.");
       return;
     }
-    if (!phone.trim() || phone.trim().length < 8) {
-      setError("Telefone inválido.");
+    if (!phoneValidation.valid) {
+      setError(phoneValidation.hint || "Telefone inválido. Inclua o DDD e o número completo.");
       return;
     }
     setStep(2);
@@ -305,10 +308,14 @@ export default function Register() {
               </div>
               <div>
                 <label className="block text-sm font-inter font-medium text-foreground mb-1.5">Telefone / WhatsApp</label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(51) 9 9999-9999" className={inputClass} required />
-                </div>
+                <WhatsAppPhoneInput
+                  value={phone}
+                  onChange={(formatted, validation) => {
+                    setPhone(formatted);
+                    setPhoneValidation(validation);
+                  }}
+                  showValidationAlways={phone.length > 0}
+                />
               </div>
               {error && (
                 <div className="bg-destructive/10 border border-destructive/30 rounded-xl px-4 py-3">

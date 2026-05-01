@@ -19,6 +19,7 @@ import NotificationSettings from "@/components/home/NotificationSettings";
 import InstallAppCard from "@/components/home/InstallAppCard";
 import TypingMetricsPanel from "@/components/home/TypingMetricsPanel";
 import PushActivationBanner from "@/components/home/PushActivationBanner";
+import WhatsAppBlockedBanner from "@/components/home/WhatsAppBlockedBanner";
 import RemindersSection from "@/components/home/RemindersSection";
 import PersonalizedGreeting from "@/components/home/PersonalizedGreeting";
 import BottomNav, { type Tab } from "@/components/home/BottomNav";
@@ -207,6 +208,10 @@ export default function Index() {
               <h2 className="font-montserrat font-black text-foreground text-xl">👤 Perfil</h2>
             </div>
 
+            <WhatsAppBlockedBanner
+              onNavigateToSettings={() => setProfileSubTab("configuracoes")}
+            />
+
             <div className="px-5">
               <Tabs value={profileSubTab} onValueChange={(value) => setProfileSubTab(value as ProfileSubTab)}>
                 <TabsList className="grid w-full grid-cols-3 h-11">
@@ -269,6 +274,26 @@ export default function Index() {
 
             {profileSubTab === "configuracoes" && (
               <>
+                <div className="px-5">
+                  <button
+                    onClick={() => navigate("/exportar-dados")}
+                    className="w-full flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-primary/10">
+                      <ShieldCheck className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-montserrat font-bold text-foreground text-sm">
+                        Privacidade e dados
+                      </p>
+                      <p className="text-muted-foreground text-xs font-inter">
+                        Exportar dados ou registrar solicitacao LGPD
+                      </p>
+                    </div>
+                    <span className="ml-auto text-muted-foreground text-xs">→</span>
+                  </button>
+                </div>
+
                 {/* Edição de dados pessoais */}
                 <EditProfileForm />
 

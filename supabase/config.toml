@@ -23,3 +23,9 @@ verify_jwt = false
 
 [functions.customer-portal]
 verify_jwt = false
+
+[functions.send-whatsapp-reminders]
+verify_jwt = false
+
+[functions.test-notifications]
+verify_jwt = false

@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Shield, User, Search, ShieldCheck, ShieldOff, CalendarDays, MapPin, ChevronRight, X, Save, Phone, Cake, Home, Users, GraduationCap, Clock, Download, Trash2, Mail } from "lucide-react";
+import { Shield, User, Search, ShieldCheck, ShieldOff, CalendarDays, MapPin, ChevronRight, X, Save, Phone, Cake, Home, Users, GraduationCap, Clock, Download, Trash2, Mail, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import WhatsAppPhoneInput from "@/components/ui/WhatsAppPhoneInput";
+import { validateBRPhone, type PhoneValidation } from "@/lib/phoneValidation";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,6 +20,9 @@ type UserEntry = {
   community: string;
   area: string;
   phone: string;
+  whatsapp_number: string | null;
+  whatsapp_validation_status: "valid" | "invalid" | "pending" | null;
+  whatsapp_last_blocked_reason: string | null;
   birth_date: string;
   father_name: string;
   mother_name: string;
@@ -67,7 +72,10 @@ export default function UsersTab({ onSelectTurma }: UsersTabProps) {
   const [promotingUser, setPromotingUser] = useState<UserEntry | null>(null);
   const [promotingRole, setPromotingRole] = useState<"admin" | "lider" | null>(null);
   const [editingUser, setEditingUser] = useState<UserEntry | null>(null);
-  const [editForm, setEditForm] = useState({ full_name: "", phone: "", birth_date: "", community: "", area: "", father_name: "", mother_name: "", father_phone: "", mother_phone: "", address: "", turma_id: "" });
+  const [editForm, setEditForm] = useState({ full_name: "", phone: "", whatsapp_number: "", birth_date: "", community: "", area: "", father_name: "", mother_name: "", father_phone: "", mother_phone: "", address: "", turma_id: "" });
+  const [editWaValidation, setEditWaValidation] = useState<PhoneValidation>(() => validateBRPhone(""));
+  const [revalidating, setRevalidating] = useState(false);
+  const [waStatus, setWaStatus] = useState<{ status: string; reason: string | null } | null>(null);
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingUser, setDeletingUser] = useState<UserEntry | null>(null);
@@ -78,7 +86,7 @@ export default function UsersTab({ onSelectTurma }: UsersTabProps) {
   async function fetchUsers() {
     setLoading(true);
     const [{ data: profiles }, { data: roles }, { data: turmasData }] = await Promise.all([
-      supabase.from("profiles").select("user_id, full_name, email, community, area, phone, birth_date, father_name, mother_name, father_phone, mother_phone, address, created_at, turma_id").order("full_name"),
+      supabase.from("profiles").select("user_id, full_name, email, community, area, phone, whatsapp_number, whatsapp_validation_status, whatsapp_last_blocked_reason, birth_date, father_name, mother_name, father_phone, mother_phone, address, created_at, turma_id").order("full_name"),
       supabase.from("user_roles").select("user_id, role, admin_area"),
       supabase.from("turmas").select("id, name, year, area").eq("is_active", true).order("year", { ascending: false }),
     ]);
@@ -101,6 +109,9 @@ export default function UsersTab({ onSelectTurma }: UsersTabProps) {
       father_phone: (p as any).father_phone ?? "",
       mother_phone: (p as any).mother_phone ?? "",
       address: (p as any).address ?? "",
+      whatsapp_number: (p as any).whatsapp_number ?? null,
+      whatsapp_validation_status: (p as any).whatsapp_validation_status ?? null,
+      whatsapp_last_blocked_reason: (p as any).whatsapp_last_blocked_reason ?? null,
       turma_id: p.turma_id ?? null,
       role: roleMap[p.user_id]?.role ?? "user",
       admin_area: roleMap[p.user_id]?.admin_area ?? null,
@@ -164,9 +175,11 @@ export default function UsersTab({ onSelectTurma }: UsersTabProps) {
 
   function openEditUser(u: UserEntry) {
     setEditingUser(u);
+    const waNum = u.whatsapp_number ?? "";
     setEditForm({
       full_name: u.full_name,
       phone: u.phone,
+      whatsapp_number: waNum,
       birth_date: u.birth_date,
       community: u.community,
       area: u.area,
@@ -177,6 +190,58 @@ export default function UsersTab({ onSelectTurma }: UsersTabProps) {
       address: u.address,
       turma_id: u.turma_id ?? "",
     });
+    setEditWaValidation(validateBRPhone(waNum));
+    setWaStatus(
+      u.whatsapp_validation_status
+        ? { status: u.whatsapp_validation_status, reason: u.whatsapp_last_blocked_reason }
+        : null
+    );
+  }
+
+  async function handleRevalidateWhatsApp() {
+    if (!editingUser) return;
+    setRevalidating(true);
+
+    // 1. Salva o número atual antes de revalidar
+    const waNum = editForm.whatsapp_number.trim() || null;
+    await supabase.from("profiles").update({ whatsapp_number: waNum }).eq("user_id", editingUser.user_id);
+
+    // 2. Chama a RPC de revalidação no banco
+    const { data, error } = await supabase.rpc("revalidate_user_whatsapp", {
+      _target_user_id: editingUser.user_id,
+    });
+
+    setRevalidating(false);
+
+    if (error) {
+      toast({ title: "Erro ao revalidar", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    const result = data as { status: string; e164: string | null; reason: string | null };
+    setWaStatus({ status: result.status, reason: result.reason });
+
+    // Atualiza lista local
+    setUsers(prev => prev.map(u =>
+      u.user_id === editingUser.user_id
+        ? {
+            ...u,
+            whatsapp_number: waNum,
+            whatsapp_validation_status: result.status as UserEntry["whatsapp_validation_status"],
+            whatsapp_last_blocked_reason: result.reason,
+          }
+        : u
+    ));
+
+    if (result.status === "valid") {
+      toast({ title: "✅ WhatsApp válido", description: `Número ${result.e164} confirmado.` });
+    } else {
+      toast({
+        title: "❌ Número inválido",
+        description: result.reason ?? "Verifique o número e tente novamente.",
+        variant: "destructive",
+      });
+    }
   }
 
   async function saveEditUser() {
@@ -188,9 +253,21 @@ export default function UsersTab({ onSelectTurma }: UsersTabProps) {
       comms.includes(editForm.community)
     )?.[0] ?? editForm.area;
 
+    const waNum = editForm.whatsapp_number.trim() || null;
+    // Marca validação do WhatsApp ao salvar (sem sobrescrever status de revalidação explícita)
+    const waValidNow = waNum ? editWaValidation : null;
+
     const { error } = await supabase.from("profiles").update({
       full_name: editForm.full_name,
       phone: editForm.phone,
+      whatsapp_number: waNum,
+      whatsapp_validation_status: waNum
+        ? (waValidNow?.valid ? "valid" : "invalid")
+        : null,
+      whatsapp_last_blocked_reason: waNum && !waValidNow?.valid
+        ? (waValidNow?.hint ?? "Formato inválido")
+        : null,
+      whatsapp_last_blocked_at: waNum && !waValidNow?.valid ? new Date().toISOString() : null,
       birth_date: editForm.birth_date,
       community: editForm.community as any,
       area: newArea as any,
@@ -200,14 +277,25 @@ export default function UsersTab({ onSelectTurma }: UsersTabProps) {
       mother_phone: editForm.mother_phone,
       address: editForm.address,
       turma_id: editForm.turma_id || null,
-    }).eq("user_id", editingUser.user_id);
+      enrollment_status: editForm.turma_id ? "approved" : "pending",
+    } as any).eq("user_id", editingUser.user_id);
 
     if (error) {
       toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
     } else {
       setUsers(prev => prev.map(p =>
         p.user_id === editingUser.user_id
-          ? { ...p, full_name: editForm.full_name, phone: editForm.phone, birth_date: editForm.birth_date, community: editForm.community, area: newArea, turma_id: editForm.turma_id || null }
+          ? {
+              ...p,
+              full_name: editForm.full_name,
+              phone: editForm.phone,
+              whatsapp_number: waNum,
+              whatsapp_validation_status: waNum ? (waValidNow?.valid ? "valid" : "invalid") : null,
+              birth_date: editForm.birth_date,
+              community: editForm.community,
+              area: newArea,
+              turma_id: editForm.turma_id || null,
+            }
           : p
       ));
       toast({ title: "✅ Perfil atualizado", description: `Dados de ${editForm.full_name} salvos.` });
@@ -398,6 +486,58 @@ export default function UsersTab({ onSelectTurma }: UsersTabProps) {
                 <label className="text-xs font-inter font-medium text-muted-foreground mb-1 flex items-center gap-1"><Cake className="w-3 h-3" /> Nascimento</label>
                 <Input type="date" value={editForm.birth_date} onChange={e => setEditForm(f => ({ ...f, birth_date: e.target.value }))} className="rounded-xl" />
               </div>
+            </div>
+
+            {/* WhatsApp exclusivo com revalidação */}
+            <div className="space-y-2 rounded-xl border border-border p-3 bg-muted/20">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-inter font-medium text-muted-foreground flex items-center gap-1.5">
+                  💬 WhatsApp (para lembretes automáticos)
+                </label>
+                {/* Badge de status */}
+                {waStatus && (
+                  <span className={`flex items-center gap-1 text-[10px] font-inter font-bold px-2 py-0.5 rounded-full ${
+                    waStatus.status === "valid"
+                      ? "bg-brand-green/15 text-brand-green"
+                      : "bg-destructive/15 text-destructive"
+                  }`}>
+                    {waStatus.status === "valid"
+                      ? <><CheckCircle2 className="w-3 h-3" /> Válido</>
+                      : <><AlertCircle className="w-3 h-3" /> Inválido</>
+                    }
+                  </span>
+                )}
+              </div>
+
+              <WhatsAppPhoneInput
+                value={editForm.whatsapp_number}
+                onChange={(formatted, validation) => {
+                  setEditForm(f => ({ ...f, whatsapp_number: formatted }));
+                  setEditWaValidation(validation);
+                  // Limpa status anterior quando usuário edita
+                  if (waStatus) setWaStatus(null);
+                }}
+                showValidationAlways={editForm.whatsapp_number.length > 0}
+              />
+
+              {/* Motivo do bloqueio anterior */}
+              {waStatus?.status === "invalid" && waStatus.reason && (
+                <p className="text-[10px] font-inter text-destructive/80 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                  Último erro: {waStatus.reason}
+                </p>
+              )}
+
+              {/* Botão Revalidar */}
+              <button
+                type="button"
+                onClick={handleRevalidateWhatsApp}
+                disabled={revalidating || editForm.whatsapp_number.length < 10}
+                className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-montserrat font-bold border border-[#25D366]/40 text-[#25D366] hover:bg-[#25D366]/10 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${revalidating ? "animate-spin" : ""}`} />
+                {revalidating ? "Revalidando..." : "Revalidar WhatsApp"}
+              </button>
             </div>
 
             <div>

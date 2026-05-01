@@ -19,8 +19,17 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
     const VAPID_PUBLIC_KEY = (Deno.env.get("VAPID_PUBLIC_KEY") ?? "").replace(/["\s,]/g, "");
     const VAPID_PRIVATE_KEY = (Deno.env.get("VAPID_PRIVATE_KEY") ?? "").replace(/["\s,]/g, "");
+
+    const authResult = await authorizeServiceOrAdminLeader(req, SUPABASE_URL, ANON_KEY, SERVICE_ROLE_KEY);
+    if (!authResult.ok) {
+      return new Response(JSON.stringify({ error: authResult.error }), {
+        status: authResult.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
@@ -160,3 +169,29 @@ Deno.serve(async (req) => {
     });
   }
 });
+
+async function authorizeServiceOrAdminLeader(
+  req: Request,
+  supabaseUrl: string,
+  anonKey: string,
+  serviceRoleKey: string
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const authHeader = req.headers.get("Authorization") ?? "";
+  if (authHeader === `Bearer ${serviceRoleKey}`) return { ok: true };
+  if (!authHeader) return { ok: false, status: 401, error: "Missing Authorization header" };
+
+  const anonClient = createClient(supabaseUrl, anonKey, {
+    global: { headers: { Authorization: authHeader } },
+  });
+  const { data: { user }, error } = await anonClient.auth.getUser();
+  if (error || !user) return { ok: false, status: 401, error: "Unauthorized" };
+
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+  const [{ data: isAdmin }, { data: isLeader }] = await Promise.all([
+    adminClient.rpc("has_role", { _user_id: user.id, _role: "admin" }),
+    adminClient.rpc("has_role", { _user_id: user.id, _role: "lider" }),
+  ]);
+
+  if (isAdmin === true || isLeader === true) return { ok: true };
+  return { ok: false, status: 403, error: "Forbidden" };
+}
