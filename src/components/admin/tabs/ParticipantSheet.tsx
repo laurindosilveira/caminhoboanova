@@ -1047,6 +1047,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                 setSavingTurma(true);
                 const { error } = await supabase.from("profiles").update({
                   turma_id: newTurmaId || null,
+                  enrollment_status: newTurmaId ? "approved" : "pending",
                 }).eq("user_id", p.user_id);
                 setSavingTurma(false);
                 if (!error) {

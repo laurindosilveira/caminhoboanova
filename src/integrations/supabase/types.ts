@@ -1095,6 +1095,7 @@ export type Database = {
           birth_date: string
           community: string
           created_at: string
+          enrollment_status: string
           father_name: string | null
           father_phone: string | null
           full_name: string
@@ -1112,6 +1113,7 @@ export type Database = {
           birth_date: string
           community: string
           created_at?: string
+          enrollment_status?: string
           father_name?: string | null
           father_phone?: string | null
           full_name: string
@@ -1129,6 +1131,7 @@ export type Database = {
           birth_date?: string
           community?: string
           created_at?: string
+          enrollment_status?: string
           father_name?: string | null
           father_phone?: string | null
           full_name?: string

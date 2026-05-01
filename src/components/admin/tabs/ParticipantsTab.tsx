@@ -392,6 +392,7 @@ function ParticipantDetail({ participant: pOriginal, activities, onBack }: Detai
       mother_phone: editForm.mother_phone?.trim() ?? "",
       confirmation_year: editForm.confirmation_year ?? null,
       turma_id: editForm.turma_id ?? null,
+      enrollment_status: editForm.turma_id ? "approved" : "pending",
     } as any).eq("user_id", p.user_id);
     if (error) {
       toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });

@@ -18,6 +18,7 @@ interface Profile {
   address?: string;
   avatar_url?: string;
   confirmation_year?: number | null;
+  enrollment_status?: "pending" | "approved" | "rejected";
 }
 
 interface AuthContextType {

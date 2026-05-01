@@ -169,8 +169,9 @@ export default function LeaderRoomSection({ asTab = false }: { asTab?: boolean }
     async function fetchWaitingCount() {
       const { data, error } = await supabase
         .from("profiles")
-        .select("user_id, area")
-        .is("turma_id", null);
+        .select("user_id, area, enrollment_status")
+        .is("turma_id", null)
+        .eq("enrollment_status", "pending");
       if (!error && data) {
         const myId = (await supabase.auth.getUser()).data.user?.id;
         const filtered = data.filter(p => p.user_id !== myId && p.area === turmaArea);

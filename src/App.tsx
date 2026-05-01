@@ -26,7 +26,7 @@ import AdminSistemaPasswordGate from "./components/auth/AdminSistemaPasswordGate
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, profile, loading, signOut } = useAuth();
 
   if (loading) {
     return (
@@ -42,6 +42,27 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) return <Navigate to="/login" replace />;
+  if (profile?.enrollment_status === "rejected") {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6 bg-background">
+        <div className="w-full max-w-sm rounded-2xl border border-destructive/30 bg-card p-6 text-center shadow-sm">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-destructive/10">
+            <span className="text-destructive text-xl font-black">!</span>
+          </div>
+          <h1 className="font-montserrat text-xl font-black text-foreground">Cadastro nao autorizado</h1>
+          <p className="mt-2 font-inter text-sm text-muted-foreground">
+            Seu cadastro foi rejeitado pela lideranca da sua area. Fale com a equipe da igreja se achar que isso foi um engano.
+          </p>
+          <button
+            onClick={() => void signOut()}
+            className="mt-5 w-full rounded-xl bg-destructive px-4 py-3 font-montserrat text-sm font-bold text-destructive-foreground transition-colors hover:bg-destructive/90"
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    );
+  }
   return <>{children}</>;
 }
 

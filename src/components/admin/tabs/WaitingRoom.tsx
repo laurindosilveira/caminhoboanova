@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Clock, UserPlus, Search, GraduationCap } from "lucide-react";
+import { Clock, UserPlus, Search, GraduationCap, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 
@@ -12,6 +12,7 @@ type WaitingUser = {
   phone: string;
   birth_date: string;
   turma_id: string | null;
+  enrollment_status: "pending" | "approved" | "rejected";
 };
 
 type Turma = {
@@ -34,7 +35,10 @@ export default function WaitingRoom() {
   async function fetchData() {
     setLoading(true);
     const [{ data: profiles }, { data: turmasData }, userResult] = await Promise.all([
-      supabase.from("profiles").select("user_id, full_name, community, area, phone, birth_date, turma_id"),
+      supabase
+        .from("profiles")
+        .select("user_id, full_name, community, area, phone, birth_date, turma_id, enrollment_status")
+        .eq("enrollment_status", "pending"),
       supabase.from("turmas").select("id, name, year, area").eq("is_active", true).order("year", { ascending: false }),
       supabase.auth.getUser(),
     ]);
@@ -49,12 +53,34 @@ export default function WaitingRoom() {
 
   async function assignTurma(userId: string, turmaId: string, userName: string) {
     setSaving(userId);
-    const { error } = await supabase.from("profiles").update({ turma_id: turmaId }).eq("user_id", userId);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ turma_id: turmaId, enrollment_status: "approved" })
+      .eq("user_id", userId);
     if (error) {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     } else {
       const turma = turmas.find(t => t.id === turmaId);
       toast({ title: "✅ Atribuído", description: `${userName} foi adicionado à turma "${turma?.name}".` });
+      setUsers(prev => prev.filter(u => u.user_id !== userId));
+    }
+    setSaving(null);
+  }
+
+  async function rejectUser(userId: string, userName: string) {
+    const confirmed = window.confirm(`Rejeitar o cadastro de ${userName}?`);
+    if (!confirmed) return;
+
+    setSaving(userId);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ turma_id: null, enrollment_status: "rejected" })
+      .eq("user_id", userId);
+
+    if (error) {
+      toast({ title: "Erro ao rejeitar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Usuario rejeitado", description: `${userName} foi removido da sala de espera.` });
       setUsers(prev => prev.filter(u => u.user_id !== userId));
     }
     setSaving(null);
@@ -117,17 +143,23 @@ export default function WaitingRoom() {
                     <p className="text-muted-foreground text-xs font-inter">{u.community} · {u.area}</p>
                   </div>
                 </div>
-                {turmas.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {turmas.map(t => (
-                      <button key={t.id} onClick={() => assignTurma(u.user_id, t.id, u.full_name)} disabled={saving === u.user_id}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all disabled:opacity-50">
-                        <GraduationCap className="w-3 h-3" />
-                        {t.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <div className="flex flex-wrap gap-1.5">
+                  {turmas.length > 0 && turmas.map(t => (
+                    <button key={t.id} onClick={() => assignTurma(u.user_id, t.id, u.full_name)} disabled={saving === u.user_id}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all disabled:opacity-50">
+                      <GraduationCap className="w-3 h-3" />
+                      {t.name}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => rejectUser(u.user_id, u.full_name)}
+                    disabled={saving === u.user_id}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-montserrat font-bold bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 transition-all disabled:opacity-50"
+                  >
+                    <XCircle className="w-3 h-3" />
+                    Rejeitar
+                  </button>
+                </div>
               </div>
             );
           })}
