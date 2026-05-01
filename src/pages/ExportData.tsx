@@ -11,6 +11,63 @@ type AdminExportMode = "schema" | "data" | "all";
 type AuditExportType = "personal_json" | "admin_schema" | "admin_data" | "admin_full";
 type PrivacyRequestType = "data_deletion" | "data_correction" | "consent_review" | "other";
 type GenericRowsResult = { data: Record<string, unknown>[] | null; error: { message: string } | null };
+type StorageListItem = {
+  name: string;
+  id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  last_accessed_at?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
+const MIGRATION_TABLES = [
+  "courses",
+  "activities",
+  "turmas",
+  "community_settings",
+  "area_pastors",
+  "community_challenges",
+  "lessons",
+  "course_unlocks",
+  "ranking_seasons",
+  "lesson_content",
+  "devotional_content",
+  "events",
+  "leader_meeting_notes",
+  "messages",
+  "profiles",
+  "user_roles",
+  "user_progress",
+  "lesson_responses",
+  "devotional_progress",
+  "devotional_responses",
+  "attendance",
+  "worship_attendance",
+  "achievement_unlocks",
+  "challenge_participants",
+  "meeting_evaluations",
+  "message_reactions",
+  "discipleship_plans",
+  "pastoral_notes",
+  "spiritual_assessments",
+  "notification_preferences",
+  "community_chat",
+  "prayer_requests",
+  "testimonies",
+  "user_devotional_overrides",
+  "user_lesson_overrides",
+];
+
+const MIGRATION_BUCKETS = ["avatars", "challenge-files", "chat-files", "event-photos"];
+
+const MANUAL_MIGRATION_ITEMS = [
+  "Exportar usuarios do Supabase Auth pelo painel/CLI. Senhas nao sao exportadas pelo app.",
+  "Recriar secrets: SUPABASE_SERVICE_ROLE_KEY, STRIPE_SECRET_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY e credenciais WhatsApp.",
+  "Publicar novamente as Edge Functions no novo projeto.",
+  "Recriar cron jobs/agendamentos do Supabase.",
+  "Copiar arquivos do Storage separadamente quando o manifesto indicar que existem arquivos.",
+  "Conferir redirects, URLs publicas, dominio e configuracoes de Auth no novo projeto.",
+];
 
 function escapeSQL(value: unknown): string {
   if (value === null || value === undefined) return "NULL";
@@ -313,6 +370,116 @@ export default function ExportData() {
     }
   }
 
+  async function listKnownStorageBuckets() {
+    const results = await Promise.all(
+      MIGRATION_BUCKETS.map(async (bucket) => {
+        const { data, error } = await supabase.storage.from(bucket).list("", {
+          limit: 1000,
+          sortBy: { column: "name", order: "asc" },
+        });
+
+        return {
+          bucket,
+          status: error ? "error" : "listed",
+          error: error?.message ?? null,
+          note: "Listagem limitada ao nivel raiz e as policies disponiveis para este usuario.",
+          files: (data ?? []).map((item: StorageListItem) => ({
+            name: item.name,
+            id: item.id ?? null,
+            created_at: item.created_at ?? null,
+            updated_at: item.updated_at ?? null,
+            last_accessed_at: item.last_accessed_at ?? null,
+            metadata: item.metadata ?? null,
+          })),
+        };
+      })
+    );
+
+    return results;
+  }
+
+  async function handleMigrationPackage() {
+    if (!isSystemAdmin) {
+      setStatus("Apenas administradores do sistema podem preparar pacote de migracao.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const date = new Date().toISOString().slice(0, 10);
+      await auditExport("admin_full", "system", "started", { mode: "migration_package" });
+      setStatus("Preparando pacote de migracao...");
+
+      const [dataSql, storage] = await Promise.all([
+        fetchAllData(),
+        listKnownStorageBuckets(),
+      ]);
+
+      const fullSql = buildHeader("PACOTE DE MIGRACAO - SCHEMA + DADOS PUBLIC") +
+        "-- Este arquivo nao inclui Auth, senhas, Storage binario, secrets, Edge Functions ou cron jobs.\n\n" +
+        "-- PARTE 1: ESTRUTURA\n\n" +
+        SCHEMA_SQL +
+        "\n\n-- PARTE 2: DADOS PUBLIC\n\n" +
+        dataSql;
+
+      const manifest = {
+        generated_at: new Date().toISOString(),
+        generated_by: {
+          user_id: user?.id ?? null,
+          email: user?.email ?? null,
+          name: profile?.full_name ?? null,
+        },
+        source_project: {
+          supabase_url: import.meta.env.VITE_SUPABASE_URL ?? null,
+          project_id: import.meta.env.VITE_SUPABASE_PROJECT_ID ?? null,
+        },
+        included_files: [
+          `pacote-migracao-${date}.sql`,
+          `manifesto-migracao-${date}.json`,
+        ],
+        included: {
+          schema_sql: true,
+          public_table_data_sql: true,
+          public_tables: MIGRATION_TABLES,
+          storage_bucket_listing_attempted: true,
+          storage_buckets: storage,
+        },
+        not_included: {
+          auth_passwords: "Senhas nunca sao exportadas pelo app.",
+          auth_users_full_dump: "Use Supabase Dashboard/CLI para exportar usuarios Auth quando necessario.",
+          storage_binary_files: "O manifesto lista arquivos quando a policy permite, mas nao baixa os binarios.",
+          secrets: "Secrets precisam ser recriados manualmente no novo projeto.",
+          edge_functions: "Funcoes devem ser publicadas novamente a partir do repositorio.",
+          cron_jobs: "Agendamentos precisam ser recriados no novo Supabase.",
+          project_settings: "Configuracoes internas do projeto devem ser revisadas manualmente.",
+        },
+        manual_checklist: MANUAL_MIGRATION_ITEMS,
+        recommended_order: [
+          "Criar novo projeto Supabase.",
+          "Aplicar migrations/schema.",
+          "Restaurar dados public do arquivo SQL.",
+          "Criar buckets e copiar arquivos Storage.",
+          "Configurar Auth, redirects e usuarios.",
+          "Configurar secrets.",
+          "Publicar Edge Functions.",
+          "Recriar cron jobs.",
+          "Testar login, perfil, notificacoes, pagamentos e exportacao LGPD.",
+        ],
+      };
+
+      downloadFile(fullSql, `pacote-migracao-${date}.sql`, "text/sql;charset=utf-8");
+      downloadFile(JSON.stringify(manifest, null, 2), `manifesto-migracao-${date}.json`, "application/json;charset=utf-8");
+      await auditExport("admin_full", "system", "completed", { mode: "migration_package" });
+      setStatus("Pacote de migracao gerado. Baixe tambem Auth, Storage e secrets pelos canais administrativos.");
+    } catch (err) {
+      console.error(err);
+      await auditExport("admin_full", "system", "failed", { mode: "migration_package", error: String(err) });
+      setStatus("Erro ao preparar pacote de migracao: " + String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handlePrivacyRequest() {
     if (!user?.id) return;
 
@@ -422,6 +589,12 @@ export default function ExportData() {
               <Button onClick={() => handleAdminExport("all")} disabled={loading} className="w-full" size="lg">
                 Exportar Tudo (Schema + Dados)
               </Button>
+              <Button onClick={handleMigrationPackage} disabled={loading} className="w-full" size="lg" variant="secondary">
+                Preparar migracao completa
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Gera SQL + manifesto. Auth, senhas, arquivos Storage e secrets exigem etapas administrativas.
+              </p>
             </CardContent>
           </Card>
         )}
