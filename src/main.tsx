@@ -13,9 +13,8 @@ function hideSplash() {
 }
 
 // ─── PWA Update Strategy ─────────────────────────────
-// Check for updates without taking over the current session.
-// When a new version is available, show a banner and let the user choose when
-// to reload, instead of silently refreshing while they are using the app.
+// Check for updates early and apply them automatically.
+// This avoids PWA users staying on an old deployed bundle after a release.
 
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour (not every 60s)
 const VISIBILITY_CHECK_COOLDOWN_MS = 5 * 60 * 1000; // avoid noisy checks when tab focus changes
@@ -52,7 +51,7 @@ function showUpdateBanner(updateSWFn: () => void) {
 }
 
 const updateSW = registerSW({
-  immediate: false,
+  immediate: true,
 
   onRegisteredSW(_swUrl, registration) {
     if (!registration) return;
@@ -79,9 +78,9 @@ const updateSW = registerSW({
     });
   },
 
-  // When a new version is ready: show banner, let the user decide when to reload
+  // When a new version is ready, activate it immediately.
   onNeedRefresh() {
-    showUpdateBanner(() => updateSW(true));
+    updateSW(true);
   },
 
   onOfflineReady() {
