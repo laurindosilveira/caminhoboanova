@@ -27,6 +27,10 @@ interface ActivityItem {
   tableId?: string;
   /** For attendance items: the event type (encontro, confirmatorio, culto, etc.) */
   eventType?: string;
+  lessonId?: string | null;
+  lessonTitle?: string;
+  lessonOrder?: number | null;
+  devotionalDay?: number | null;
 }
 
 type LessonExpandedContent = {
@@ -122,6 +126,7 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
   const [gaps, setGaps] = useState<{ missingLessons: { id: string; title: string }[]; missingDevotionals: { id: string; title: string; day_number: number | null }[] } | null>(null);
   const [showGaps, setShowGaps] = useState(false);
   const [showBonusForm, setShowBonusForm] = useState(false);
+  const [selectedDevotionalLessonKey, setSelectedDevotionalLessonKey] = useState<string | null>(null);
   const [bonusCategory, setBonusCategory] = useState<BonusCategory>("conquista");
   const [bonusPoints, setBonusPoints] = useState("");
   const [bonusJustification, setBonusJustification] = useState("");
@@ -168,7 +173,7 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
       supabase.from("worship_attendance").select("id, worship_date, preacher_name, worship_time, status, created_at").eq("user_id", userId).eq("status", "aprovado"),
       supabase.from("achievement_unlocks").select("id, achievement_key, bonus_points, unlocked_at").eq("user_id", userId),
       supabase.from("user_progress").select("id, activity_id, completed_at").eq("user_id", userId),
-      supabase.from("lessons").select("id, title, course_id"),
+      supabase.from("lessons").select("id, title, course_id, order_num"),
       supabase.from("devotional_content").select("id, title, day_number, lesson_id"),
       supabase.from("events").select("id, title, event_date, type"),
       supabase.from("activities").select("id, title, points, type"),
@@ -255,18 +260,25 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
 
     (devProgress ?? []).forEach((progress) => {
       const devotional = devotionalMap.get(progress.devotional_id);
+      const lesson = devotional?.lesson_id ? lessonMap.get(devotional.lesson_id) : null;
       const dayOfWeek = new Date(progress.completed_at).getDay();
       const points = dayOfWeek === 0 || dayOfWeek === 6 ? devWkPts : devPts;
+      const completionLabel = dayOfWeek === 0 || dayOfWeek === 6 ? "Recuperado no fim de semana" : "Devocional diario";
+      const lessonLabel = lesson ? `Licao ${lesson.order_num}: ${lesson.title}` : "Sem licao vinculada";
       allItems.push({
         id: `dev-${progress.id}`,
         type: "devotional",
         source: "native",
         title: devotional?.title || `Devocional dia ${devotional?.day_number ?? "?"}`,
-        subtitle: dayOfWeek === 0 || dayOfWeek === 6 ? "Recuperado no fim de semana" : "Devocional diário",
+        subtitle: `${lessonLabel} - ${completionLabel}`,
         points,
         date: progress.completed_at,
         deletable: true,
         tableId: progress.id,
+        lessonId: devotional?.lesson_id ?? null,
+        lessonTitle: lesson?.title ?? "Sem licao vinculada",
+        lessonOrder: lesson?.order_num ?? null,
+        devotionalDay: devotional?.day_number ?? null,
       });
     });
 
@@ -637,6 +649,37 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
       ? items.filter(i => i.type === "attendance" && `att_${i.eventType ?? "encontro"}` === categoryModal)
       : items.filter(i => i.type === categoryModal)
     : [];
+  const devotionalLessonGroups = categoryItems
+    .filter((item) => item.type === "devotional")
+    .reduce((acc, item) => {
+      const key = item.source === "manual_bonus"
+        ? "manual_bonus"
+        : item.lessonId ?? "without_lesson";
+      if (!acc[key]) {
+        acc[key] = {
+          key,
+          title: item.source === "manual_bonus" ? "Bonus de Devocional" : item.lessonTitle ?? "Sem licao vinculada",
+          order: item.source === "manual_bonus" ? 9998 : item.lessonOrder ?? 9999,
+          items: [] as ActivityItem[],
+          points: 0,
+          lastDate: item.date,
+        };
+      }
+      acc[key].items.push(item);
+      acc[key].points += item.points;
+      if (new Date(item.date).getTime() > new Date(acc[key].lastDate).getTime()) {
+        acc[key].lastDate = item.date;
+      }
+      return acc;
+    }, {} as Record<string, { key: string; title: string; order: number; items: ActivityItem[]; points: number; lastDate: string }>);
+  const devotionalLessonGroupList = Object.values(devotionalLessonGroups)
+    .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
+  const selectedDevotionalLessonGroup = selectedDevotionalLessonKey
+    ? devotionalLessonGroups[selectedDevotionalLessonKey]
+    : null;
+  const visibleCategoryItems = categoryModal === "devotional" && selectedDevotionalLessonGroup
+    ? selectedDevotionalLessonGroup.items
+    : categoryItems;
   const selectedBonusOption = bonusOptions.find((option) => option.value === bonusCategory);
   const isManualConquistaBonus = bonusCategory === "conquista";
   const whatsappLink = buildWhatsAppLink(phone);
@@ -745,7 +788,7 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
             {Object.entries(grouped).map(([type, { count, points }]) => (
               <button
                 key={type}
-                onClick={() => setCategoryModal(type)}
+                onClick={() => { setCategoryModal(type); setSelectedDevotionalLessonKey(null); }}
                 className="bg-muted/50 hover:bg-muted/80 active:scale-95 rounded-xl p-2 text-center transition-all cursor-pointer"
               >
                 <div className="flex items-center justify-center mb-1">{typeIcon(type)}</div>
@@ -842,21 +885,63 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
           >
             <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
               <div className="flex items-center gap-2 font-montserrat text-lg font-bold text-foreground">
-                {typeIcon(categoryModal)}
-                {typeLabel(categoryModal)}
+                {categoryModal === "devotional" && selectedDevotionalLessonGroup && (
+                  <button
+                    onClick={() => setSelectedDevotionalLessonKey(null)}
+                    className="p-1 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+                  >
+                    <ChevronRight className="w-4 h-4 rotate-180" />
+                  </button>
+                )}
+                {categoryModal === "devotional" && selectedDevotionalLessonGroup
+                  ? <BookOpen className="w-4 h-4 text-secondary" />
+                  : typeIcon(categoryModal)}
+                {categoryModal === "devotional" && selectedDevotionalLessonGroup
+                  ? selectedDevotionalLessonGroup.order < 9998
+                    ? `Lição ${selectedDevotionalLessonGroup.order}`
+                    : selectedDevotionalLessonGroup.title
+                  : typeLabel(categoryModal)}
                 <span className="text-muted-foreground font-inter text-sm font-normal ml-1">
-                  {categoryItems.length} {categoryItems.length === 1 ? "item" : "itens"}
+                  {categoryModal === "devotional" && !selectedDevotionalLessonGroup
+                    ? `${devotionalLessonGroupList.length} ${devotionalLessonGroupList.length === 1 ? "lição" : "lições"}`
+                    : `${visibleCategoryItems.length} ${visibleCategoryItems.length === 1 ? "item" : "itens"}`}
                 </span>
               </div>
-              <button onClick={() => setCategoryModal(null)} className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors">
+              <button
+                onClick={() => { setCategoryModal(null); setSelectedDevotionalLessonKey(null); }}
+                className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="overflow-y-auto p-4 space-y-2">
               {categoryItems.length === 0 ? (
                 <p className="text-center text-muted-foreground font-inter text-sm py-8">Nenhuma atividade nesta categoria.</p>
+              ) : categoryModal === "devotional" && !selectedDevotionalLessonGroup ? (
+                devotionalLessonGroupList.map((group) => (
+                  <button
+                    key={group.key}
+                    onClick={() => setSelectedDevotionalLessonKey(group.key)}
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-secondary/10 flex items-center justify-center flex-shrink-0">
+                      <BookOpen className="w-4 h-4 text-secondary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-inter text-sm text-foreground font-semibold truncate">
+                        {group.order < 9998 ? `Lição ${group.order}: ${group.title}` : group.title}
+                      </p>
+                      <p className="text-muted-foreground text-[10px] font-inter">
+                        {group.items.length} {group.items.length === 1 ? "devocional lido" : "devocionais lidos"}
+                        {group.lastDate ? ` - último em ${format(new Date(group.lastDate), "d/MM/yy")}` : ""}
+                      </p>
+                    </div>
+                    <span className="font-montserrat font-bold text-primary text-xs flex-shrink-0">+{group.points}</span>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  </button>
+                ))
               ) : (
-                categoryItems.map((item) => {
+                visibleCategoryItems.map((item) => {
                   const canOpenDetails = item.source !== "manual_bonus" && (item.type === "lesson" || item.type === "devotional");
                   return (
                     <div
