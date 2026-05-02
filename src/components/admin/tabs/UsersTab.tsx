@@ -85,13 +85,52 @@ export default function UsersTab({ onSelectTurma }: UsersTabProps) {
 
   async function fetchUsers() {
     setLoading(true);
-    const [{ data: profiles }, { data: roles }, { data: turmasData }] = await Promise.all([
-      supabase.from("profiles").select("user_id, full_name, email, community, area, phone, whatsapp_number, whatsapp_validation_status, whatsapp_last_blocked_reason, birth_date, father_name, mother_name, father_phone, mother_phone, address, created_at, turma_id").order("full_name"),
+    const [{ data: profiles, error: profilesError }, { data: roles, error: rolesError }, { data: turmasData, error: turmasError }] = await Promise.all([
+      supabase.from("profiles").select("user_id, full_name, email, community, area, phone, birth_date, father_name, mother_name, father_phone, mother_phone, address, created_at, turma_id").order("full_name"),
       supabase.from("user_roles").select("user_id, role, admin_area"),
       supabase.from("turmas").select("id, name, year, area").eq("is_active", true).order("year", { ascending: false }),
     ]);
 
+    if (profilesError) {
+      setUsers([]);
+      setAvailableYears([]);
+      setTurmas(turmasData ?? []);
+      setLoading(false);
+      toast({ title: "Erro ao carregar usuarios", description: profilesError.message, variant: "destructive" });
+      return;
+    }
+
+    if (rolesError) {
+      toast({ title: "Aviso ao carregar permissoes", description: rolesError.message, variant: "destructive" });
+    }
+
+    if (turmasError) {
+      toast({ title: "Aviso ao carregar turmas", description: turmasError.message, variant: "destructive" });
+    }
+
     setTurmas(turmasData ?? []);
+
+    const userIds = (profiles ?? []).map(p => p.user_id);
+    const whatsappByUser: Record<string, {
+      whatsapp_number: string | null;
+      whatsapp_validation_status: UserEntry["whatsapp_validation_status"];
+      whatsapp_last_blocked_reason: string | null;
+    }> = {};
+
+    if (userIds.length > 0) {
+      const { data: whatsappRows } = await supabase
+        .from("profiles")
+        .select("user_id, whatsapp_number, whatsapp_validation_status, whatsapp_last_blocked_reason")
+        .in("user_id", userIds) as any;
+
+      (whatsappRows ?? []).forEach((row: any) => {
+        whatsappByUser[row.user_id] = {
+          whatsapp_number: row.whatsapp_number ?? null,
+          whatsapp_validation_status: row.whatsapp_validation_status ?? null,
+          whatsapp_last_blocked_reason: row.whatsapp_last_blocked_reason ?? null,
+        };
+      });
+    }
 
     const roleMap: Record<string, { role: "admin" | "lider" | "user"; admin_area: string | null }> = {};
     (roles ?? []).forEach(r => {
@@ -109,9 +148,9 @@ export default function UsersTab({ onSelectTurma }: UsersTabProps) {
       father_phone: (p as any).father_phone ?? "",
       mother_phone: (p as any).mother_phone ?? "",
       address: (p as any).address ?? "",
-      whatsapp_number: (p as any).whatsapp_number ?? null,
-      whatsapp_validation_status: (p as any).whatsapp_validation_status ?? null,
-      whatsapp_last_blocked_reason: (p as any).whatsapp_last_blocked_reason ?? null,
+      whatsapp_number: whatsappByUser[p.user_id]?.whatsapp_number ?? null,
+      whatsapp_validation_status: whatsappByUser[p.user_id]?.whatsapp_validation_status ?? null,
+      whatsapp_last_blocked_reason: whatsappByUser[p.user_id]?.whatsapp_last_blocked_reason ?? null,
       turma_id: p.turma_id ?? null,
       role: roleMap[p.user_id]?.role ?? "user",
       admin_area: roleMap[p.user_id]?.admin_area ?? null,
