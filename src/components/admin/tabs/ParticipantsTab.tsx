@@ -9,6 +9,16 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import ParticipantSheet from "./ParticipantSheet";
 
 type Activity = { id: string; type: string; title: string; points: number; order_num: number; subtitle: string | null };
@@ -1106,11 +1116,15 @@ type StatusFilter = "todos" | "iniciando" | "andamento" | "avancado";
 
 export default function ParticipantsTab({ participants, activities, communities }: Props) {
   const { profile } = useAuth();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [communityFilter, setCommunityFilter] = useState("todas");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("todos");
   const [yearFilter, setYearFilter] = useState<string>("todos");
   const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
+  const [deletingParticipant, setDeletingParticipant] = useState<Participant | null>(null);
+  const [isDeletingParticipant, setIsDeletingParticipant] = useState(false);
+  const [deletedParticipantIds, setDeletedParticipantIds] = useState<Set<string>>(new Set());
 
   // Course unlock management
   const myArea = profile?.area ?? "";
@@ -1153,6 +1167,37 @@ export default function ParticipantsTab({ participants, activities, communities 
       }
     }
     setUnlockLoading(null);
+  }
+
+  async function deleteParticipant() {
+    if (!deletingParticipant) return;
+    setIsDeletingParticipant(true);
+    try {
+      const res = await supabase.rpc("delete_user_from_discipleship" as any, {
+        _target_user_id: deletingParticipant.user_id,
+      });
+
+      if (res.error || res.data?.error) {
+        toast({
+          title: "Erro ao deletar usuario",
+          description: res.data?.error || res.error?.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setDeletedParticipantIds(prev => new Set(prev).add(deletingParticipant.user_id));
+      if (selectedParticipant?.user_id === deletingParticipant.user_id) setSelectedParticipant(null);
+      toast({
+        title: "Usuario deletado",
+        description: `${deletingParticipant.full_name} foi removido do banco de dados.`,
+      });
+      setDeletingParticipant(null);
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    } finally {
+      setIsDeletingParticipant(false);
+    }
   }
 
   // Fetch objective status reasons from DB
@@ -1254,7 +1299,9 @@ export default function ParticipantsTab({ participants, activities, communities 
     return <ParticipantSheet participant={selectedParticipant} activities={activities} onBack={() => setSelectedParticipant(null)} />;
   }
 
-  const filtered = participants.filter((p) => {
+  const visibleParticipants = participants.filter((p) => !deletedParticipantIds.has(p.user_id));
+
+  const filtered = visibleParticipants.filter((p) => {
     if (search && !p.full_name.toLowerCase().includes(search.toLowerCase()) && !p.community.toLowerCase().includes(search.toLowerCase())) return false;
     if (communityFilter !== "todas" && p.community !== communityFilter) return false;
     if (yearFilter !== "todos" && p.confirmation_year !== Number(yearFilter)) return false;
@@ -1266,12 +1313,13 @@ export default function ParticipantsTab({ participants, activities, communities 
   }).sort((a, b) => (a.full_name ?? "").localeCompare(b.full_name ?? "", "pt-BR", { sensitivity: "base" }));
 
   // ── Group summary metrics ──
-  const totalDevotionals = participants.reduce((s, p) => s + (p.completed_devotional_count ?? 0), 0);
-  const totalLessons = participants.reduce((s, p) => s + (p.completed_lesson_count ?? 0), 0);
-  const totalPresences = participants.reduce((s, p) => s + (p.completed_event_count ?? 0), 0);
-  const alertCount = Object.keys(statusReasons).filter(id => statusReasons[id]?.some(r => r.severity === "high")).length;
-  const attentionCount = Object.keys(statusReasons).filter(id => !statusReasons[id]?.some(r => r.severity === "high") && statusReasons[id]?.length > 0).length;
-  const healthyCount = participants.length - alertCount - attentionCount;
+  const visibleParticipantIds = new Set(visibleParticipants.map(p => p.user_id));
+  const totalDevotionals = visibleParticipants.reduce((s, p) => s + (p.completed_devotional_count ?? 0), 0);
+  const totalLessons = visibleParticipants.reduce((s, p) => s + (p.completed_lesson_count ?? 0), 0);
+  const totalPresences = visibleParticipants.reduce((s, p) => s + (p.completed_event_count ?? 0), 0);
+  const alertCount = Object.keys(statusReasons).filter(id => visibleParticipantIds.has(id) && statusReasons[id]?.some(r => r.severity === "high")).length;
+  const attentionCount = Object.keys(statusReasons).filter(id => visibleParticipantIds.has(id) && !statusReasons[id]?.some(r => r.severity === "high") && statusReasons[id]?.length > 0).length;
+  const healthyCount = visibleParticipants.length - alertCount - attentionCount;
 
   return (
     <div className="space-y-4">
@@ -1284,7 +1332,7 @@ export default function ParticipantsTab({ participants, activities, communities 
             <p className="font-montserrat font-bold text-foreground text-sm">Resumo da Turma</p>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="font-montserrat font-black text-foreground text-2xl">{participants.length}</span>
+            <span className="font-montserrat font-black text-foreground text-2xl">{visibleParticipants.length}</span>
             <span className="font-inter text-xs text-muted-foreground">discípulos</span>
           </div>
         </div>
@@ -1443,9 +1491,17 @@ export default function ParticipantsTab({ participants, activities, communities 
               ? "border-l-4 border-l-amber-400"
               : "";
             return (
-              <button
+              <div
                 key={p.user_id}
+                role="button"
+                tabIndex={0}
                 onClick={() => setSelectedParticipant(p)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setSelectedParticipant(p);
+                  }
+                }}
                 className={`w-full text-left bg-card rounded-2xl border border-border shadow-sm overflow-hidden hover:border-primary/30 transition-colors ${borderAccent}`}
               >
                 <div className="p-4 pb-3">
@@ -1471,9 +1527,23 @@ export default function ParticipantsTab({ participants, activities, communities 
                         </div>
                       </div>
                     </div>
-                    <span className={`px-2.5 py-1 rounded-lg text-xs font-inter font-medium flex-shrink-0 ${status.bg} ${status.color}`}>
-                      {status.label}
-                    </span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className={`px-2.5 py-1 rounded-lg text-xs font-inter font-medium ${status.bg} ${status.color}`}>
+                        {status.label}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDeletingParticipant(p);
+                        }}
+                        className="w-8 h-8 rounded-lg border border-destructive/20 bg-destructive/10 text-destructive hover:bg-destructive/20 flex items-center justify-center transition-colors"
+                        title={`Deletar ${p.full_name}`}
+                        aria-label={`Deletar ${p.full_name}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Alert reasons */}
@@ -1502,11 +1572,33 @@ export default function ParticipantsTab({ participants, activities, communities 
                   <span className="text-[11px] font-inter text-muted-foreground">📅 <strong className="text-foreground">{p.completed_event_count ?? 0}</strong></span>
                   <span className="ml-auto font-montserrat font-black text-primary text-xs">⭐ {totalPts} pts</span>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
       )}
+
+      <AlertDialog open={!!deletingParticipant} onOpenChange={(open) => { if (!open) setDeletingParticipant(null); }}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-montserrat font-bold">Deletar usuario?</AlertDialogTitle>
+            <AlertDialogDescription className="font-inter text-sm">
+              Tem certeza que deseja deletar <span className="font-bold text-foreground">{deletingParticipant?.full_name}</span>?
+              Esta acao e irreversivel e removera o perfil, permissoes e login deste usuario do banco de dados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl font-montserrat font-bold" disabled={isDeletingParticipant}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteParticipant}
+              disabled={isDeletingParticipant}
+              className="rounded-xl font-montserrat font-bold bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeletingParticipant ? "Deletando..." : "Sim, deletar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
