@@ -10,7 +10,7 @@ type AgendaSchedule = {
   lateAccessLessonIds: Set<string>;
   lessonEventDate: Map<string, Date>;
   lessonDevotionalDates: Map<string, Date[]>;
-  schedule: { lessonId: string; windowStart: Date }[];
+  schedule: { lessonId: string; eventDate: Date; windowStart: Date }[];
 };
 
 type Props = {
@@ -130,7 +130,7 @@ export default function CourseTrailSection({
                     if (eventDay) eventDay.setHours(0, 0, 0, 0);
                     const todayZero = new Date(); todayZero.setHours(0, 0, 0, 0);
                     const isLateAccess = !isLeaderOrAdmin && agendaSchedule.lateAccessLessonIds.has(lesson.id) && !isFullyDone;
-                    const isAccessible = isLeaderOrAdmin || isStudyOpen || isLateAccess || isFullyDone || isDone || hasManualOverride;
+                    const isAccessible = isLeaderOrAdmin || isStudyOpen || isLateAccess || isFullyDone || hasManualOverride;
                     const isLocked = !isLeaderOrAdmin && agendaSchedule.hasScheduledEvents && !isAccessible && !isFullyDone;
                     const isNotScheduled = !isLeaderOrAdmin && agendaSchedule.hasScheduledEvents && !isScheduled && !isFullyDone && !isDone && !hasManualOverride;
 
@@ -144,7 +144,7 @@ export default function CourseTrailSection({
                     } else if (isLocked) {
                       const entry = agendaSchedule.schedule.find(e => e.lessonId === lesson.id);
                       if (entry) {
-                        lockMessage = `Disponível em ${entry.windowStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
+                        lockMessage = `Disponível em ${entry.eventDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
                       } else {
                         lockMessage = "Ainda não liberada";
                       }

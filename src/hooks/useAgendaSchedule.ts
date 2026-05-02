@@ -41,6 +41,12 @@ export function getBusinessDaysBefore(date: Date, count: number): Date[] {
   return days;
 }
 
+function startOfLocalDay(date: Date): Date {
+  const day = new Date(date);
+  day.setHours(0, 0, 0, 0);
+  return day;
+}
+
 export function useAgendaSchedule() {
   const { profile, role, user } = useAuth();
   const { effectiveArea } = useAreaSwitch();
@@ -214,7 +220,8 @@ export function useAgendaSchedule() {
   const lessonDevotionalMode = new Map<string, "5_days" | "10_days">();
 
   for (const entry of schedule) {
-    if (today >= entry.windowStart) releasedLessonIds.add(entry.lessonId);
+    const eventDay = startOfLocalDay(entry.eventDate);
+    if (today >= eventDay) releasedLessonIds.add(entry.lessonId);
     if (now >= entry.eventDate) lateAccessLessonIds.add(entry.lessonId);
     lessonDevotionalDates.set(entry.lessonId, entry.devotionalDates);
     lessonEventDate.set(entry.lessonId, entry.eventDate);
@@ -222,7 +229,7 @@ export function useAgendaSchedule() {
     lessonDevotionalMode.set(entry.lessonId, entry.devotionalMode);
   }
 
-  const currentOpenEntry = schedule.find((e) => today >= e.windowStart && now < e.eventDate);
+  const currentOpenEntry = schedule.find((e) => today >= startOfLocalDay(e.eventDate) && now < e.eventDate);
   if (currentOpenEntry) studyOpenLessonIds.add(currentOpenEntry.lessonId);
 
   const scheduledLessonIds = new Set(schedule.map((e) => e.lessonId));

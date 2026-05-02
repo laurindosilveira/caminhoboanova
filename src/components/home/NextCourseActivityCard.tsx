@@ -289,7 +289,9 @@ export default function NextCourseActivityCard({ onNavigateToDiscipulado }: { on
         return;
       }
 
-      if (!studiedLessons.has(lessonId)) {
+      const eventDay = new Date(entry.eventDate);
+      eventDay.setHours(0, 0, 0, 0);
+      if (!studiedLessons.has(lessonId) && today >= eventDay) {
         setNextItem({
           type: "lesson",
           title: `Licao ${entry.lessonOrder}: ${entry.lessonTitle}`,

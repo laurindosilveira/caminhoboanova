@@ -396,6 +396,10 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
       );
     }
     const isLateAccess = !isLeaderOrAdmin && agendaSchedule.lateAccessLessonIds.has(selectedLesson.id) && !fullyCompletedLessonIds.has(selectedLesson.id);
+    const hasManualOverride = manualLessonOverrideMap.has(selectedLesson.id);
+    const isStudyOpen = isLeaderOrAdmin || agendaSchedule.studyOpenLessonIds.has(selectedLesson.id) || hasManualOverride;
+    const isFullyDone = fullyCompletedLessonIds.has(selectedLesson.id);
+    const isStudyLocked = !isLeaderOrAdmin && !isStudyOpen && !isLateAccess && !isFullyDone;
     const studyDone = completedLessonIds.has(selectedLesson.id);
     return (
       <LessonChoiceView
@@ -410,7 +414,7 @@ export default function DiscipleshipTab({ targetLessonId, targetLessonMode = "ch
         releasedDayNumbers={agendaSchedule.lessonReleasedDays.get(selectedLesson.id)}
         devotionalMode={agendaSchedule.lessonDevotionalMode.get(selectedLesson.id) ?? "10_days"}
         eventDate={agendaSchedule.lessonEventDate.get(selectedLesson.id) ?? undefined}
-        isStudyLocked={false}
+        isStudyLocked={isStudyLocked}
         isLateAccess={isLateAccess}
         isStudyCompleted={studyDone}
         overrideId={manualLessonOverrideMap.get(selectedLesson.id)?.id}
