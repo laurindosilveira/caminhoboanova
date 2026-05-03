@@ -22,6 +22,7 @@ import PushActivationBanner from "@/components/home/PushActivationBanner";
 import WhatsAppBlockedBanner from "@/components/home/WhatsAppBlockedBanner";
 import RemindersSection from "@/components/home/RemindersSection";
 import PersonalizedGreeting from "@/components/home/PersonalizedGreeting";
+import BirthdayHighlights from "@/components/home/BirthdayHighlights";
 import BottomNav, { type Tab } from "@/components/home/BottomNav";
 import ErrorBoundary from "@/components/shared/ErrorBoundary";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -94,6 +95,9 @@ export default function Index() {
 
             {/* Personalized greeting based on last activity */}
             <PersonalizedGreeting />
+
+            {/* Aniversariantes do mes em destaque */}
+            <BirthdayHighlights area={currentArea} variant="journey" />
 
             {/* Indicador de impacto espiritual */}
             <motion.div

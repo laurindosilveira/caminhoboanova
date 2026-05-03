@@ -127,12 +127,41 @@ Deno.serve(async (req) => {
       .select("id, title, community, area")
       .gte("created_at", yesterday.toISOString());
 
-    // User profiles for community/area matching
+    // User profiles for community/area matching and birthday automation
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("user_id, community, area")
-      .in("user_id", userIds);
+      .select("user_id, full_name, community, area, birth_date, enrollment_status");
     const profileMap = new Map((profiles ?? []).map((p: any) => [p.user_id, p]));
+
+    const brtParts = getDatePartsInTimezone(nowUtc, "America/Sao_Paulo");
+    const birthdayCfg = getAutom(
+      "birthday_today",
+      "Aniversariante do dia!",
+      "Hoje e aniversario de {nome}. Envie uma mensagem de carinho!"
+    );
+    const birthdayAutomationOn = birthdayCfg.enabled && brtParts.hour >= 8;
+    const birthdaysToday = birthdayAutomationOn
+      ? (profiles ?? []).filter((p: any) => {
+          if (!p.birth_date || !p.area) return false;
+          if (p.enrollment_status && p.enrollment_status !== "approved") return false;
+          const birthday = parseDateOnly(p.birth_date);
+          return birthday.month === brtParts.month && birthday.day === brtParts.day;
+        })
+      : [];
+    const birthdaysByArea = new Map<string, any[]>();
+    for (const birthday of birthdaysToday) {
+      if (!birthdaysByArea.has(birthday.area)) birthdaysByArea.set(birthday.area, []);
+      birthdaysByArea.get(birthday.area)!.push(birthday);
+    }
+    const { data: existingBirthdayLogs } = birthdayAutomationOn
+      ? await supabase
+          .from("push_notification_log")
+          .select("target_value")
+          .eq("type", "birthday")
+          .like("target_value", `%|${brtParts.date}|%`)
+      : { data: [] as any[] };
+    const existingBirthdayLogKeys = new Set((existingBirthdayLogs ?? []).map((log: any) => log.target_value));
+    const birthdayLogStats = new Map<string, { title: string; body: string; area: string; sent: number; failed: number }>();
 
     let sent = 0, failed = 0, skipped = 0;
     const failedEndpoints: string[] = [];
@@ -149,13 +178,13 @@ Deno.serve(async (req) => {
       const tz            = prefs?.timezone || "America/Sao_Paulo";
       const preferredHour = prefs?.preferred_hour ?? 7;
       const currentHourInTz = getCurrentHourInTimezone(nowUtc, tz);
-      if (currentHourInTz !== preferredHour) { skipped++; continue; }
+      const isPreferredHour = currentHourInTz === preferredHour;
 
-      const notifications: Array<{ title: string; body: string; tag: string }> = [];
+      const notifications: Array<{ title: string; body: string; tag: string; birthdayLogKey?: string }> = [];
 
       // ── 3b. Upcoming events ────────────────────────────────────────────────
       const eventosOn = prefs ? prefs.eventos : true;
-      if (eventosOn && upcomingEvents && profile) {
+      if (isPreferredHour && eventosOn && upcomingEvents && profile) {
         const userEvents = upcomingEvents.filter((e: any) =>
           (e.community === profile.community) ||
           (e.area === profile.area) ||
@@ -176,7 +205,7 @@ Deno.serve(async (req) => {
       // ── 3c. Streak risk (uses precomputed data — no extra DB query) ─────────
       const streakOn  = prefs ? prefs.streak : true;
       const streakCfg = getAutom("streak_risk", "🔥 Sua sequência está em risco!", "Faz 2 dias sem devocional. Não deixe sua caminhada esfriar!");
-      if (streakOn && streakCfg.enabled) {
+      if (isPreferredHour && streakOn && streakCfg.enabled) {
         const twoDaysAgo = new Date(nowUtc.getTime() - 2 * 24 * 60 * 60 * 1000);
         const ud = userDevData.get(sub.user_id);
         if (ud && ud.completedIds.size > 0 && ud.mostRecentAt && ud.mostRecentAt < twoDaysAgo) {
@@ -191,7 +220,7 @@ Deno.serve(async (req) => {
       // ── 3d. New pastor messages ────────────────────────────────────────────
       const mensagensOn = prefs ? prefs.mensagens : true;
       const msgCfg = getAutom("pastor_message", "💬 Nova Mensagem do Pastor", "");
-      if (mensagensOn && msgCfg.enabled && recentMessages && profile) {
+      if (isPreferredHour && mensagensOn && msgCfg.enabled && recentMessages && profile) {
         const userMessages = recentMessages.filter((m: any) =>
           (!m.area && !m.community) ||
           (m.area === profile.area) ||
@@ -206,6 +235,33 @@ Deno.serve(async (req) => {
             body:  bodyText,
             tag:   "pastor-message",
           });
+        }
+      }
+
+      // Birthday greetings are sent once per birthday/day to everyone in that area.
+      if (birthdayAutomationOn && profile?.area) {
+        const areaBirthdays = birthdaysByArea.get(profile.area) ?? [];
+        for (const birthday of areaBirthdays) {
+          const birthdayLogKey = `${birthday.area}|${brtParts.date}|${birthday.user_id}`;
+          if (existingBirthdayLogKeys.has(birthdayLogKey)) continue;
+
+          const title = birthdayCfg.title
+            .replaceAll("{nome}", birthday.full_name)
+            .replaceAll("{area}", birthday.area);
+          const body = birthdayCfg.body
+            .replaceAll("{nome}", birthday.full_name)
+            .replaceAll("{area}", birthday.area);
+
+          notifications.push({
+            title,
+            body,
+            tag: `birthday-${brtParts.date}-${birthday.user_id}`,
+            birthdayLogKey,
+          });
+
+          if (!birthdayLogStats.has(birthdayLogKey)) {
+            birthdayLogStats.set(birthdayLogKey, { title, body, area: birthday.area, sent: 0, failed: 0 });
+          }
         }
       }
 
@@ -229,9 +285,17 @@ Deno.serve(async (req) => {
             VAPID_PRIVATE_KEY
           );
           sent++;
+          if (notif.birthdayLogKey) {
+            const stat = birthdayLogStats.get(notif.birthdayLogKey);
+            if (stat) stat.sent++;
+          }
         } catch (err: any) {
           console.error(`Push failed for ${sub.endpoint}:`, err.message);
           failed++;
+          if (notif.birthdayLogKey) {
+            const stat = birthdayLogStats.get(notif.birthdayLogKey);
+            if (stat) stat.failed++;
+          }
           if (err.status === 410 || err.status === 404) failedEndpoints.push(sub.endpoint);
         }
       }
@@ -240,6 +304,22 @@ Deno.serve(async (req) => {
     // ── 4. Clean up expired subscriptions ────────────────────────────────────
     if (failedEndpoints.length > 0) {
       await supabase.from("push_subscriptions").delete().in("endpoint", failedEndpoints);
+    }
+
+    const birthdayLogEntries = [...birthdayLogStats.entries()]
+      .filter(([key]) => !existingBirthdayLogKeys.has(key))
+      .map(([key, stat]) => ({
+        type: "birthday",
+        title: stat.title,
+        body: stat.body,
+        target: "area",
+        target_value: key,
+        sent_count: stat.sent,
+        failed_count: stat.failed,
+      }));
+
+    if (birthdayLogEntries.length > 0) {
+      await supabase.from("push_notification_log").insert(birthdayLogEntries);
     }
 
     // ── 5. Process scheduled pushes that are now due ──────────────────────────
@@ -280,6 +360,7 @@ Deno.serve(async (req) => {
         failed,
         skipped,
         cleaned:   failedEndpoints.length,
+        birthdays: birthdayLogEntries.length,
         scheduled: (pendingScheduled ?? []).length,
         total:     subscriptions.length,
       }),
@@ -308,6 +389,44 @@ function getCurrentHourInTimezone(date: Date, tz: string): number {
 }
 
 // ─── Web Push implementation using Web Crypto API ────────────────────────────
+
+function getDatePartsInTimezone(date: Date, tz: string): { date: string; month: number; day: number; hour: number } {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      hour12: false,
+    }).formatToParts(date);
+    const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
+    const year = get("year");
+    const month = get("month");
+    const day = get("day");
+    return {
+      date: `${year}-${month}-${day}`,
+      month: Number(month),
+      day: Number(day),
+      hour: Number(get("hour")),
+    };
+  } catch {
+    const brt = new Date(date.getTime() - 3 * 60 * 60 * 1000);
+    const month = brt.getUTCMonth() + 1;
+    const day = brt.getUTCDate();
+    return {
+      date: `${brt.getUTCFullYear()}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+      month,
+      day,
+      hour: brt.getUTCHours(),
+    };
+  }
+}
+
+function parseDateOnly(date: string): { month: number; day: number } {
+  const [, month, day] = date.split("-").map(Number);
+  return { month, day };
+}
 
 async function sendWebPush(
   subscription: { endpoint: string; keys: { p256dh: string; auth: string } },

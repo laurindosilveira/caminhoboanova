@@ -3,13 +3,14 @@ import { getAreaForCommunity } from "@/config/areas";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAreaSwitch } from "@/contexts/AreaSwitchContext";
-import { MessageCircle, GraduationCap, Cake, Sparkles, Send, Trash2, Target, Check, Users, Upload, Image, Camera } from "lucide-react";
+import { MessageCircle, GraduationCap, Sparkles, Send, Trash2, Target, Check, Users, Upload, Image, Camera } from "lucide-react";
 import ClassroomTab from "./ClassroomTab";
 import AnnouncementsSection from "./AnnouncementsSection";
 import PollsSection from "./PollsSection";
 import CommunityAchievements from "./CommunityAchievements";
 import PrayerPairsSection from "./PrayerPairsSection";
 import EventPhotoGallery from "./EventPhotoGallery";
+import BirthdayHighlights from "./BirthdayHighlights";
 
 const REACTION_EMOJIS = [
   { emoji: "🙏", label: "orando" },
@@ -52,12 +53,6 @@ interface Challenge {
   file_url: string | null;
 }
 
-interface BirthdayPerson {
-  full_name: string;
-  birth_date: string;
-  day: number;
-}
-
 type SubTab = "comunidade" | "sala" | "galeria";
 
 export default function CommunityTab() {
@@ -72,7 +67,6 @@ export default function CommunityTab() {
   const [submittingTestimony, setSubmittingTestimony] = useState(false);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(true);
-  const [birthdays, setBirthdays] = useState<BirthdayPerson[]>([]);
   const [challengeResponses, setChallengeResponses] = useState<Record<string, string>>({});
   const [challengeFiles, setChallengeFiles] = useState<Record<string, File | null>>({});
   const [completingChallenge, setCompletingChallenge] = useState<string | null>(null);
@@ -105,26 +99,6 @@ export default function CommunityTab() {
       setLoadingMessages(false);
     }
 
-
-    async function fetchBirthdays() {
-      const currentMonth = new Date().getMonth() + 1;
-      const { data } = await supabase
-        .from("profiles")
-        .select("full_name, birth_date, area")
-        .eq("area", currentArea as any);
-      const bdays: BirthdayPerson[] = (data ?? [])
-        .filter(p => {
-          const month = new Date(p.birth_date + "T00:00:00").getMonth() + 1;
-          return month === currentMonth;
-        })
-        .map(p => ({
-          full_name: p.full_name,
-          birth_date: p.birth_date,
-          day: new Date(p.birth_date + "T00:00:00").getDate(),
-        }))
-        .sort((a, b) => a.day - b.day);
-      setBirthdays(bdays);
-    }
 
     async function fetchTestimonies() {
       const { data } = await supabase
@@ -177,7 +151,6 @@ export default function CommunityTab() {
     }
 
     fetchMessages();
-    fetchBirthdays();
     fetchTestimonies();
     fetchChallenges();
   }, [profile, currentArea]);
@@ -540,43 +513,8 @@ export default function CommunityTab() {
             )}
           </div>
 
-          {/* Aniversariantes do mês */}
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <Cake className="w-4 h-4 text-secondary" />
-              <span className="font-montserrat font-bold text-foreground text-sm">
-                🎂 Aniversariantes de {new Date().toLocaleString("pt-BR", { month: "long" })}
-              </span>
-            </div>
-            {birthdays.length === 0 ? (
-              <div className="bg-card rounded-2xl border border-border p-4 text-center">
-                <p className="text-muted-foreground text-sm font-inter">Nenhum aniversariante este mês.</p>
-              </div>
-            ) : (
-              <div className="bg-card rounded-2xl border border-border overflow-hidden shadow-sm">
-                {birthdays.map((b, i) => {
-                  const isToday = b.day === new Date().getDate();
-                  return (
-                    <div
-                      key={b.full_name + b.birth_date}
-                      className={`flex items-center gap-3 px-4 py-3 ${i < birthdays.length - 1 ? "border-b border-border" : ""} ${isToday ? "bg-secondary/5" : ""}`}
-                    >
-                      <span className="text-lg">{isToday ? "🎉" : "🎂"}</span>
-                      <span className="font-montserrat font-black text-card-foreground text-sm flex-shrink-0">
-                        {String(b.day).padStart(2, '0')}/{String(new Date().getMonth() + 1).padStart(2, '0')}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-montserrat text-card-foreground text-sm truncate">
-                          {b.full_name}
-                          {isToday && <span className="text-secondary text-xs font-inter ml-1">(hoje!)</span>}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          {/* Aniversariantes do mes */}
+          <BirthdayHighlights area={currentArea} variant="community" />
         </div>
       )}
     </div>
