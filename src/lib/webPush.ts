@@ -1,8 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
 
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_SUPABASE_URL
-  ? undefined // We'll fetch from edge function or env
-  : undefined;
+type PushSubscriptionJson = {
+  endpoint?: string;
+  keys?: {
+    p256dh?: string;
+    auth?: string;
+  };
+};
 
 /**
  * Subscribe the current user to Web Push notifications.
@@ -21,7 +25,7 @@ export async function subscribeToWebPush(vapidPublicKey: string): Promise<boolea
 
     // Wait for service worker
     const registration = await navigator.serviceWorker.ready;
-    const pushManager = (registration as any).pushManager;
+    const pushManager = registration.pushManager;
 
     // Check for existing subscription
     let subscription = await pushManager.getSubscription();
@@ -39,7 +43,7 @@ export async function subscribeToWebPush(vapidPublicKey: string): Promise<boolea
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
-    const subJson = subscription.toJSON();
+    const subJson = subscription.toJSON() as PushSubscriptionJson;
     const { error } = await supabase.from("push_subscriptions").upsert(
       {
         user_id: user.id,
@@ -71,7 +75,7 @@ export async function unsubscribeFromWebPush(): Promise<void> {
 
   try {
     const registration = await navigator.serviceWorker.ready;
-    const subscription = await (registration as any).pushManager.getSubscription();
+    const subscription = await registration.pushManager.getSubscription();
 
     if (subscription) {
       const endpoint = subscription.endpoint;
@@ -99,7 +103,7 @@ export async function isWebPushSubscribed(): Promise<boolean> {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
   try {
     const registration = await navigator.serviceWorker.ready;
-    const subscription = await (registration as any).pushManager.getSubscription();
+    const subscription = await registration.pushManager.getSubscription();
     return !!subscription;
   } catch {
     return false;

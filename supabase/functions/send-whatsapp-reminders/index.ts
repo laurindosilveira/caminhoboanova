@@ -103,6 +103,13 @@ type LogEntry = {
   blocked_reason_code?: string;
 };
 
+type ReminderConfigRow = {
+  key: string;
+  enabled: boolean | null;
+  message_template: string | null;
+  threshold: number | null;
+};
+
 // â”€â”€â”€ Handler principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 Deno.serve(async (req) => {
@@ -175,7 +182,7 @@ Deno.serve(async (req) => {
       .from("whatsapp_reminder_config")
       .select("key, enabled, message_template, threshold");
 
-    const configMap = new Map((configs ?? []).map((c: any) => [
+    const configMap = new Map((configs as ReminderConfigRow[] ?? []).map((c) => [
       c.key,
       { enabled: c.enabled, template: c.message_template, threshold: c.threshold },
     ]));
@@ -191,7 +198,8 @@ Deno.serve(async (req) => {
     const checkinCfg = getConfig("checkin_late",    "Oi, {nome}! ðŸ“‹ Confirme sua presenÃ§a no *{evento}* de {data_evento} no app!", 1);
 
     const logs: LogEntry[] = [];
-    let sent = 0, failed = 0, blocked = 0, skipped = 0;
+    let sent = 0, failed = 0, blocked = 0;
+    const skipped = 0;
 
     // â”€â”€ Helper: processar um usuÃ¡rio com validaÃ§Ã£o antes do envio â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     async function processUser(
@@ -238,7 +246,11 @@ Deno.serve(async (req) => {
         error_detail:  result.error,
         blocked_reason_code: result.ok ? undefined : "api_error",
       });
-      result.ok ? sent++ : failed++;
+      if (result.ok) {
+        sent++;
+      } else {
+        failed++;
+      }
     }
 
     // â”€â”€ 1. DEVOCIONAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -292,9 +304,9 @@ Deno.serve(async (req) => {
 
     return respond({ sent, failed, blocked, skipped, total: logs.length });
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("WhatsApp reminder error:", err);
-    return respond({ error: err.message }, 500);
+    return respond({ error: err instanceof Error ? err.message : "Erro desconhecido" }, 500);
   }
 });
 
@@ -356,7 +368,7 @@ async function sendWhatsApp(
     const phoneDigits = e164.replace("+", "");
     let url: string;
     let body: unknown;
-    let headers: Record<string, string> = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
 
     if (provider === "zapi") {
       url  = `${apiUrl}/send-text`;
@@ -383,7 +395,7 @@ async function sendWhatsApp(
       return { ok: false, error: `HTTP ${resp.status}: ${text.slice(0, 200)}` };
     }
     return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }
