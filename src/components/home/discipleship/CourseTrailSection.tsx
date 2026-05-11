@@ -144,7 +144,7 @@ export default function CourseTrailSection({
                     } else if (isLocked) {
                       const entry = agendaSchedule.schedule.find(e => e.lessonId === lesson.id);
                       if (entry) {
-                        lockMessage = `Disponível em ${entry.eventDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
+                        lockMessage = `Disponível em ${entry.windowStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
                       } else {
                         lockMessage = "Ainda não liberada";
                       }

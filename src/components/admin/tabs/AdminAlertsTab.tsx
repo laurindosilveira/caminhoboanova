@@ -12,6 +12,12 @@ type Alert = {
   severity: "high" | "medium" | "low";
 };
 
+function normalizeAttendanceStatus(status: string) {
+  if (status === "falta") return "faltou";
+  if (status === "justificado") return "justificou";
+  return status;
+}
+
 export default function AdminAlertsTab({ participants }: { participants: any[] }) {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,7 +52,7 @@ export default function AdminAlertsTab({ participants }: { participants: any[] }
     Object.entries(userAttendance).forEach(([userId, statuses]) => {
       let consecutive = 0;
       for (const s of statuses) {
-        if (s === "faltou") consecutive++;
+        if (normalizeAttendanceStatus(s) === "faltou") consecutive++;
         else break;
       }
       if (consecutive >= 3) {

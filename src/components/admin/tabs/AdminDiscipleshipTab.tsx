@@ -14,6 +14,12 @@ const HEALTH_CFG = {
   critico:  { label: "Necessita cuidado", bg: "bg-destructive/10", text: "text-destructive" },
 };
 
+function normalizeAttendanceStatus(status: string) {
+  if (status === "falta") return "faltou";
+  if (status === "justificado") return "justificou";
+  return status;
+}
+
 type Props = {
   participants: Participant[];
   activities: Activity[];
@@ -122,10 +128,11 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
       // Build attendance map
       const attMap: Record<string, { present: number; total: number }> = {};
       (attendanceData ?? []).forEach(a => {
-        if (!["presente", "falta", "justificado"].includes(a.status)) return;
+        const normalizedStatus = normalizeAttendanceStatus(a.status);
+        if (!["presente", "faltou", "justificou"].includes(normalizedStatus)) return;
         if (!attMap[a.user_id]) attMap[a.user_id] = { present: 0, total: 0 };
         attMap[a.user_id].total++;
-        if (a.status === "presente") attMap[a.user_id].present++;
+        if (normalizedStatus === "presente") attMap[a.user_id].present++;
       });
       setAttendanceMap(attMap);
     }
@@ -253,7 +260,7 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
                   <button key={p.user_id} onClick={() => setSelected(p)}
                     className="w-full text-left flex items-center gap-2 py-1.5 px-2 rounded-xl hover:bg-primary/10 transition-colors">
                     <span className="font-inter text-sm text-foreground">{p.full_name}</span>
-                    <span className="text-muted-foreground font-inter text-xs ml-auto">- {p.community} -></span>
+                    <span className="text-muted-foreground font-inter text-xs ml-auto">- {p.community} {"->"}</span>
                   </button>
                 ))}
               </div>
@@ -270,7 +277,7 @@ export default function AdminDiscipleshipTab({ participants, activities, initial
                   <button key={p.user_id} onClick={() => setSelected(p)}
                     className="w-full text-left flex items-center gap-2 py-1.5 px-2 rounded-xl hover:bg-accent/10 transition-colors">
                     <span className="font-inter text-sm text-foreground">{p.full_name}</span>
-                    <span className="text-muted-foreground font-inter text-xs ml-auto">- {p.community} -></span>
+                    <span className="text-muted-foreground font-inter text-xs ml-auto">- {p.community} {"->"}</span>
                   </button>
                 ))}
               </div>

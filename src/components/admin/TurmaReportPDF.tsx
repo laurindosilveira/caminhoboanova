@@ -31,6 +31,12 @@ function getTimeOrMax(value?: string | null) {
   return parsed ? parsed.getTime() : Number.MAX_SAFE_INTEGER;
 }
 
+function normalizeAttendanceStatus(status: string) {
+  if (status === "falta") return "faltou";
+  if (status === "justificado") return "justificou";
+  return status;
+}
+
 function calcAge(birthDate: string) {
   const birth = parseLocalDate(birthDate);
   if (!birth) return null;
@@ -217,7 +223,7 @@ export default function TurmaReportPDF({ participants, activities, turmaName }: 
         const pct = activities.length > 0 ? Math.round((p.completed_count / activities.length) * 100) : 0;
         const age = calcAge(p.birth_date);
         const att = attendMap.get(p.user_id) ?? [];
-        const present = att.filter((a: any) => a.status === "presente").length;
+        const present = att.filter((a: any) => normalizeAttendanceStatus(a.status) === "presente").length;
         const attPct = att.length > 0 ? Math.round((present / att.length) * 100) : 0;
         const plan = plansMap.get(p.user_id);
         const aptLabel = plan?.aptidao ? (APTIDAO_CFG[plan.aptidao]?.label?.split(" ")[0] ?? "—") : "—";
@@ -322,9 +328,9 @@ export default function TurmaReportPDF({ participants, activities, turmaName }: 
         addSection("PRESENCA NOS ENCONTROS");
         const userAtt = attendMap.get(p.user_id) ?? [];
         if (userAtt.length > 0) {
-          const present = userAtt.filter((a: any) => a.status === "presente").length;
-          const absent = userAtt.filter((a: any) => a.status === "faltou").length;
-          const justified = userAtt.filter((a: any) => a.status === "justificou").length;
+          const present = userAtt.filter((a: any) => normalizeAttendanceStatus(a.status) === "presente").length;
+          const absent = userAtt.filter((a: any) => normalizeAttendanceStatus(a.status) === "faltou").length;
+          const justified = userAtt.filter((a: any) => normalizeAttendanceStatus(a.status) === "justificou").length;
           const attPct = Math.round((present / userAtt.length) * 100);
           addRow("Presente", `${present} encontro(s)`);
           addRow("Faltou", `${absent} encontro(s)`);
@@ -342,10 +348,11 @@ export default function TurmaReportPDF({ participants, activities, turmaName }: 
           for (const att of sorted) {
             checkPage(5);
             const ev = evMap.get(att.event_id);
-            const statusTxt = att.status === "presente" ? "Presente" : att.status === "faltou" ? "Faltou" : "Justificou";
+            const normalizedStatus = normalizeAttendanceStatus(att.status);
+            const statusTxt = normalizedStatus === "presente" ? "Presente" : normalizedStatus === "faltou" ? "Faltou" : "Justificou";
             const dateStr = formatPtDate(ev?.event_date);
             addText(`${dateStr} - ${ev?.title ?? "Evento"}: ${statusTxt}`, margin + 4, y, 7, false,
-              att.status === "presente" ? "#065F46" : att.status === "faltou" ? "#991B1B" : "#92400E");
+              normalizedStatus === "presente" ? "#065F46" : normalizedStatus === "faltou" ? "#991B1B" : "#92400E");
             y += 4;
           }
         } else {

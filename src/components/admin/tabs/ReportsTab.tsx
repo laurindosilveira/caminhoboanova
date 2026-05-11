@@ -51,8 +51,14 @@ function escapeCsvCell(value: string | number) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
+function normalizeAttendanceStatus(status: string) {
+  if (status === "falta") return "faltou";
+  if (status === "justificado") return "justificou";
+  return status;
+}
+
 function isFinalAttendanceStatus(status: string) {
-  return status === "presente" || status === "falta" || status === "justificado";
+  return ["presente", "faltou", "justificou"].includes(normalizeAttendanceStatus(status));
 }
 
 export default function ReportsTab() {
@@ -134,9 +140,10 @@ export default function ReportsTab() {
     attendanceData.forEach((item) => {
       const title = eventMap.get(item.event_id) ?? item.event_id.slice(0, 8);
       if (!byEvent[item.event_id]) byEvent[item.event_id] = { presente: 0, ausente: 0, justificado: 0, title };
-      if (item.status === "presente") byEvent[item.event_id].presente++;
-      else if (item.status === "justificado") byEvent[item.event_id].justificado++;
-      else if (item.status === "falta") byEvent[item.event_id].ausente++;
+      const normalizedStatus = normalizeAttendanceStatus(item.status);
+      if (normalizedStatus === "presente") byEvent[item.event_id].presente++;
+      else if (normalizedStatus === "justificou") byEvent[item.event_id].justificado++;
+      else if (normalizedStatus === "faltou") byEvent[item.event_id].ausente++;
     });
 
     return Object.values(byEvent).slice(0, 10);

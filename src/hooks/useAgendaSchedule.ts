@@ -229,7 +229,7 @@ export function useAgendaSchedule() {
     lessonDevotionalMode.set(entry.lessonId, entry.devotionalMode);
   }
 
-  const currentOpenEntry = schedule.find((e) => today >= startOfLocalDay(e.eventDate) && now < e.eventDate);
+  const currentOpenEntry = schedule.find((e) => today >= e.windowStart && now < e.eventDate);
   if (currentOpenEntry) studyOpenLessonIds.add(currentOpenEntry.lessonId);
 
   const scheduledLessonIds = new Set(schedule.map((e) => e.lessonId));

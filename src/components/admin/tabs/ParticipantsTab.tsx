@@ -44,6 +44,12 @@ type StatusReason = {
   severity: "high" | "medium" | "low";
 };
 
+function normalizeAttendanceStatus(status: string) {
+  if (status === "falta") return "faltou";
+  if (status === "justificado") return "justificou";
+  return status;
+}
+
 // ─── Real completion data types ───────────────────────────
 type RealLessonCompletion = {
   lesson_id: string;
@@ -1247,8 +1253,9 @@ export default function ParticipantsTab({ participants, activities, communities 
         const statuses = userAtt[p.user_id] ?? [];
         let consecutive = 0;
         for (const s of statuses) {
-          if (s === "presente") break;
-          if (s === "falta") {
+          const normalizedStatus = normalizeAttendanceStatus(s);
+          if (normalizedStatus === "presente") break;
+          if (normalizedStatus === "faltou") {
             consecutive++;
             continue;
           }

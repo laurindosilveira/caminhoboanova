@@ -127,10 +127,20 @@ Deno.serve(async (req) => {
       .select("id, title, community, area")
       .gte("created_at", yesterday.toISOString());
 
-    // User profiles for community/area matching and birthday automation
-    const { data: profiles } = await supabase
+    // User profiles for community/area matching and birthday automation.
+    // Some production databases have not received enrollment_status yet, so retry
+    // without it instead of breaking the whole notification run.
+    let { data: profiles, error: profilesError } = await supabase
       .from("profiles")
       .select("user_id, full_name, community, area, birth_date, enrollment_status");
+    if (profilesError?.message?.includes("enrollment_status")) {
+      const retry = await supabase
+        .from("profiles")
+        .select("user_id, full_name, community, area, birth_date");
+      profiles = retry.data;
+      profilesError = retry.error;
+    }
+    if (profilesError) throw profilesError;
     const profileMap = new Map((profiles ?? []).map((p: any) => [p.user_id, p]));
 
     const brtParts = getDatePartsInTimezone(nowUtc, "America/Sao_Paulo");

@@ -113,6 +113,12 @@ function buildWhatsAppLink(phone?: string | null) {
   return `https://wa.me/${normalized}`;
 }
 
+function normalizeAttendanceStatus(status: string) {
+  if (status === "falta") return "faltou";
+  if (status === "justificado") return "justificou";
+  return status;
+}
+
 export default function PlayerDetailSheet({ userId, fullName, currentArea, onClose, onPointsChanged }: Props) {
   const { role } = useAuth();
   const canDelete = role === "admin" || role === "lider";
@@ -169,7 +175,7 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
     ] = await Promise.all([
       supabase.from("lesson_responses").select("id, lesson_id, question_key, response, created_at").eq("user_id", userId),
       supabase.from("devotional_progress").select("id, devotional_id, completed_at").eq("user_id", userId),
-      supabase.from("attendance").select("id, event_id, status, created_at").eq("user_id", userId).in("status", ["presente", "justificou"]),
+      supabase.from("attendance").select("id, event_id, status, created_at").eq("user_id", userId).in("status", ["presente", "faltou", "falta", "justificou", "justificado"]),
       supabase.from("worship_attendance").select("id, worship_date, preacher_name, worship_time, status, created_at").eq("user_id", userId).eq("status", "aprovado"),
       supabase.from("achievement_unlocks").select("id, achievement_key, bonus_points, unlocked_at").eq("user_id", userId),
       supabase.from("user_progress").select("id, activity_id, completed_at").eq("user_id", userId),
@@ -284,7 +290,7 @@ export default function PlayerDetailSheet({ userId, fullName, currentArea, onClo
 
     (attendance ?? []).forEach((presence) => {
       const event = eventMap.get(presence.event_id);
-      const isJustified = presence.status === "justificou";
+      const isJustified = normalizeAttendanceStatus(presence.status) === "justificou";
       allItems.push({
         id: `att-${presence.id}`,
         type: "attendance",

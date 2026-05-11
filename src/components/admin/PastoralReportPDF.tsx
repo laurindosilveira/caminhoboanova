@@ -33,6 +33,12 @@ function getTimeOrMax(value?: string | null) {
   return parsed ? parsed.getTime() : Number.MAX_SAFE_INTEGER;
 }
 
+function normalizeAttendanceStatus(status: string) {
+  if (status === "falta") return "faltou";
+  if (status === "justificado") return "justificou";
+  return status;
+}
+
 function calcAge(birthDate: string) {
   const birth = parseLocalDate(birthDate);
   if (!birth) return null;
@@ -94,9 +100,9 @@ export default function PastoralReportPDF({ participant: p, activities }: Props)
     // Enrich attendance with event details
     const attArr = attendRec ?? [];
     if (attArr.length > 0) {
-      const present = attArr.filter(a => a.status === "presente").length;
-      const absent = attArr.filter(a => a.status === "faltou").length;
-      const justified = attArr.filter(a => a.status === "justificou").length;
+      const present = attArr.filter(a => normalizeAttendanceStatus(a.status) === "presente").length;
+      const absent = attArr.filter(a => normalizeAttendanceStatus(a.status) === "faltou").length;
+      const justified = attArr.filter(a => normalizeAttendanceStatus(a.status) === "justificou").length;
       setAttendanceData({ present, absent, justified, total: attArr.length });
 
       const eventIds = [...new Set(attArr.map(a => a.event_id))];
@@ -299,10 +305,11 @@ export default function PastoralReportPDF({ participant: p, activities }: Props)
           y += 5;
           for (const att of attendanceDetails) {
             checkPage(6);
-            const statusTxt = att.status === "presente" ? "Presente" : att.status === "faltou" ? "Faltou" : "Justificou";
+            const normalizedStatus = normalizeAttendanceStatus(att.status);
+            const statusTxt = normalizedStatus === "presente" ? "Presente" : normalizedStatus === "faltou" ? "Faltou" : "Justificou";
             const dateStr = formatPtDate(att.event_date);
             addText(`${dateStr} - ${att.event_title}: ${statusTxt}`, margin + 4, y, 8, false, 
-              att.status === "presente" ? "#065F46" : att.status === "faltou" ? "#991B1B" : "#92400E");
+              normalizedStatus === "presente" ? "#065F46" : normalizedStatus === "faltou" ? "#991B1B" : "#92400E");
             y += 4.5;
           }
         }

@@ -53,6 +53,12 @@ type TimelineItem = {
   severity?: "positive" | "neutral" | "warning" | "critical";
 };
 
+function normalizeAttendanceStatus(status: string) {
+  if (status === "falta") return "faltou";
+  if (status === "justificado") return "justificou";
+  return status;
+}
+
 export type Participant = {
   user_id: string; full_name: string; community: string; area: string;
   birth_date: string; phone: string; completed_count: number; completed_activity_ids: string[];
@@ -383,10 +389,11 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
         let consecutiveMisses = 0;
         sortedAtt.forEach(a => {
           const ev = eventsMap.get(a.event_id);
-          const statusEmoji = a.status === "presente" ? "🟢" : a.status === "faltou" ? "🔴" : "🟡";
-          const severity = a.status === "presente" ? "positive" as const : a.status === "faltou" ? "warning" as const : "neutral" as const;
+          const normalizedStatus = normalizeAttendanceStatus(a.status);
+          const statusEmoji = normalizedStatus === "presente" ? "🟢" : normalizedStatus === "faltou" ? "🔴" : "🟡";
+          const severity = normalizedStatus === "presente" ? "positive" as const : normalizedStatus === "faltou" ? "warning" as const : "neutral" as const;
           
-          if (a.status !== "presente") {
+          if (normalizedStatus !== "presente") {
             consecutiveMisses++;
           } else {
             if (consecutiveMisses >= 3) {
@@ -400,7 +407,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
             tl.push({ date: ev?.event_date ?? a.created_at, type: "crisis", category: "crise", title: `🚨 3 faltas consecutivas`, detail: "Alerta pastoral — possível afastamento", icon: "🚨", severity: "critical" });
           }
 
-          tl.push({ date: ev?.event_date ?? a.created_at, type: "attendance", category: "encontro", title: `${statusEmoji} ${ev?.title ?? "Evento"}`, detail: a.status === "presente" ? "Presente" : a.status === "faltou" ? "Faltou" : "Justificou", icon: statusEmoji, severity });
+          tl.push({ date: ev?.event_date ?? a.created_at, type: "attendance", category: "encontro", title: `${statusEmoji} ${ev?.title ?? "Evento"}`, detail: normalizedStatus === "presente" ? "Presente" : normalizedStatus === "faltou" ? "Faltou" : "Justificou", icon: statusEmoji, severity });
         });
       }
 
@@ -808,7 +815,7 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
 
   // Attendance stats
   const totalEvents = attendanceRecords.length;
-  const presentCount = attendanceRecords.filter(a => a.status === "presente").length;
+  const presentCount = attendanceRecords.filter(a => normalizeAttendanceStatus(a.status) === "presente").length;
   const attendancePct = totalEvents > 0 ? Math.round((presentCount / totalEvents) * 100) : 0;
 
   if (loading) return <div className="py-20 text-center text-muted-foreground font-inter text-sm">Carregando ficha...</div>;
@@ -1487,8 +1494,8 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
             <div className="grid grid-cols-3 gap-2 mb-3">
               {[
                 { label: "Presente", count: presentCount, emoji: "🟢", color: "text-brand-green", bg: "bg-brand-green/10" },
-                { label: "Faltou", count: attendanceRecords.filter(a => a.status === "faltou").length, emoji: "🔴", color: "text-destructive", bg: "bg-destructive/10" },
-                { label: "Justificou", count: attendanceRecords.filter(a => a.status === "justificou").length, emoji: "🟡", color: "text-accent-foreground", bg: "bg-accent/20" },
+                { label: "Faltou", count: attendanceRecords.filter(a => normalizeAttendanceStatus(a.status) === "faltou").length, emoji: "🔴", color: "text-destructive", bg: "bg-destructive/10" },
+                { label: "Justificou", count: attendanceRecords.filter(a => normalizeAttendanceStatus(a.status) === "justificou").length, emoji: "🟡", color: "text-accent-foreground", bg: "bg-accent/20" },
               ].map(s => (
                 <div key={s.label} className={`rounded-xl p-2.5 text-center ${s.bg}`}>
                   <p className={`font-montserrat font-black text-xl ${s.color}`}>{s.count}</p>
@@ -1516,8 +1523,9 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
           ) : (
             <div className="space-y-2">
               {attendanceRecords.map(a => {
-                const statusEmoji = a.status === "presente" ? "🟢" : a.status === "faltou" ? "🔴" : "🟡";
-                const statusLabel = a.status === "presente" ? "Presente" : a.status === "faltou" ? "Faltou" : "Justificou";
+                const normalizedStatus = normalizeAttendanceStatus(a.status);
+                const statusEmoji = normalizedStatus === "presente" ? "🟢" : normalizedStatus === "faltou" ? "🔴" : "🟡";
+                const statusLabel = normalizedStatus === "presente" ? "Presente" : normalizedStatus === "faltou" ? "Faltou" : "Justificou";
                 return (
                   <div key={a.id} className="bg-card rounded-xl border border-border p-3 flex items-center gap-3">
                     <span className="text-lg">{statusEmoji}</span>
@@ -1528,8 +1536,8 @@ export default function ParticipantSheet({ participant: p, activities, onBack }:
                       </p>
                     </div>
                     <span className={`text-xs font-inter font-medium px-2 py-0.5 rounded-full ${
-                      a.status === "presente" ? "bg-brand-green/10 text-brand-green" :
-                      a.status === "faltou" ? "bg-destructive/10 text-destructive" :
+                      normalizedStatus === "presente" ? "bg-brand-green/10 text-brand-green" :
+                      normalizedStatus === "faltou" ? "bg-destructive/10 text-destructive" :
                       "bg-accent/20 text-accent-foreground"
                     }`}>{statusLabel}</span>
                   </div>
