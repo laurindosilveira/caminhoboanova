@@ -3,6 +3,7 @@ import { Cake, PartyPopper, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface BirthdayPerson {
+  user_id?: string;
   full_name: string;
   birth_date: string;
   community?: string | null;
@@ -16,6 +17,22 @@ interface BirthdayHighlightsProps {
 
 function parseLocalDate(date: string) {
   return new Date(`${date}T00:00:00`);
+}
+
+function mapBirthdayRows(rows: any[] | null | undefined, currentMonth: number): BirthdayPerson[] {
+  return (rows ?? [])
+    .filter((person) => {
+      if (!person.birth_date) return false;
+      return parseLocalDate(person.birth_date).getMonth() + 1 === currentMonth;
+    })
+    .map((person) => ({
+      user_id: person.user_id,
+      full_name: person.full_name,
+      birth_date: person.birth_date,
+      community: person.community,
+      day: parseLocalDate(person.birth_date).getDate(),
+    }))
+    .sort((a, b) => a.day - b.day || a.full_name.localeCompare(b.full_name, "pt-BR"));
 }
 
 export default function BirthdayHighlights({ area, variant = "community" }: BirthdayHighlightsProps) {
@@ -38,26 +55,28 @@ export default function BirthdayHighlights({ area, variant = "community" }: Birt
 
     async function fetchBirthdays() {
       setLoading(true);
-      const { data } = await supabase
-        .from("profiles")
-        .select("full_name, birth_date, community, area")
-        .eq("area", area as any)
-        .eq("enrollment_status", "approved" as any);
+      const { data, error } = await (supabase as any).rpc("get_area_birthdays", {
+        _area: area,
+        _month: currentMonth,
+      });
 
       if (cancelled) return;
 
-      const monthlyBirthdays: BirthdayPerson[] = (data ?? [])
-        .filter((person) => {
-          if (!person.birth_date) return false;
-          return parseLocalDate(person.birth_date).getMonth() + 1 === currentMonth;
-        })
-        .map((person) => ({
-          full_name: person.full_name,
-          birth_date: person.birth_date,
-          community: person.community,
-          day: parseLocalDate(person.birth_date).getDate(),
-        }))
-        .sort((a, b) => a.day - b.day || a.full_name.localeCompare(b.full_name, "pt-BR"));
+      let monthlyBirthdays = mapBirthdayRows(data, currentMonth);
+
+      if (error) {
+        console.warn("BirthdayHighlights: RPC failed, falling back to profiles query", error.message);
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from("profiles")
+          .select("user_id, full_name, birth_date, community, area")
+          .eq("area", area as any);
+
+        if (fallbackError) {
+          console.warn("BirthdayHighlights: profiles fallback failed", fallbackError.message);
+        }
+
+        monthlyBirthdays = mapBirthdayRows(fallbackData, currentMonth);
+      }
 
       setBirthdays(monthlyBirthdays);
       setLoading(false);
